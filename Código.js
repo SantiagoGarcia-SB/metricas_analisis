@@ -7,25 +7,11 @@ const ID_HOJA_REESTUDIOS = "1slgykTgjoAtCd6KmlG7Lqiuw-nM1hSguQbi0XqeLu7U";
 const NOMBRE_PESTANA_REESTUDIOS = "ORIGEN";
 const TIMEZONE = "America/Bogota";
 
-/**
- * Control de Acceso Web App de Métricas.
- */
-function verificarPermisoAdmin() {
-  const userEmail = Session.getActiveUser().getEmail().toLowerCase().trim();
-  const ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
-  const hojaUser = ss.getSheetByName("Usuarios");
-  const dataUser = hojaUser.getDataRange().getValues();
-  const usuario = dataUser.find(f => String(f[2]).toLowerCase().trim() === userEmail);
-  
-  if (!usuario || String(usuario[23]).toUpperCase().trim() !== "ADMIN") {
-    throw new Error("Acceso Denegado: Se requieren permisos de Administrador.");
-  }
-}
 
 function doGet(e) {
   return HtmlService.createTemplateFromFile('MetricasPanel')
     .evaluate()
-    .setTitle('Métricas del Equipo - Producción')
+    .setTitle('Métricas Análisis de Riesgo')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -51,10 +37,29 @@ function parseFechaDDMMYYYY(fechaStr) {
 }
 
 /**
+ * Determina la sucursal/ciudad basándose en el número de póliza.
+ * @param {string} polizaStr - Número de póliza
+ * @returns {string} Nombre de la ciudad/sucursal
+ */
+function obtenerSucursalPorPoliza(polizaStr) {
+  const num = parseInt(String(polizaStr).trim(), 10);
+  if (isNaN(num)) return "Sin clasificar";
+  if (num === 0) return "Operador Inmobiliario";
+  if (num >= 1 && num <= 9999) return "Bogotá";
+  if (num >= 10000 && num <= 10999) return "Cali";
+  if (num >= 11000 && num <= 11999) return "Bucaramanga";
+  if (num >= 12000 && num <= 12999) return "Eje Cafetero";
+  if (num >= 13000 && num <= 13999) return "Medellín";
+  if (num >= 14000 && num <= 14999) return "Barranquilla";
+  if (num >= 15000 && num <= 15999) return "Cartagena";
+  if (num >= 16000 && num <= 16999) return "Eje Cafetero";
+  return "Sin clasificar";
+}
+
+/**
  * Obtiene todas las métricas agregadas para el rango de fechas dado.
  */
 function obtenerDatosMetricas(fechaDesde, fechaHasta) {
-  verificarPermisoAdmin();
   const ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
   const hoja = ss.getSheetByName(SHEET_NAME_SOLICITUDES);
   if (!hoja) throw new Error("No se pudo acceder a la hoja de solicitudes.");
@@ -69,8 +74,8 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   let totalGestionadas = 0;
   let sumaTiempos = 0;
   let countTiempos = 0;
-  let sumaTiemposGeneral = 0;
-  let countTiemposGeneral = 0;
+  let sumaTiemposResolucion = 0;
+  let countTiemposResolucion = 0;
   let aprobadas = 0;
   let negadas = 0;
   let aplazadas = 0;
@@ -79,6 +84,9 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   const produccionMap = {};
   const slaMap = {};
   const analistaMap = {};
+  const sucursalMap = {};  // { fecha: { sucursal: count } }
+  const tipoMap = {};
+  const tiemposDetalle = [];
 
   for (let i = 1; i < data.length; i++) {
     const fila = data[i];
@@ -92,12 +100,18 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     const estado = String(fila[16] || "").toUpperCase().trim();
     const nombre = String(fila[30] || "Sin nombre").trim();
     const tiempoGestionRaw = String(fila[34] || "").trim();
-    const tiempoGeneralRaw = String(fila[36] || "").trim();
-    const slaHorasRaw = String(fila[29] || "").trim();
+    const tiempoResolucionRaw = String(fila[29] || "").trim();
 
     if (estado.includes("APROB")) aprobadas++;
     else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) negadas++;
     else if (estado.includes("APLAZ")) aplazadas++;
+
+    const clase = String(fila[20] || "").toUpperCase().trim();
+    let tipoSol = 'Digital';
+    if (estado.includes('BIOMETRIA')) tipoSol = 'Biometría';
+    else if (clase === 'INDUCCION') tipoSol = 'Inducción';
+    if (!tipoMap[fechaGestionStr]) tipoMap[fechaGestionStr] = { Digital: 0, UAR: 0, Reestudio: 0, 'Biometría': 0, 'Inducción': 0 };
+    tipoMap[fechaGestionStr][tipoSol]++;
 
     const tiempoGestion = parseFloat(tiempoGestionRaw);
     if (!isNaN(tiempoGestion) && tiempoGestion >= 0) {
@@ -105,36 +119,51 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
       countTiempos++;
     }
 
-    const tiempoGeneral = parseFloat(tiempoGeneralRaw);
-    if (!isNaN(tiempoGeneral) && tiempoGeneral > 0) {
-      sumaTiemposGeneral += tiempoGeneral;
-      countTiemposGeneral++;
+    const tiempoResolucion = parseFloat(tiempoResolucionRaw.replace(',', '.'));
+    if (!isNaN(tiempoResolucion) && tiempoResolucion > 0) {
+      sumaTiemposResolucion += tiempoResolucion;
+      countTiemposResolucion++;
     }
 
-    const slaHoras = parseFloat(slaHorasRaw.replace(',', '.'));
-    if (!isNaN(slaHoras) && slaHoras > 4) fueraDeSLA++;
+    if (!isNaN(tiempoResolucion) && tiempoResolucion > 2) fueraDeSLA++;
 
     if (!produccionMap[fechaGestionStr]) produccionMap[fechaGestionStr] = 0;
     produccionMap[fechaGestionStr]++;
 
     if (!slaMap[fechaGestionStr]) slaMap[fechaGestionStr] = { dentroSLA: 0, fueraSLA: 0 };
-    if (!isNaN(slaHoras)) {
-      if (slaHoras <= 4) slaMap[fechaGestionStr].dentroSLA++;
+    if (!isNaN(tiempoResolucion)) {
+      if (tiempoResolucion <= 2) slaMap[fechaGestionStr].dentroSLA++;
       else slaMap[fechaGestionStr].fueraSLA++;
     }
 
     if (!analistaMap[nombre]) {
-      analistaMap[nombre] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoGeneral: 0, countTiempoGeneral: 0, fueraSLA: 0 };
+      analistaMap[nombre] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, diasInfo: {}, horasSlot: {} };
     }
     const a = analistaMap[nombre];
     a.total++;
+    const fechaFinCompleta = String(fila[28] || "").trim();
+    const horaFin = fechaFinCompleta.split(' ')[1] || "";
+    if (horaFin && fechaGestionStr) {
+      if (!a.diasInfo[fechaGestionStr]) a.diasInfo[fechaGestionStr] = { count: 0, primera: horaFin, ultima: horaFin };
+      a.diasInfo[fechaGestionStr].count++;
+      if (horaFin < a.diasInfo[fechaGestionStr].primera) a.diasInfo[fechaGestionStr].primera = horaFin;
+      if (horaFin > a.diasInfo[fechaGestionStr].ultima) a.diasInfo[fechaGestionStr].ultima = horaFin;
+      const hSlot = parseInt(horaFin.split(':')[0], 10);
+      if (!isNaN(hSlot)) a.horasSlot[hSlot] = (a.horasSlot[hSlot] || 0) + 1;
+    }
     if (estado.includes("APROB")) a.aprobadas++;
     else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) a.negadas++;
     else if (estado.includes("APLAZ")) a.aplazadas++;
     
     if (!isNaN(tiempoGestion) && tiempoGestion >= 0) { a.sumaTiempo += tiempoGestion; a.countTiempo++; }
-    if (!isNaN(tiempoGeneral) && tiempoGeneral > 0) { a.sumaTiempoGeneral += tiempoGeneral; a.countTiempoGeneral++; }
-    if (!isNaN(slaHoras) && slaHoras > 4) a.fueraSLA++;
+    if (!isNaN(tiempoResolucion) && tiempoResolucion > 0) { a.sumaTiempoResolucion += tiempoResolucion; a.countTiempoResolucion++; }
+    if (!isNaN(tiempoResolucion) && tiempoResolucion > 2) a.fueraSLA++;
+
+    const sucursal = obtenerSucursalPorPoliza(fila[1]);
+    if (!sucursalMap[fechaGestionStr]) sucursalMap[fechaGestionStr] = {};
+    sucursalMap[fechaGestionStr][sucursal] = (sucursalMap[fechaGestionStr][sucursal] || 0) + 1;
+
+    tiemposDetalle.push({ fecha: fechaGestionStr, sucursal: sucursal, tipo: tipoSol, tGestion: !isNaN(tiempoGestion) && tiempoGestion >= 0 ? tiempoGestion : null, tResolucion: !isNaN(tiempoResolucion) && tiempoResolucion > 0 ? tiempoResolucion : null });
   }
 
   try {
@@ -143,7 +172,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     if (hojaReest) {
       const lastRowR = hojaReest.getLastRow();
       if (lastRowR > 1) {
-        const dataReest = hojaReest.getRange(2, 1, lastRowR - 1, 14).getDisplayValues();
+        const dataReest = hojaReest.getRange(2, 1, lastRowR - 1, 17).getDisplayValues();
         for (let i = 0; i < dataReest.length; i++) {
           const fechaFinStr = String(dataReest[i][9]).trim();
           if (!fechaFinStr) continue;
@@ -155,22 +184,70 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
           totalGestionadas++;
           const estadoR = String(dataReest[i][10]).toUpperCase().trim();
           const nombreR = String(dataReest[i][7] || "Sin nombre").trim();
+          const tiempoResolucionReestRaw = String(dataReest[i][14] || "").trim();
+          const tiempoGestionReestRaw = String(dataReest[i][15] || "").trim();
           
           if (estadoR.includes("APROB")) aprobadas++;
           else if (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) negadas++;
           else if (estadoR.includes("APLAZ")) aplazadas++;
 
+          const origenR = String(dataReest[i][3] || "").toUpperCase().trim();
+          const tipoProcesoR = String(dataReest[i][4] || "").toUpperCase().trim();
+          const esUarMetrica = origenR === "CORREO" && (tipoProcesoR.includes("ADICIONAL") || tipoProcesoR.includes("NUEVA"));
+          const tipoReest = esUarMetrica ? 'UAR' : 'Reestudio';
+          if (!tipoMap[fechaParte]) tipoMap[fechaParte] = { Digital: 0, UAR: 0, Reestudio: 0, 'Biometría': 0, 'Inducción': 0 };
+          tipoMap[fechaParte][tipoReest]++;
+
+          const tiempoResolucionReest = parseFloat(tiempoResolucionReestRaw.replace(',', '.'));
+          const tiempoResolucionReestHoras = !isNaN(tiempoResolucionReest) ? tiempoResolucionReest / 60 : NaN;
+          if (!isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 0) {
+            sumaTiemposResolucion += tiempoResolucionReestHoras;
+            countTiemposResolucion++;
+          }
+
+          const tiempoGestionReest = parseFloat(tiempoGestionReestRaw.replace(',', '.'));
+          if (!isNaN(tiempoGestionReest) && tiempoGestionReest >= 0) {
+            sumaTiempos += tiempoGestionReest;
+            countTiempos++;
+          }
+
+          if (!isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 2) fueraDeSLA++;
+
           if (!produccionMap[fechaParte]) produccionMap[fechaParte] = 0;
           produccionMap[fechaParte]++;
 
+          if (!slaMap[fechaParte]) slaMap[fechaParte] = { dentroSLA: 0, fueraSLA: 0 };
+          if (!isNaN(tiempoResolucionReestHoras)) {
+            if (tiempoResolucionReestHoras <= 2) slaMap[fechaParte].dentroSLA++;
+            else slaMap[fechaParte].fueraSLA++;
+          }
+
           if (!analistaMap[nombreR]) {
-            analistaMap[nombreR] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, fueraSLA: 0 };
+            analistaMap[nombreR] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, diasInfo: {}, horasSlot: {} };
           }
           const aR = analistaMap[nombreR];
           aR.total++;
+          const horaFinR = fechaFinStr.split(' ')[1] || "";
+          if (horaFinR && fechaParte) {
+            if (!aR.diasInfo[fechaParte]) aR.diasInfo[fechaParte] = { count: 0, primera: horaFinR, ultima: horaFinR };
+            aR.diasInfo[fechaParte].count++;
+            if (horaFinR < aR.diasInfo[fechaParte].primera) aR.diasInfo[fechaParte].primera = horaFinR;
+            if (horaFinR > aR.diasInfo[fechaParte].ultima) aR.diasInfo[fechaParte].ultima = horaFinR;
+            const hSlotR = parseInt(horaFinR.split(':')[0], 10);
+            if (!isNaN(hSlotR)) aR.horasSlot[hSlotR] = (aR.horasSlot[hSlotR] || 0) + 1;
+          }
           if (estadoR.includes("APROB")) aR.aprobadas++;
           else if (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) aR.negadas++;
           else if (estadoR.includes("APLAZ")) aR.aplazadas++;
+          if (!isNaN(tiempoGestionReest) && tiempoGestionReest >= 0) { aR.sumaTiempo += tiempoGestionReest; aR.countTiempo++; }
+          if (!isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 0) { aR.sumaTiempoResolucion += tiempoResolucionReestHoras; aR.countTiempoResolucion++; }
+          if (!isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 2) aR.fueraSLA++;
+
+          const sucursalR = obtenerSucursalPorPoliza(dataReest[i][16]);
+          if (!sucursalMap[fechaParte]) sucursalMap[fechaParte] = {};
+          sucursalMap[fechaParte][sucursalR] = (sucursalMap[fechaParte][sucursalR] || 0) + 1;
+
+          tiemposDetalle.push({ fecha: fechaParte, sucursal: sucursalR, tipo: tipoReest, tGestion: !isNaN(tiempoGestionReest) && tiempoGestionReest >= 0 ? tiempoGestionReest : null, tResolucion: !isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 0 ? tiempoResolucionReestHoras : null });
         }
       }
     }
@@ -179,8 +256,106 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   }
 
   const tiempoPromedioMinutos = countTiempos > 0 ? Math.round((sumaTiempos / countTiempos) * 10) / 10 : 0;
-  const tiempoPromedioGeneralHoras = countTiemposGeneral > 0 ? Number((sumaTiemposGeneral / countTiemposGeneral).toFixed(2)) : 0;
+  const tiempoPromedioResolucionHoras = countTiemposResolucion > 0 ? Number((sumaTiemposResolucion / countTiemposResolucion).toFixed(2)) : 0;
   const tasaAprobacion = totalGestionadas > 0 ? Math.round((aprobadas / totalGestionadas) * 1000) / 10 : 0;
+
+  // Backlog: solicitudes asignadas sin fecha fin
+  let backlog = 0;
+  for (let i = 1; i < data.length; i++) {
+    const fechaAsig = String(data[i][26] || "").trim();
+    const fechaFin = String(data[i][28] || "").trim();
+    if (fechaAsig !== "" && fechaFin === "") backlog++;
+  }
+  // Backlog reestudios
+  try {
+    const ssReestB = SpreadsheetApp.openById(ID_HOJA_REESTUDIOS);
+    const hojaReestB = ssReestB.getSheetByName(NOMBRE_PESTANA_REESTUDIOS);
+    if (hojaReestB) {
+      const lastRowB = hojaReestB.getLastRow();
+      if (lastRowB > 1) {
+        const dataB = hojaReestB.getRange(2, 9, lastRowB - 1, 2).getDisplayValues();
+        for (let i = 0; i < dataB.length; i++) {
+          const fAsig = String(dataB[i][0]).trim();
+          const fFin = String(dataB[i][1]).trim();
+          if (fAsig !== "" && fFin === "") backlog++;
+        }
+      }
+    }
+  } catch(e) {}
+
+  // Negación por sucursal (para gráfica macro) - incluye ambas hojas
+  const negacionSucursal = {};
+  for (let i = 1; i < data.length; i++) {
+    const fechaGStr = String(data[i][33] || "").trim();
+    if (!fechaGStr) continue;
+    const fG = parseFechaDDMMYYYY(fechaGStr);
+    if (!fG || fG < desde || fG > hasta) continue;
+    const est = String(data[i][16] || "").toUpperCase().trim();
+    const suc = obtenerSucursalPorPoliza(data[i][1]);
+    if (!negacionSucursal[suc]) negacionSucursal[suc] = { total: 0, negadas: 0 };
+    negacionSucursal[suc].total++;
+    if (est.includes("NEGAD") || est.includes("RECHAZ")) negacionSucursal[suc].negadas++;
+  }
+  // Agregar reestudios a negación por sucursal
+  try {
+    const ssReestN = SpreadsheetApp.openById(ID_HOJA_REESTUDIOS);
+    const hojaReestN = ssReestN.getSheetByName(NOMBRE_PESTANA_REESTUDIOS);
+    if (hojaReestN) {
+      const lastRowN = hojaReestN.getLastRow();
+      if (lastRowN > 1) {
+        const dataN = hojaReestN.getRange(2, 1, lastRowN - 1, 17).getDisplayValues();
+        for (let i = 0; i < dataN.length; i++) {
+          const fechaFinN = String(dataN[i][9]).trim();
+          if (!fechaFinN) continue;
+          const fechaParteN = fechaFinN.split(' ')[0];
+          const fN = parseFechaDDMMYYYY(fechaParteN);
+          if (!fN || fN < desde || fN > hasta) continue;
+          const estN = String(dataN[i][10]).toUpperCase().trim();
+          const sucN = obtenerSucursalPorPoliza(dataN[i][16]);
+          if (!negacionSucursal[sucN]) negacionSucursal[sucN] = { total: 0, negadas: 0 };
+          negacionSucursal[sucN].total++;
+          if (estN.includes("NEGAD") || estN.includes("RECHAZ")) negacionSucursal[sucN].negadas++;
+        }
+      }
+    }
+  } catch(e) {}
+
+  const tasaNegacionSucursal = Object.keys(negacionSucursal).map(s => ({
+    sucursal: s,
+    total: negacionSucursal[s].total,
+    negadas: negacionSucursal[s].negadas,
+    tasa: negacionSucursal[s].total > 0 ? Math.round((negacionSucursal[s].negadas / negacionSucursal[s].total) * 1000) / 10 : 0
+  })).sort((a, b) => b.tasa - a.tasa);
+
+  // SLA semanal (% cumplimiento)
+  const slaSemanal = {};
+  const fechasSLA = Object.keys(slaMap).sort((a, b) => parseFechaDDMMYYYY(a) - parseFechaDDMMYYYY(b));
+  fechasSLA.forEach(fecha => {
+    const f = parseFechaDDMMYYYY(fecha);
+    if (!f) return;
+    // Agrupar por semana (lunes de la semana)
+    const dia = f.getDay();
+    const lunes = new Date(f);
+    lunes.setDate(f.getDate() - (dia === 0 ? 6 : dia - 1));
+    const semKey = (lunes.getDate() < 10 ? '0' : '') + lunes.getDate() + '/' + (lunes.getMonth() < 9 ? '0' : '') + (lunes.getMonth()+1) + '/' + lunes.getFullYear();
+    if (!slaSemanal[semKey]) slaSemanal[semKey] = { dentro: 0, fuera: 0 };
+    slaSemanal[semKey].dentro += slaMap[fecha].dentroSLA;
+    slaSemanal[semKey].fuera += slaMap[fecha].fueraSLA;
+  });
+  const tendenciaSLA = Object.keys(slaSemanal)
+    .sort((a, b) => parseFechaDDMMYYYY(a) - parseFechaDDMMYYYY(b))
+    .map(sem => {
+      const t = slaSemanal[sem].dentro + slaSemanal[sem].fuera;
+      return { semana: sem, pctCumplimiento: t > 0 ? Math.round((slaSemanal[sem].dentro / t) * 1000) / 10 : 100 };
+    });
+
+  // Heatmap hora (consolidado equipo)
+  const heatmapHora = {};
+  for (let h = 7; h <= 18; h++) heatmapHora[h] = 0;
+  Object.keys(analistaMap).forEach(nombre => {
+    const slots = analistaMap[nombre].horasSlot;
+    Object.keys(slots).forEach(h => { heatmapHora[h] = (heatmapHora[h] || 0) + slots[h]; });
+  });
 
   const produccionDiaria = Object.keys(produccionMap)
     .sort((a, b) => parseFechaDDMMYYYY(a) - parseFechaDDMMYYYY(b))
@@ -200,22 +375,73 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
         negadas: a.negadas,
         aplazadas: a.aplazadas,
         tiempoPromedio: a.countTiempo > 0 ? Math.round((a.sumaTiempo / a.countTiempo) * 10) / 10 : 0,
-        tiempoPromedioGeneral: a.countTiempoGeneral > 0 ? Number((a.sumaTiempoGeneral / a.countTiempoGeneral).toFixed(2)) : 0,
+        tiempoPromedioGeneral: a.countTiempoResolucion > 0 ? Number((a.sumaTiempoResolucion / a.countTiempoResolucion).toFixed(2)) : 0,
+        promedioPorHora: (function() {
+          var dias = Object.keys(a.diasInfo);
+          if (dias.length === 0) return 0;
+          var sumaRates = 0;
+          var diasConRango = 0;
+          for (var d = 0; d < dias.length; d++) {
+            var info = a.diasInfo[dias[d]];
+            if (info.count <= 1) { sumaRates += info.count; diasConRango++; continue; }
+            var pParts = info.primera.split(':');
+            var uParts = info.ultima.split(':');
+            var pMin = parseInt(pParts[0]) * 60 + parseInt(pParts[1]);
+            var uMin = parseInt(uParts[0]) * 60 + parseInt(uParts[1]);
+            var diffHoras = (uMin - pMin) / 60;
+            if (diffHoras > 0) { sumaRates += info.count / diffHoras; diasConRango++; }
+            else { sumaRates += info.count; diasConRango++; }
+          }
+          return diasConRango > 0 ? Math.round(sumaRates / diasConRango) : 0;
+        })(),
+        detalleHoras: (function() {
+          var numDias = Object.keys(a.diasInfo).length || 1;
+          var detalle = {};
+          for (var h = 7; h <= 18; h++) {
+            detalle[h] = a.horasSlot[h] ? Math.round(a.horasSlot[h] / numDias) : 0;
+          }
+          return detalle;
+        })(),
         fueraSLA: a.fueraSLA
       };
     })
     .sort((a, b) => b.total - a.total);
 
+  // Obtener lista de sucursales únicas
+  const sucursalesUnicas = {};
+  Object.keys(sucursalMap).forEach(fecha => {
+    Object.keys(sucursalMap[fecha]).forEach(s => { sucursalesUnicas[s] = true; });
+  });
+  const listaSucursales = Object.keys(sucursalesUnicas).sort();
+
+  const porSucursal = {
+    fechas: Object.keys(sucursalMap).sort((a, b) => parseFechaDDMMYYYY(a) - parseFechaDDMMYYYY(b)),
+    sucursales: listaSucursales,
+    datos: {}
+  };
+  listaSucursales.forEach(s => {
+    porSucursal.datos[s] = porSucursal.fechas.map(f => sucursalMap[f][s] || 0);
+  });
+
   return {
     totalGestionadas: totalGestionadas,
     tiempoPromedioMinutos: tiempoPromedioMinutos,
-    tiempoPromedioGeneralHoras: tiempoPromedioGeneralHoras,
+    tiempoPromedioGeneralHoras: tiempoPromedioResolucionHoras,
     tasaAprobacion: tasaAprobacion,
     fueraDeSLA: fueraDeSLA,
+    backlog: backlog,
     produccionDiaria: produccionDiaria,
     distribucionEstados: { aprobadas: aprobadas, negadas: negadas, aplazadas: aplazadas },
     porAnalista: porAnalista,
-    slaDiario: slaDiario
+    slaDiario: slaDiario,
+    porSucursal: porSucursal,
+    porTipo: Object.keys(tipoMap)
+      .sort((a, b) => parseFechaDDMMYYYY(a) - parseFechaDDMMYYYY(b))
+      .map(fecha => ({ fecha: fecha, Digital: tipoMap[fecha].Digital, UAR: tipoMap[fecha].UAR, Reestudio: tipoMap[fecha].Reestudio, Biometria: tipoMap[fecha]['Biometría'], Induccion: tipoMap[fecha]['Inducción'] })),
+    tiemposDetalle: tiemposDetalle,
+    tasaNegacionSucursal: tasaNegacionSucursal,
+    tendenciaSLA: tendenciaSLA,
+    heatmapHora: heatmapHora
   };
 }
 
@@ -223,7 +449,6 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
  * Obtiene la lista de analistas activos con la hora de su primer resultado del día.
  */
 function admin_obtenerAsesoresActivosPrimerResultado(fechaFiltro) {
-  verificarPermisoAdmin();
   const ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
   const hojaUser = ss.getSheetByName("Usuarios");
   const dataUser = hojaUser.getDataRange().getValues();
@@ -380,7 +605,6 @@ function admin_obtenerAsesoresActivosPrimerResultado(fechaFiltro) {
  * Obtiene el detalle de solicitudes de un analista para una fecha específica.
  */
 function admin_obtenerDetallePorAnalista(correoAnalista, fechaFiltro) {
-  verificarPermisoAdmin();
   correoAnalista = String(correoAnalista || "").toLowerCase().trim();
   if (!correoAnalista) return { success: false, message: "Correo no proporcionado." };
   
