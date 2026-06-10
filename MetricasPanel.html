@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Métricas de Operación</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.5/css/dataTables.bootstrap5.min.css">
+<style>
+:root {
+    --rojo:        #BD0F14;
+    --rojo-dark:   #8b0a0e;
+    --rojo-light:  #fde8e8;
+    --rojo-mid:    #f87171;
+    --azul:        #253150;
+    --azul-dark:   #161e33;
+    --azul-mid:    #3a4d7a;
+    --azul-light:  #e8edf6;
+    --grad-rojo:   linear-gradient(135deg, #8b0a0e 0%, #BD0F14 55%, #e05555 100%);
+    --grad-azul:   linear-gradient(135deg, #161e33 0%, #253150 60%, #3a4d7a 100%);
+    --bg-page:     #F4F5F8;
+    --bg-card:     #FFFFFF;
+    --text-main:   #111827;
+    --text-muted:  #64748b;
+    --text-light:  #94a3b8;
+    --border:      #e5e7eb;
+    --sidebar-w:   240px;
+    --radius:      20px;
+    --shadow:      0 2px 12px rgba(37,49,80,0.08);
+}
+body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--text-main); }
+
+#sidebar {
+    width:var(--sidebar-w); height:100vh; background:var(--bg-card);
+    position:fixed; top:0; left:0;
+    display:flex; flex-direction:column;
+    border-right:1px solid var(--border); z-index:100;
+}
+.sidebar-brand {
+    display:flex; align-items:center; gap:12px;
+    padding:22px 20px; border-bottom:1px solid var(--border);
+}
+.brand-icon {
+    width:38px; height:38px; background:var(--grad-rojo);
+    border-radius:11px; display:flex; align-items:center; justify-content:center;
+    color:white; font-size:1rem; flex-shrink:0;
+    box-shadow:0 4px 14px rgba(189,15,20,0.35);
+}
+.brand-name { font-size:1.1rem; font-weight:800; color:var(--text-main); letter-spacing:-0.3px; }
+.sidebar-section { padding:18px 12px 4px; }
+.sidebar-label {
+    font-size:0.62rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:1.2px; color:var(--text-light); padding:0 8px; margin-bottom:6px;
+}
+.nav-link-admin {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px; border-radius:11px;
+    color:var(--text-muted); text-decoration:none;
+    font-weight:500; font-size:0.875rem;
+    transition:all 0.2s; position:relative; margin-bottom:2px;
+}
+.nav-link-admin:hover { background:var(--azul-light); color:var(--azul); }
+.nav-link-admin.active { background:var(--rojo-light); color:var(--rojo); font-weight:700; }
+
+.main-content { margin-left:var(--sidebar-w); padding:32px 28px 48px; min-height:100vh; }
+.page-title { font-size:2rem; font-weight:800; letter-spacing:-0.5px; color:var(--text-main); }
+.page-sub   { font-size:0.83rem; color:var(--text-muted); margin-top:3px; }
+
+.btn-primary-brand {
+    display:flex; align-items:center; gap:6px;
+    background:var(--grad-azul); color:white; border:none;
+    border-radius:50px; padding:10px 22px;
+    font-size:0.84rem; font-weight:700; font-family:'Manrope',sans-serif;
+    cursor:pointer; transition:all 0.2s;
+    box-shadow:0 4px 14px rgba(37,49,80,0.35); text-decoration:none;
+}
+.btn-primary-brand:hover { filter:brightness(1.1); transform:translateY(-1px); }
+.btn-outline-brand {
+    display:flex; align-items:center; gap:6px;
+    background:white; color:var(--text-main);
+    border:1.5px solid var(--border); border-radius:50px; padding:10px 20px;
+    font-size:0.84rem; font-weight:600; font-family:'Manrope',sans-serif;
+    cursor:pointer; transition:all 0.2s;
+}
+.btn-outline-brand:hover { border-color:var(--azul-mid); color:var(--azul); }
+
+.metrics-row { display:grid; grid-template-columns:repeat(5,1fr); gap:16px; margin-bottom:24px; }
+@media (max-width: 1200px) { .metrics-row { grid-template-columns:repeat(2,1fr); } }
+@media (max-width: 768px) { .metrics-row { grid-template-columns:1fr; } }
+
+.metric-card {
+    background:var(--bg-card); border-radius:var(--radius); padding:22px;
+    box-shadow:var(--shadow); transition:transform 0.25s,box-shadow 0.25s;
+    border:1px solid var(--border);
+}
+.metric-card:hover { transform:translateY(-3px); box-shadow:var(--shadow-md); }
+.card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
+.metric-label { font-size:0.8rem; font-weight:600; color:var(--text-muted); }
+.card-arrow {
+    width:30px; height:30px; border-radius:50%;
+    border:1.5px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text-muted); font-size:0.75rem; flex-shrink:0;
+}
+.metric-value { font-size:2.2rem; font-weight:800; line-height:1; letter-spacing:-1px; margin-bottom:10px; color:var(--text-main); }
+.metric-trend { display:flex; align-items:center; gap:6px; font-size:0.73rem; font-weight:600; color:var(--text-muted); }
+.trend-chip { background:rgba(37,49,80,0.08); color:var(--azul); border-radius:6px; padding:2px 8px; font-size:0.7rem; font-weight:700; }
+
+.table-container {
+    background:var(--bg-card); border-radius:var(--radius); padding:26px;
+    box-shadow:var(--shadow); border:1px solid var(--border); margin-top:24px;
+}
+.table-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.table-title  { font-size:1rem; font-weight:800; color:var(--text-main); }
+.table-sub    { font-size:0.75rem; color:var(--text-muted); margin-top:2px; }
+.table { color:var(--text-main) !important; background:transparent !important; }
+.table thead th {
+    background:var(--bg-page) !important; color:var(--text-muted) !important;
+    font-size:0.67rem; font-weight:700; text-transform:uppercase; letter-spacing:1px;
+    border:none !important; padding:10px 14px;
+}
+.table tbody td { padding:13px 14px; border-bottom:1px solid var(--border) !important; vertical-align:middle; font-size:0.875rem; }
+
+.badge-pill {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:4px 11px; border-radius:20px;
+    font-size:0.72rem; font-weight:700; white-space:nowrap;
+}
+.badge-esp-digital  { background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe; }
+.badge-esp-desplaz  { background:#fdf4ff; color:#7e22ce; border:1px solid #e9d5ff; }
+.badge-esp-traslado { background:#d1fae5; color:#065f46; border:1px solid #a7f3d0; }
+.badge-est-activo      { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+.badge-est-almuerzo    { background:#fef9c3; color:#a16207; border:1px solid #fde68a; }
+.badge-est-breakm      { background:#ffedd5; color:#c2410c; border:1px solid #fed7aa; }
+.badge-est-breakt      { background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe; }
+.badge-est-breakb      { background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; }
+.badge-est-imprevisto  { background:var(--rojo-light); color:var(--rojo-dark); border:1px solid #fecaca; }
+.badge-est-inactivo    { background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; }
+.badge-est-default     { background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0; }
+.badge-hora { background:var(--bg-page); color:var(--text-muted); border:1px solid var(--border); padding:4px 9px; border-radius:7px; font-size:0.7rem; font-weight:600; display:inline-flex; align-items:center; gap:4px; }
+
+.btn-action {
+    width:32px; height:32px; border-radius:9px;
+    border:1.5px solid var(--border); background:var(--bg-card); color:var(--text-muted);
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:0.82rem; cursor:pointer; transition:all 0.2s;
+}
+.btn-action:hover { background:var(--azul); color:white; border-color:var(--azul); }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="sidebar-brand">
+        <div class="brand-icon"><i class="bi bi-bar-chart-fill"></i></div>
+        <span class="brand-name">Métricas Pro</span>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-label">Navegación</div>
+        <a href="#" class="nav-link-admin active">
+            <i class="bi bi-graph-up-arrow"></i> Desempeño
+        </a>
+    </div>
+    <div style="margin-top:auto; padding:16px 12px;">
+         <span style="font-size: 0.7rem; font-weight: bold; color: var(--text-muted); padding: 8px;">Acceso como:</span>
+         <p style="font-size: 0.75rem; color: var(--text-main); font-weight: 800; padding: 0 8px; margin: 0; word-break: break-all;" id="adminEmail">cargando...</p>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h1 class="page-title">Métricas del Equipo</h1>
+            <p class="page-sub">Análisis consolidado de tiempos de atención, producción y cumplimiento de ANS</p>
+        </div>
+        <button class="btn-outline-brand" onclick="cargarMetricas()">
+            <i class="bi bi-arrow-clockwise"></i> Sincronizar Datos
+        </button>
+    </div>
+
+    <!-- Filtros de fecha -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-4 p-3 bg-white rounded-4 border" style="border-color:var(--border);">
+        <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Desde</label>
+            <input type="date" id="metricaDesde" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Hasta</label>
+            <input type="date" id="metricaHasta" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
+        </div>
+        <button class="btn-primary-brand" onclick="aplicarFiltroFechas()" style="border-radius:10px;padding:8px 18px;">
+            <i class="bi bi-funnel"></i> Aplicar Rango
+        </button>
+        <div class="d-flex gap-2 ms-auto">
+            <button class="btn-outline-brand" onclick="setRangoRapido('hoy')" style="padding:6px 14px;font-size:0.75rem;">Hoy</button>
+            <button class="btn-outline-brand" onclick="setRangoRapido('semana')" style="padding:6px 14px;font-size:0.75rem;">Últimos 7 días</button>
+            <button class="btn-outline-brand" onclick="setRangoRapido('mes')" style="padding:6px 14px;font-size:0.75rem;">Últimos 30 días</button>
+        </div>
+    </div>
+
+    <!-- Spinner de carga -->
+    <div id="metricasSpinner" class="text-center py-5">
+        <div class="spinner-border" role="status" style="color:var(--rojo);width:3rem;height:3rem;"></div>
+        <p class="mt-3 text-muted fw-bold">Calculando y estructurando bases de datos...</p>
+    </div>
+
+    <!-- Contenido de métricas -->
+    <div id="metricasContenido" style="display:none;">
+        <!-- Tarjetas KPI -->
+        <div class="metrics-row mb-4">
+            <div class="metric-card">
+                <div class="card-top"><span class="metric-label">Total Cerradas</span><div class="card-arrow"><i class="bi bi-clipboard-check"></i></div></div>
+                <div class="metric-value" id="kpiTotal">0</div>
+                <div class="metric-trend"><span class="trend-chip">Período</span> Solicitudes fin</div>
+            </div>
+            <div class="metric-card">
+                <div class="card-top"><span class="metric-label">T. Promedio Gestión</span><div class="card-arrow"><i class="bi bi-stopwatch"></i></div></div>
+                <div class="metric-value" id="kpiTiempo">0<span style="font-size:1rem;font-weight:600;"> min</span></div>
+                <div class="metric-trend"><span class="trend-chip">Asignación → Cierre</span> Promedio</div>
+            </div>
+            <div class="metric-card">
+                <div class="card-top"><span class="metric-label">Tiempo de Resolución</span><div class="card-arrow"><i class="bi bi-clock-history"></i></div></div>
+                <div class="metric-value" id="kpiTiempoGeneral" style="color:#7c3aed;">0<span style="font-size:1rem;font-weight:600;">h</span></div>
+                <div class="metric-trend"><span class="trend-chip" style="background:#ede9fe;color:#7c3aed;">Radicación → Cierre</span> Promedio</div>
+            </div>
+            <div class="metric-card">
+                <div class="card-top"><span class="metric-label">Tasa Aprobación</span><div class="card-arrow"><i class="bi bi-check-circle"></i></div></div>
+                <div class="metric-value" id="kpiAprobacion">0<span style="font-size:1rem;font-weight:600;">%</span></div>
+                <div class="metric-trend"><span class="trend-chip" style="background:rgba(34,197,94,0.1);color:#15803d;">Aprobaciones</span> Del total</div>
+            </div>
+            <div class="metric-card">
+                <div class="card-top"><span class="metric-label">Fuera de SLA</span><div class="card-arrow"><i class="bi bi-exclamation-triangle"></i></div></div>
+                <div class="metric-value" id="kpiFueraSLA" style="color:var(--rojo);">0</div>
+                <div class="metric-trend"><span class="trend-chip" style="background:var(--rojo-light);color:var(--rojo);">Alerta</span> Mayor de 4 horas</div>
+            </div>
+        </div>
+
+        <!-- Gráficos -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-title mb-3"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Producción Diaria</div>
+                    <canvas id="chartProduccion" height="220"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-title mb-3"><i class="bi bi-pie-chart me-2" style="color:var(--azul);"></i>Distribución por Estado</div>
+                    <canvas id="chartEstados" height="220"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-title mb-3"><i class="bi bi-people me-2" style="color:var(--azul);"></i>Productividad por Analista</div>
+                    <canvas id="chartAnalistas" height="220"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-title mb-3"><i class="bi bi-shield-check me-2" style="color:var(--azul);"></i>Cumplimiento SLA</div>
+                    <canvas id="chartSLA" height="220"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabla Rendimiento Analistas -->
+        <div class="table-container">
+            <div class="table-header">
+                <div>
+                    <div class="table-title">Rendimiento Individual</div>
+                    <div class="table-sub">Eficiencia y volúmenes de casos cerrados por cada analista</div>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="tablaMetricasAnalistas" class="table w-100 align-middle">
+                    <thead>
+                        <tr>
+                            <th>Analista</th>
+                            <th>Total</th>
+                            <th>Aprobadas</th>
+                            <th>Negadas</th>
+                            <th>Aplazadas</th>
+                            <th>T. Gestión Prom</th>
+                            <th>T. General Prom</th>
+                            <th>Fuera SLA</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cuerpoMetricasAnalistas"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Panel Seguimiento Analistas -->
+        <div class="table-container mt-4">
+            <div class="table-header">
+                <div>
+                    <div class="table-title"><i class="bi bi-activity me-2" style="color:var(--azul);"></i>Monitoreo y Log de Actividad</div>
+                    <div class="table-sub">SLA diario, horas del primer/último caso resuelto</div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <input type="date" id="filtroFechaSeguimiento" class="form-control" onchange="cargarAsesoresActivosPrimerResultado()" style="width:160px;padding:6px 10px !important;font-size:0.78rem;border-radius:9px !important;">
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="tablaAsesoresPrimerResultado" class="table w-100 align-middle">
+                    <thead>
+                        <tr>
+                            <th>Asesor</th>
+                            <th>Especialidad</th>
+                            <th>Estado</th>
+                            <th class="text-center">Gestionadas</th>
+                            <th class="text-center">Pendientes</th>
+                            <th class="text-center">Prom. Gestión</th>
+                            <th class="text-center">Prom. General</th>
+                            <th>Primer Resultado</th>
+                            <th>Último Resultado</th>
+                            <th class="text-center">Historial</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cuerpoAsesoresPrimerResultado"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+<script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.5/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+var chartProduccion = null;
+var chartEstados = null;
+var chartAnalistas = null;
+var chartSLA = null;
+var metricasInicializado = false;
+
+window.onload = function() {
+    google.script.run.withSuccessHandler(function(email) {
+        if (email) {
+            var prefijo = email.split('@')[0];
+            var nombre = prefijo.split('.').map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+            document.getElementById('adminEmail').innerText = nombre;
+        }
+    }).getEmailUsuario();
+
+    var hoy = new Date();
+    var yyyy = hoy.getFullYear();
+    var mm = String(hoy.getMonth() + 1).padStart(2, '0');
+    var dd = String(hoy.getDate()).padStart(2, '0');
+    
+    document.getElementById('filtroFechaSeguimiento').value = yyyy + '-' + mm + '-' + dd;
+    document.getElementById('filtroFechaSeguimiento').max = yyyy + '-' + mm + '-' + dd;
+
+    setRangoRapido('semana');
+};
+
+function setRangoRapido(tipo) {
+    var hoy = new Date();
+    var desde = new Date();
+    if (tipo === 'hoy') {
+        desde = new Date(hoy);
+    } else if (tipo === 'semana') {
+        desde.setDate(hoy.getDate() - 7);
+    } else if (tipo === 'mes') {
+        desde.setDate(hoy.getDate() - 30);
+    }
+    
+    document.getElementById('metricaDesde').value = formatDateInput(desde);
+    document.getElementById('metricaHasta').value = formatDateInput(hoy);
+    cargarMetricas();
+}
+
+function formatDateInput(d) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+}
+
+function formatDateBackend(inputValue) {
+    if (!inputValue) return '';
+    var parts = inputValue.split('-');
+    return parts[2] + '/' + parts[1] + '/' + parts[0];
+}
+
+function aplicarFiltroFechas() {
+    var desde = document.getElementById('metricaDesde').value;
+    var hasta = document.getElementById('metricaHasta').value;
+    if (!desde || !hasta) {
+        Swal.fire({ icon: 'warning', title: 'Fechas incompletas', text: 'Selecciona ambas fechas.' });
+        return;
+    }
+    cargarMetricas();
+}
+
+function cargarMetricas() {
+    var desde = formatDateBackend(document.getElementById('metricaDesde').value);
+    var hasta = formatDateBackend(document.getElementById('metricaHasta').value);
+    
+    document.getElementById('metricasSpinner').style.display = 'block';
+    document.getElementById('metricasContenido').style.display = 'none';
+    
+    google.script.run
+        .withSuccessHandler(renderizarMetricas)
+        .withFailureHandler(function(err) {
+            Swal.fire({ icon: 'error', title: 'Error de carga', text: err.message });
+        })
+        .obtenerDatosMetricas(desde, hasta);
+}
+
+function renderizarMetricas(datos) {
+    document.getElementById('metricasSpinner').style.display = 'none';
+    document.getElementById('metricasContenido').style.display = 'block';
+    
+    // KPI Cards
+    document.getElementById('kpiTotal').textContent = datos.totalGestionadas;
+    document.getElementById('kpiTiempo').innerHTML = formatearDuracion(datos.tiempoPromedioMinutos);
+    document.getElementById('kpiTiempoGeneral').innerHTML = formatearTiempoGeneral(datos.tiempoPromedioGeneralHoras);
+    document.getElementById('kpiAprobacion').innerHTML = datos.tasaAprobacion + '%';
+    document.getElementById('kpiFueraSLA').textContent = datos.fueraDeSLA;
+
+    renderGraficoProduccion(datos.produccionDiaria);
+    renderGraficoEstados(datos.distribucionEstados);
+    renderGraficoAnalistas(datos.porAnalista);
+    renderGraficoSLA(datos.slaDiario);
+    renderTablaAnalistas(datos.porAnalista);
+    
+    cargarAsesoresActivosPrimerResultado();
+}
+
+function renderGraficoProduccion(produccionDiaria) {
+    if (chartProduccion) chartProduccion.destroy();
+    var ctx = document.getElementById('chartProduccion').getContext('2d');
+    chartProduccion = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: produccionDiaria.map(function(d) { return d.fecha; }),
+            datasets: [{
+                label: 'Cerradas',
+                data: produccionDiaria.map(function(d) { return d.cantidad; }),
+                borderColor: '#253150',
+                backgroundColor: 'rgba(37,49,80,0.08)',
+                borderWidth: 2.5,
+                fill: true,
+                tension: 0.25
+            }]
+        },
+        options: { responsive: true }
+    });
+}
+
+function renderGraficoEstados(dist) {
+    if (chartEstados) chartEstados.destroy();
+    var ctx = document.getElementById('chartEstados').getContext('2d');
+    chartEstados = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Aprobadas', 'Negadas', 'Aplazadas'],
+            datasets: [{
+                data: [dist.aprobadas, dist.negadas, dist.aplazadas],
+                backgroundColor: ['#22c55e', '#ef4444', '#f59e0b']
+            }]
+        },
+        options: { responsive: true }
+    });
+}
+
+function renderGraficoAnalistas(porAnalista) {
+    if (chartAnalistas) chartAnalistas.destroy();
+    var ctx = document.getElementById('chartAnalistas').getContext('2d');
+    var top10 = porAnalista.slice(0, 10);
+    chartAnalistas = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: top10.map(function(a) { return a.nombre; }),
+            datasets: [{
+                label: 'Solicitudes',
+                data: top10.map(function(a) { return a.total; }),
+                backgroundColor: '#253150',
+                borderRadius: 6
+            }]
+        },
+        options: { responsive: true, indexAxis: 'y' }
+    });
+}
+
+function renderGraficoSLA(slaDiario) {
+    if (chartSLA) chartSLA.destroy();
+    var ctx = document.getElementById('chartSLA').getContext('2d');
+    chartSLA = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: slaDiario.map(function(d) { return d.fecha; }),
+            datasets: [
+                { label: 'Dentro SLA (<=4h)', data: slaDiario.map(function(d) { return d.dentroSLA; }), backgroundColor: '#22c55e' },
+                { label: 'Fuera SLA (>4h)', data: slaDiario.map(function(d) { return d.fueraSLA; }), backgroundColor: '#ef4444' }
+            ]
+        },
+        options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true } } }
+    });
+}
+
+function renderTablaAnalistas(porAnalista) {
+    if ($.fn.DataTable.isDataTable('#tablaMetricasAnalistas')) $('#tablaMetricasAnalistas').DataTable().destroy();
+    var html = '';
+    porAnalista.forEach(function(a) {
+        var claseFueraSLA = a.fueraSLA > 0 ? 'table-danger' : '';
+        html += '<tr>' +
+            '<td class="fw-bold">' + a.nombre + '</td>' +
+            '<td>' + a.total + '</td>' +
+            '<td class="text-success fw-bold">' + a.aprobadas + '</td>' +
+            '<td class="text-danger fw-bold">' + a.negadas + '</td>' +
+            '<td class="text-warning fw-bold">' + a.aplazadas + '</td>' +
+            '<td>' + formatearDuracion(a.tiempoPromedio) + '</td>' +
+            '<td>' + formatearTiempoGeneral(a.tiempoPromedioGeneral) + '</td>' +
+            '<td class="' + claseFueraSLA + '">' + a.fueraSLA + '</td>' +
+        '</tr>';
+    });
+    document.getElementById('cuerpoMetricasAnalistas').innerHTML = html;
+    $('#tablaMetricasAnalistas').DataTable({ language: { url: '//cdn.datatables.net/plug-ins/1.13.5/i18n/es-ES.json' }, pageLength: 5 });
+}
+
+function cargarAsesoresActivosPrimerResultado() {
+    var fecha = document.getElementById('filtroFechaSeguimiento').value;
+    google.script.run
+        .withSuccessHandler(renderAsesoresPrimerResultado)
+        .withFailureHandler(function(err){
+            console.error(err);
+        })
+        .admin_obtenerAsesoresActivosPrimerResultado(fecha);
+}
+
+function renderAsesoresPrimerResultado(respuesta) {
+    if ($.fn.DataTable.isDataTable('#tablaAsesoresPrimerResultado')) $('#tablaAsesoresPrimerResultado').DataTable().destroy();
+    var html = '';
+    respuesta.datos.forEach(function(a) {
+        var hPrimer = a.primerResultado ? '<span class="badge-hora"><i class="bi bi-clock"></i> ' + a.primerResultado + '</span>' : '---';
+        var hUltimo = a.ultimoResultado ? '<span class="badge-hora"><i class="bi bi-clock-history"></i> ' + a.ultimoResultado + '</span>' : '---';
+        
+        html += '<tr>' +
+            '<td class="fw-bold">' + a.nombre + '</td>' +
+            '<td><span class="badge-pill badge-esp-digital">' + a.especialidad + '</span></td>' +
+            '<td><span class="badge-pill badge-est-activo">' + a.estado + '</span></td>' +
+            '<td class="text-center">' + a.gestionadas + '</td>' +
+            '<td class="text-center">' + a.pendientes + '</td>' +
+            '<td class="text-center">' + formatearDuracion(a.promedioGestion) + '</td>' +
+            '<td class="text-center text-purple fw-bold">' + formatearTiempoGeneral(a.promedioGeneral) + '</td>' +
+            '<td>' + hPrimer + '</td>' +
+            '<td>' + hUltimo + '</td>' +
+            '<td class="text-center"><button class="btn-action" onclick="verDetalleAnalista(\'' + a.correo.replace(/'/g, "\\'") + '\')"><i class="bi bi-eye"></i></button></td>' +
+        '</tr>';
+    });
+    document.getElementById('cuerpoAsesoresPrimerResultado').innerHTML = html;
+    $('#tablaAsesoresPrimerResultado').DataTable({ language: { url: '//cdn.datatables.net/plug-ins/1.13.5/i18n/es-ES.json' }, pageLength: 5 });
+}
+
+function verDetalleAnalista(correo) {
+    Swal.fire({ title: 'Cargando log de analista...', didOpen: function() { Swal.showLoading(); } });
+    var fecha = document.getElementById('filtroFechaSeguimiento').value;
+    google.script.run
+        .withSuccessHandler(function(res) {
+            Swal.close();
+            var html = '<div style="text-align:left;"><p><strong>Analista:</strong> ' + res.nombre + '</p><hr>';
+            html += '<h6 class="text-success fw-bold">Gestionadas: ' + res.gestionadas.length + '</h6><ul>';
+            res.gestionadas.forEach(function(g) {
+                html += '<li>Solicitud: ' + g.id + ' (Póliza: ' + g.poliza + ') - ' + g.estado + '</li>';
+            });
+            html += '</ul><h6 class="text-primary fw-bold">Pendientes: ' + res.pendientes.length + '</h6><ul>';
+            res.pendientes.forEach(function(p) {
+                html += '<li>Solicitud: ' + p.id + ' (Póliza: ' + p.poliza + ')</li>';
+            });
+            html += '</ul></div>';
+            Swal.fire({ title: 'Detalle de Solicitudes', html: html, width: 600 });
+        })
+        .admin_obtenerDetallePorAnalista(correo, fecha);
+}
+
+function formatearDuracion(minutos) {
+    if (!minutos || minutos === 0) return '—';
+    var h = Math.floor(minutos / 60);
+    var m = Math.round(minutos % 60);
+    return h === 0 ? m + ' min' : h + 'h ' + m + 'm';
+}
+
+function formatearTiempoGeneral(horas) {
+    if (!horas || horas === 0) return '—';
+    var h = Math.floor(horas);
+    var m = Math.round((horas - h) * 60);
+    return h === 0 ? m + ' min' : h + 'h ' + m + 'm';
+}
+</script>
+</body>
+</html>
