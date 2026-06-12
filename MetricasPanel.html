@@ -4,181 +4,13 @@
     <base target="_top">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Métricas Análisis de Riesgo</title>
+    <title>Métricas Análisis</title>
     <link rel="icon" type="image/png" href="https://multimedia-jelpit-personas-prod.s3.amazonaws.com/public/MmViFBbLVXF3xkEPDY7zBHjcNk8dIpnY42UqjtVO.png">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.5/css/dataTables.bootstrap5.min.css">
-<style>
-:root {
-    --rojo:        #BD0F14;
-    --rojo-dark:   #8b0a0e;
-    --rojo-light:  #fde8e8;
-    --rojo-mid:    #f87171;
-    --azul:        #253150;
-    --azul-dark:   #161e33;
-    --azul-mid:    #3a4d7a;
-    --azul-light:  #e8edf6;
-    --gris:        #706F6F;
-    --gris-light:  #f1f0f0;
-    --gris-dark:   #4a4a4a;
-    --grad-rojo:   linear-gradient(135deg, #8b0a0e 0%, #BD0F14 55%, #e05555 100%);
-    --grad-azul:   linear-gradient(135deg, #161e33 0%, #253150 60%, #3a4d7a 100%);
-    --bg-page:     #F4F5F8;
-    --bg-card:     #FFFFFF;
-    --text-main:   #253150;
-    --text-muted:  #706F6F;
-    --text-light:  #94a3b8;
-    --border:      #e5e7eb;
-    --sidebar-w:   240px;
-    --radius:      20px;
-    --shadow:      0 2px 12px rgba(37,49,80,0.08);
-}
-body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--text-main); }
-
-#sidebar {
-    width:var(--sidebar-w); height:100vh; background:var(--bg-card);
-    position:fixed; top:0; left:0;
-    display:flex; flex-direction:column;
-    border-right:1px solid var(--border); z-index:100;
-}
-.sidebar-brand {
-    display:flex; align-items:center; gap:12px;
-    padding:22px 20px; border-bottom:1px solid var(--border);
-}
-.brand-icon {
-    width:38px; height:38px; background:var(--grad-rojo);
-    border-radius:11px; display:flex; align-items:center; justify-content:center;
-    color:white; font-size:1rem; flex-shrink:0;
-    box-shadow:0 4px 14px rgba(189,15,20,0.35);
-}
-.brand-name { font-size:1.1rem; font-weight:800; color:var(--text-main); letter-spacing:-0.3px; }
-.sidebar-section { padding:18px 12px 4px; }
-.sidebar-label {
-    font-size:0.62rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:1.2px; color:var(--text-light); padding:0 8px; margin-bottom:6px;
-}
-.nav-link-admin {
-    display:flex; align-items:center; gap:10px;
-    padding:10px 14px; border-radius:11px;
-    color:var(--text-muted); text-decoration:none;
-    font-weight:500; font-size:0.875rem;
-    transition:all 0.2s; position:relative; margin-bottom:2px;
-}
-.nav-link-admin:hover { background:var(--azul-light); color:var(--azul); }
-.nav-link-admin.active { background:var(--rojo-light); color:var(--rojo); font-weight:700; }
-
-.main-content { margin-left:var(--sidebar-w); padding:22px 28px 48px; min-height:100vh; }
-.page-title { font-size:2rem; font-weight:800; letter-spacing:-0.5px; color:var(--azul); }
-.page-sub   { font-size:0.83rem; color:var(--gris); margin-top:3px; }
-
-.btn-primary-brand {
-    display:flex; align-items:center; gap:6px;
-    background:var(--grad-rojo); color:white; border:none;
-    border-radius:50px; padding:10px 22px;
-    font-size:0.84rem; font-weight:700; font-family:'Manrope',sans-serif;
-    cursor:pointer; transition:all 0.2s;
-    box-shadow:0 4px 14px rgba(189,15,20,0.35); text-decoration:none;
-}
-.btn-primary-brand:hover { filter:brightness(1.1); transform:translateY(-1px); }
-.btn-outline-brand {
-    display:flex; align-items:center; gap:6px;
-    background:white; color:var(--text-main);
-    border:1.5px solid var(--border); border-radius:50px; padding:10px 20px;
-    font-size:0.84rem; font-weight:600; font-family:'Manrope',sans-serif;
-    cursor:pointer; transition:all 0.2s;
-}
-.btn-outline-brand:hover { border-color:var(--azul-mid); color:var(--azul); }
-
-.metrics-row { display:grid; grid-template-columns:repeat(5,1fr); gap:16px; margin-bottom:24px; }
-@media (max-width: 1200px) { .metrics-row { grid-template-columns:repeat(2,1fr); } }
-@media (max-width: 768px) { .metrics-row { grid-template-columns:1fr; } }
-
-.metric-card {
-    background:var(--bg-card); border-radius:var(--radius); padding:22px;
-    box-shadow:var(--shadow); transition:transform 0.25s,box-shadow 0.25s;
-    border:1px solid var(--border);
-}
-.metric-card:hover { transform:translateY(-3px); box-shadow:var(--shadow-md); }
-.card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
-.metric-label { font-size:0.8rem; font-weight:600; color:var(--text-muted); }
-.card-arrow {
-    width:30px; height:30px; border-radius:50%;
-    border:1.5px solid var(--border);
-    display:flex; align-items:center; justify-content:center;
-    color:var(--text-muted); font-size:0.75rem; flex-shrink:0;
-}
-.metric-value { font-size:2.2rem; font-weight:800; line-height:1; letter-spacing:-1px; margin-bottom:10px; color:var(--text-main); }
-.metric-trend { display:flex; align-items:center; gap:6px; font-size:0.73rem; font-weight:600; color:var(--text-muted); }
-.trend-chip { background:rgba(37,49,80,0.08); color:var(--azul); border-radius:6px; padding:2px 8px; font-size:0.7rem; font-weight:700; }
-
-.table-container {
-    background:var(--bg-card); border-radius:var(--radius); padding:26px;
-    box-shadow:var(--shadow); border:1px solid var(--border); margin-top:24px;
-}
-.table-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-.table-title  { font-size:1rem; font-weight:800; color:var(--text-main); }
-.table-sub    { font-size:0.75rem; color:var(--text-muted); margin-top:2px; }
-.table { color:var(--text-main) !important; background:transparent !important; }
-.table thead th {
-    background:var(--bg-page) !important; color:var(--text-muted) !important;
-    font-size:0.67rem; font-weight:700; text-transform:uppercase; letter-spacing:1px;
-    border:none !important; padding:10px 14px;
-}
-.table tbody td { padding:13px 14px; border-bottom:1px solid var(--border) !important; vertical-align:middle; font-size:0.875rem; }
-
-.badge-pill {
-    display:inline-flex; align-items:center; gap:5px;
-    padding:4px 11px; border-radius:20px;
-    font-size:0.72rem; font-weight:700; white-space:nowrap;
-}
-.badge-esp-digital  { background:var(--azul-light); color:var(--azul); border:1px solid #c7d2e8; }
-.badge-esp-desplaz  { background:var(--rojo-light); color:var(--rojo); border:1px solid #f8c4c4; }
-.badge-esp-traslado { background:var(--gris-light); color:var(--gris-dark); border:1px solid #d4d4d4; }
-.badge-est-activo      { background:var(--azul-light); color:var(--azul); border:1px solid #c7d2e8; }
-.badge-est-almuerzo    { background:#fef9c3; color:#a16207; border:1px solid #fde68a; }
-.badge-est-breakm      { background:var(--gris-light); color:var(--gris-dark); border:1px solid #d4d4d4; }
-.badge-est-breakt      { background:var(--gris-light); color:var(--gris-dark); border:1px solid #d4d4d4; }
-.badge-est-breakb      { background:var(--gris-light); color:var(--gris-dark); border:1px solid #d4d4d4; }
-.badge-est-imprevisto  { background:var(--rojo-light); color:var(--rojo-dark); border:1px solid #f8c4c4; }
-.badge-est-inactivo    { background:var(--gris-light); color:var(--gris); border:1px solid #d4d4d4; }
-.badge-est-default     { background:var(--gris-light); color:var(--gris); border:1px solid #d4d4d4; }
-.badge-hora { background:var(--bg-page); color:var(--text-muted); border:1px solid var(--border); padding:4px 9px; border-radius:7px; font-size:0.7rem; font-weight:600; display:inline-flex; align-items:center; gap:4px; }
-
-.btn-action {
-    width:32px; height:32px; border-radius:9px;
-    border:1.5px solid var(--border); background:var(--bg-card); color:var(--text-muted);
-    display:inline-flex; align-items:center; justify-content:center;
-    font-size:0.82rem; cursor:pointer; transition:all 0.2s;
-}
-.btn-action:hover { background:var(--rojo); color:white; border-color:var(--rojo); }
-
-.main-content { position:relative; z-index:1; }
-
-.tipo-card {
-    display:flex; align-items:center; gap:8px;
-    background:var(--bg-card); border-radius:10px; padding:8px 10px;
-    border:1px solid var(--border); box-shadow:0 1px 4px rgba(37,49,80,0.04);
-    transition:transform 0.2s; overflow:hidden;
-}
-.tipo-card:hover { transform:translateY(-2px); box-shadow:var(--shadow); }
-.tipo-icon {
-    width:28px; height:28px; border-radius:7px;
-    display:flex; align-items:center; justify-content:center;
-    color:#fff; font-size:0.72rem; flex-shrink:0;
-}
-.tipo-info { display:flex; flex-direction:column; min-width:0; flex:1; }
-.tipo-label { font-size:0.58rem; font-weight:700; color:var(--gris); text-transform:uppercase; letter-spacing:0.4px; }
-.tipo-value { font-size:1.1rem; font-weight:800; color:var(--azul); line-height:1.1; }
-.tipo-prom {
-    font-size:0.6rem; font-weight:700;
-    color:var(--gris); background:var(--gris-light);
-    padding:2px 5px; border-radius:5px; white-space:nowrap; flex-shrink:0;
-}
-.tab-panel { animation:fadeIn 0.3s ease; }
-@keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
-</style>
+    <?!= HtmlService.createHtmlOutputFromFile('Estilos').getContent(); ?>
 </head>
 <body>
 <div id="particles-js" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;"></div>
@@ -186,24 +18,24 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
 <div id="sidebar">
     <div class="sidebar-brand">
         <div class="brand-icon"><i class="bi bi-bar-chart-fill"></i></div>
-        <span class="brand-name">Métricas Análisis de Riesgo</span>
+        <span class="brand-name">Métricas Análisis</span>
     </div>
     <div class="sidebar-section">
         <div class="sidebar-label">Navegación</div>
-        <a href="javascript:void(0)" class="nav-link-admin active" onclick="cambiarTab('resumen', this)">
-            <i class="bi bi-speedometer"></i> Resumen General
+        <a href="javascript:void(0)" class="nav-link-admin active" onclick="cambiarTab('resumen', this)" title="Resumen General">
+            <i class="bi bi-speedometer"></i> <span class="nav-text">Resumen General</span>
         </a>
-        <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('produccion', this)">
-            <i class="bi bi-bar-chart-line"></i> Producción
+        <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('produccion', this)" title="Producción">
+            <i class="bi bi-bar-chart-line"></i> <span class="nav-text">Producción</span>
         </a>
-        <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('tiempos', this)">
-            <i class="bi bi-clock-history"></i> Tiempos
+        <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('tiempos', this)" title="Tiempos">
+            <i class="bi bi-clock-history"></i> <span class="nav-text">Tiempos</span>
         </a>
-        <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('analistas', this)">
-            <i class="bi bi-people"></i> Analistas
+        <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('analistas', this)" title="Analistas">
+            <i class="bi bi-people"></i> <span class="nav-text">Analistas</span>
         </a>
     </div>
-    <div style="margin-top:auto; padding:16px 12px;">
+    <div class="sidebar-footer" style="margin-top:auto; padding:16px 12px;">
          <span style="font-size: 0.7rem; font-weight: bold; color: var(--text-muted); padding: 8px;">Acceso como:</span>
          <p style="font-size: 0.75rem; color: var(--text-main); font-weight: 800; padding: 0 8px; margin: 0; word-break: break-all;" id="adminEmail">cargando...</p>
     </div>
@@ -223,7 +55,7 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
         </div>
     </div>
 
-    <!-- Filtros de fecha -->
+    <!-- Filtros de fecha + Segmento -->
     <div class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);">
         <div class="d-flex align-items-center gap-2">
             <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Desde</label>
@@ -236,12 +68,61 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
         <button class="btn-primary-brand" onclick="aplicarFiltroFechas()" style="border-radius:10px;padding:8px 18px;">
             <i class="bi bi-funnel"></i> Aplicar Rango
         </button>
+        <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Segmento</label>
+            <select id="filtroSegmento" class="form-select" onchange="filtrarSegmentacion()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
+                <option value="todos">Todos los Segmentos</option>
+            </select>
+        </div>
         <div class="d-flex gap-2 ms-auto">
             <button class="btn-outline-brand" onclick="setRangoRapido('hoy')" style="padding:6px 14px;font-size:0.75rem;">Hoy</button>
             <button class="btn-outline-brand" onclick="setRangoRapido('semana')" style="padding:6px 14px;font-size:0.75rem;">Últimos 7 días</button>
             <button class="btn-outline-brand" onclick="setRangoRapido('mes')" style="padding:6px 14px;font-size:0.75rem;">Últimos 30 días</button>
             <button class="btn-outline-brand" onclick="setRangoRapido('4meses')" style="padding:6px 14px;font-size:0.75rem;">Últimos 4 meses</button>
         </div>
+    </div>
+
+    <!-- Filtros adicionales generales -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);">
+        <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Póliza</label>
+            <input type="text" id="filtroPoliza" class="form-control" placeholder="Buscar póliza..." oninput="debounceFiltroPoliza()" style="width:130px;padding:6px 12px !important;font-size:0.8rem;border-radius:8px;">
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Sucursal</label>
+            <select id="filtroSucursalGlobal" class="form-select" onchange="aplicarFiltrosGenerales()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
+                <option value="todas">Todas</option>
+            </select>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Tipo</label>
+            <select id="filtroTipoGlobal" class="form-select" onchange="aplicarFiltrosGenerales()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
+                <option value="todos">Todos</option>
+                <option value="Digital">Digital</option>
+                <option value="UAR">UAR</option>
+                <option value="Reestudio">Reestudio</option>
+                <option value="Biometría">Biometría</option>
+                <option value="Inducción">Inducción</option>
+            </select>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Estado</label>
+            <select id="filtroEstadoGlobal" class="form-select" onchange="aplicarFiltrosGenerales()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
+                <option value="todos">Todos</option>
+                <option value="APROBADA">Aprobada</option>
+                <option value="NEGADA">Negada</option>
+                <option value="APLAZADA">Aplazada</option>
+            </select>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Analista</label>
+            <select id="filtroAnalistaGlobal" class="form-select" onchange="aplicarFiltrosGenerales()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
+                <option value="todos">Todos</option>
+            </select>
+        </div>
+        <button class="btn-outline-brand" onclick="limpiarFiltrosGenerales()" style="padding:6px 14px;font-size:0.75rem;">
+            <i class="bi bi-x-circle"></i> Limpiar Filtros
+        </button>
     </div>
 
     <!-- Spinner de carga -->
@@ -257,313 +138,223 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
         <div id="tab-resumen" class="tab-panel">
         <!-- Tarjetas KPI -->
         <div class="metrics-row mb-4">
-            <div class="metric-card">
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('total')">
                 <div class="card-top"><span class="metric-label">Total Gestionadas</span><div class="card-arrow"><i class="bi bi-clipboard-check"></i></div></div>
                 <div class="metric-value" id="kpiTotal">0</div>
                 <div class="metric-trend"><span class="trend-chip">Período</span> Solicitudes</div>
             </div>
-            <div class="metric-card">
-                <div class="card-top"><span class="metric-label">Tiempo Promedio Gestión</span><div class="card-arrow"><i class="bi bi-stopwatch"></i></div></div>
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('tiempoCola')">
+                <div class="card-top"><span class="metric-label">T. Cola Promedio</span><div class="card-arrow"><i class="bi bi-hourglass-split"></i></div></div>
+                <div class="metric-value" id="kpiTiempoCola" style="color:var(--azul);">0<span style="font-size:1rem;font-weight:600;"> min</span></div>
+                <div class="metric-trend"><span class="trend-chip">Radicación → Asignación</span> Espera</div>
+            </div>
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('tiempoGestion')">
+                <div class="card-top"><span class="metric-label">T. Gestión Promedio</span><div class="card-arrow"><i class="bi bi-stopwatch"></i></div></div>
                 <div class="metric-value" id="kpiTiempo">0<span style="font-size:1rem;font-weight:600;"> min</span></div>
-                <div class="metric-trend"><span class="trend-chip">Asignación → Cierre</span> Promedio</div>
+                <div class="metric-trend"><span class="trend-chip">Asignación → Cierre</span> Trabajo</div>
             </div>
-            <div class="metric-card">
-                <div class="card-top"><span class="metric-label">Tiempo Promedio General</span><div class="card-arrow"><i class="bi bi-clock-history"></i></div></div>
-                <div class="metric-value" id="kpiTiempoGeneral" style="color:var(--azul);">0<span style="font-size:1rem;font-weight:600;">h</span></div>
-                <div class="metric-trend"><span class="trend-chip">Radicación → Cierre</span> Promedio</div>
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('tiempoGeneral')">
+                <div class="card-top"><span class="metric-label">T. General Promedio</span><div class="card-arrow"><i class="bi bi-clock-history"></i></div></div>
+                <div class="metric-value" id="kpiTiempoGeneral" style="color:var(--gris-dark);">0<span style="font-size:1rem;font-weight:600;"> h</span></div>
+                <div class="metric-trend"><span class="trend-chip">Radicación → Cierre</span> Ciclo total</div>
             </div>
-            <div class="metric-card">
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('aprobacion')">
                 <div class="card-top"><span class="metric-label">Tasa Aprobación</span><div class="card-arrow"><i class="bi bi-check-circle"></i></div></div>
                 <div class="metric-value" id="kpiAprobacion">0<span style="font-size:1rem;font-weight:600;">%</span></div>
                 <div class="metric-trend"><span class="trend-chip">Aprobaciones</span> Del total</div>
-            </div>
-            <div class="metric-card">
-                <div class="card-top"><span class="metric-label">Fuera de SLA</span><div class="card-arrow"><i class="bi bi-exclamation-triangle"></i></div></div>
-                <div class="metric-value" id="kpiFueraSLA" style="color:var(--rojo);">0</div>
-                <div class="metric-trend"><span class="trend-chip" style="background:var(--rojo-light);color:var(--rojo);">Alerta</span> Mayor de 2 horas</div>
             </div>
         </div>
 
         <!-- Cards Producción por Tipo -->
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:24px;">
-            <div class="tipo-card">
-                <div class="tipo-icon" style="background:var(--azul);"><i class="bi bi-stack"></i></div>
-                <div class="tipo-info">
-                    <span class="tipo-label">General</span>
-                    <span class="tipo-value" id="kpiTipoGeneral">0</span>
-                </div>
-                <span class="tipo-prom">~<span id="kpiTipoGeneralProm">0</span>/día</span>
-            </div>
-            <div class="tipo-card">
-                <div class="tipo-icon" style="background:#253150;"><i class="bi bi-laptop"></i></div>
-                <div class="tipo-info">
-                    <span class="tipo-label">Digital</span>
-                    <span class="tipo-value" id="kpiTipoDigital">0</span>
-                </div>
-                <span class="tipo-prom">~<span id="kpiTipoDigitalProm">0</span>/día</span>
-            </div>
-            <div class="tipo-card">
-                <div class="tipo-icon" style="background:#BD0F14;"><i class="bi bi-envelope-paper"></i></div>
-                <div class="tipo-info">
-                    <span class="tipo-label">UAR</span>
-                    <span class="tipo-value" id="kpiTipoUAR">0</span>
-                </div>
-                <span class="tipo-prom">~<span id="kpiTipoUARProm">0</span>/día</span>
-            </div>
-            <div class="tipo-card">
-                <div class="tipo-icon" style="background:#706F6F;"><i class="bi bi-arrow-repeat"></i></div>
-                <div class="tipo-info">
-                    <span class="tipo-label">Reestudio</span>
-                    <span class="tipo-value" id="kpiTipoReestudio">0</span>
-                </div>
-                <span class="tipo-prom">~<span id="kpiTipoReestudioProm">0</span>/día</span>
-            </div>
-            <div class="tipo-card">
-                <div class="tipo-icon" style="background:#3a4d7a;"><i class="bi bi-fingerprint"></i></div>
-                <div class="tipo-info">
-                    <span class="tipo-label">Biometría</span>
-                    <span class="tipo-value" id="kpiTipoBiometria">0</span>
-                </div>
-                <span class="tipo-prom">~<span id="kpiTipoBiometriaProm">0</span>/día</span>
-            </div>
-            <div class="tipo-card">
-                <div class="tipo-icon" style="background:#8b0a0e;"><i class="bi bi-person-badge"></i></div>
-                <div class="tipo-info">
-                    <span class="tipo-label">Inducción</span>
-                    <span class="tipo-value" id="kpiTipoInduccion">0</span>
-                </div>
-                <span class="tipo-prom">~<span id="kpiTipoInduccionProm">0</span>/día</span>
-            </div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoGeneral')"><div class="tipo-icon" style="background:var(--azul);"><i class="bi bi-stack"></i></div><div class="tipo-info"><span class="tipo-label">General</span><span class="tipo-value" id="kpiTipoGeneral">0</span></div><span class="tipo-prom">~<span id="kpiTipoGeneralProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoDigital')"><div class="tipo-icon" style="background:#253150;"><i class="bi bi-laptop"></i></div><div class="tipo-info"><span class="tipo-label">Digital</span><span class="tipo-value" id="kpiTipoDigital">0</span></div><span class="tipo-prom">~<span id="kpiTipoDigitalProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoUAR')"><div class="tipo-icon" style="background:#BD0F14;"><i class="bi bi-envelope-paper"></i></div><div class="tipo-info"><span class="tipo-label">UAR</span><span class="tipo-value" id="kpiTipoUAR">0</span></div><span class="tipo-prom">~<span id="kpiTipoUARProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoReestudio')"><div class="tipo-icon" style="background:#706F6F;"><i class="bi bi-arrow-repeat"></i></div><div class="tipo-info"><span class="tipo-label">Reestudio</span><span class="tipo-value" id="kpiTipoReestudio">0</span></div><span class="tipo-prom">~<span id="kpiTipoReestudioProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoBiometria')"><div class="tipo-icon" style="background:#3a4d7a;"><i class="bi bi-fingerprint"></i></div><div class="tipo-info"><span class="tipo-label">Biometría</span><span class="tipo-value" id="kpiTipoBiometria">0</span></div><span class="tipo-prom">~<span id="kpiTipoBiometriaProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoInduccion')"><div class="tipo-icon" style="background:#8b0a0e;"><i class="bi bi-person-badge"></i></div><div class="tipo-info"><span class="tipo-label">Inducción</span><span class="tipo-value" id="kpiTipoInduccion">0</span></div><span class="tipo-prom">~<span id="kpiTipoInduccionProm">0</span>/día</span></div>
         </div>
 
-        <!-- Gráficos -->
+        <!-- Gráficos Resumen -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Producción Diaria<span class="btn-help-chart" onclick="ayudaGrafico('produccionDiaria')">?</span></div><canvas id="chartProduccion" height="220"></canvas></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-pie-chart me-2" style="color:var(--azul);"></i>Distribución por Estado<span class="btn-help-chart" onclick="ayudaGrafico('estados')">?</span></div><canvas id="chartEstados" height="220"></canvas></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-people me-2" style="color:var(--azul);"></i>Productividad por Analista<span class="btn-help-chart" onclick="ayudaGrafico('analistas')">?</span></div><canvas id="chartAnalistas" height="220"></canvas></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-shield-check me-2" style="color:var(--azul);"></i>Cumplimiento SLA<span class="btn-help-chart" onclick="ayudaGrafico('sla')">?</span></div><canvas id="chartSLA" height="220"></canvas></div></div>
+        </div>
+
+        <!-- Segmentación Inmobiliarias -->
         <div class="row g-4 mb-4">
             <div class="col-lg-6">
                 <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-3"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Producción Diaria</div>
-                    <canvas id="chartProduccion" height="220"></canvas>
+                    <div class="table-title mb-2"><i class="bi bi-building me-2" style="color:var(--azul);"></i>Volumen por Inmobiliaria<span class="btn-help-chart" onclick="ayudaGrafico('volumenInmob')">?</span></div>
+                    <div class="table-sub mb-3">Solicitudes recibidas por inmobiliaria del segmento seleccionado</div>
+                    <div id="wrapVolumenInmob" style="position:relative;width:100%;overflow-x:auto;">
+                        <canvas id="chartVolumenInmob"></canvas>
+                    </div>
                 </div>
             </div>
             <div class="col-lg-6">
                 <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-3"><i class="bi bi-pie-chart me-2" style="color:var(--azul);"></i>Distribución por Estado</div>
-                    <canvas id="chartEstados" height="220"></canvas>
+                    <div class="table-title mb-2"><i class="bi bi-clock me-2" style="color:var(--azul);"></i>Comparativa de Tiempos<span class="btn-help-chart" onclick="ayudaGrafico('comparativaTiempos')">?</span></div>
+                    <div class="table-sub mb-3">T. Cola vs T. Gestión vs T. General por inmobiliaria</div>
+                    <div id="wrapComparativaTiempos" style="position:relative;width:100%;overflow-x:auto;">
+                        <canvas id="chartComparativaTiempos"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="segmentacionContenido"></div>
+
+        <!-- Volumen por Sucursal -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-title mb-2"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Volumen por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('volumenSucursal')">?</span></div>
+                    <div class="table-sub mb-3">Total de solicitudes por sucursal</div>
+                    <div id="wrapVolumenSucursal" style="position:relative;width:100%;height:220px;">
+                        <canvas id="chartVolumenSucursal"></canvas>
+                    </div>
                 </div>
             </div>
             <div class="col-lg-6">
                 <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-3"><i class="bi bi-people me-2" style="color:var(--azul);"></i>Productividad por Analista</div>
-                    <canvas id="chartAnalistas" height="220"></canvas>
-                </div>
-            </div>
-            <div class="col-lg-6">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-3"><i class="bi bi-shield-check me-2" style="color:var(--azul);"></i>Cumplimiento SLA</div>
-                    <canvas id="chartSLA" height="220"></canvas>
+                    <div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('tiemposSucursal')">?</span></div>
+                    <div class="table-sub mb-3">T. Gestión vs T. General promedio por sucursal</div>
+                    <div id="wrapTiemposSucursal" style="position:relative;width:100%;height:220px;">
+                        <canvas id="chartTiemposSucursal"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Macro: Indicadores estratégicos -->
+        <!-- Indicadores estratégicos -->
         <div class="row g-4 mb-4">
+            <div class="col-lg-4"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-x-octagon me-2" style="color:var(--rojo);"></i>Tasa Negación por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('negacionSucursal')">?</span></div><canvas id="chartNegacionSucursal" height="200"></canvas></div></div>
+            <div class="col-lg-4"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-graph-down me-2" style="color:var(--azul);"></i>Tendencia SLA Diaria<span class="btn-help-chart" onclick="ayudaGrafico('tendenciaSLA')">?</span></div><canvas id="chartTendenciaSLA" height="200"></canvas></div></div>
             <div class="col-lg-4">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-2"><i class="bi bi-x-octagon me-2" style="color:var(--rojo);"></i>Tasa Negación por Sucursal</div>
-                    <canvas id="chartNegacionSucursal" height="200"></canvas>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-2"><i class="bi bi-graph-down me-2" style="color:var(--azul);"></i>Tendencia SLA Semanal</div>
-                    <canvas id="chartTendenciaSLA" height="200"></canvas>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="table-container" style="margin-top:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                <div class="table-container" style="margin-top:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;" onclick="verBacklogDetalle()">
                     <div class="table-title mb-2"><i class="bi bi-inbox me-2" style="color:var(--rojo);"></i>Backlog Actual</div>
                     <div style="font-size:3.5rem;font-weight:800;color:var(--rojo);line-height:1;" id="kpiBacklog">0</div>
                     <div style="font-size:0.75rem;color:var(--gris);font-weight:600;margin-top:8px;">Solicitudes en gestión</div>
+                    <div style="font-size:0.65rem;color:var(--text-light);margin-top:4px;"><i class="bi bi-hand-index"></i> Click para ir al semáforo</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Tabla Backlog con Semáforo -->
+        <div class="table-container mb-4" id="seccionBacklogSemaforo">
+            <div class="table-header">
+                <div>
+                    <div class="table-title"><i class="bi bi-traffic-light me-2" style="color:var(--rojo);"></i>Semáforo Operativo de Backlog<span class="btn-help-chart" onclick="ayudaGrafico('semaforo')">?</span></div>
+                    <div class="table-sub">Priorización automática por tiempo de espera. 🟢 &lt;45min · 🟡 45-90min · 🔴 &gt;90min</div>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm w-100 align-middle" style="font-size:0.82rem;">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;">SLA</th>
+                            <th>Solicitud</th>
+                            <th>Analista</th>
+                            <th>Inmobiliaria</th>
+                            <th class="text-center">Tiempo Espera</th>
+                            <th>Fecha Asignación</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cuerpoBacklogSemaforo"></tbody>
+                </table>
             </div>
         </div>
         </div><!-- /tab-resumen -->
 
         <!-- TAB: Producción -->
         <div id="tab-produccion" class="tab-panel" style="display:none;">
-        <!-- Gráfico por Sucursal y por Tipo -->
         <div class="row g-4 mb-4">
-            <div class="col-lg-6">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-3"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción por Sucursal</div>
-                    <canvas id="chartSucursal" height="180"></canvas>
-                </div>
-            </div>
-            <div class="col-lg-6">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-3"><i class="bi bi-tags me-2" style="color:var(--azul);"></i>Producción por Tipo</div>
-                    <canvas id="chartTipo" height="180"></canvas>
-                </div>
-            </div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('prodSucursal')">?</span></div><canvas id="chartSucursal" height="180"></canvas></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-tags me-2" style="color:var(--azul);"></i>Producción por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('prodTipo')">?</span></div><canvas id="chartTipo" height="180"></canvas></div></div>
         </div>
-
-        <!-- Producción Mensual por Tipo -->
-        <div class="table-container mb-4">
-            <div class="table-header">
-                <div>
-                    <div class="table-title"><i class="bi bi-calendar3 me-2" style="color:var(--azul);"></i>Producción Mensual por Tipo</div>
-                    <div class="table-sub">Total de solicitudes por mes, discriminado por tipo</div>
-                </div>
-            </div>
-            <canvas id="chartMensual" height="90"></canvas>
-        </div>
-
-        <!-- Producción Mensual por Sucursal -->
-        <div class="table-container mb-4">
-            <div class="table-header">
-                <div>
-                    <div class="table-title"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción Mensual por Sucursal</div>
-                    <div class="table-sub">Total de solicitudes por mes, discriminado por sucursal</div>
-                </div>
-            </div>
-            <canvas id="chartMensualSucursal" height="90"></canvas>
-        </div>
-
-        <!-- Operativo: Heatmap y Comparativa -->
+        <div class="table-container mb-4"><div class="table-header"><div><div class="table-title"><i class="bi bi-calendar3 me-2" style="color:var(--azul);"></i>Producción Mensual por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('mensualTipo')">?</span></div><div class="table-sub">Total por mes discriminado por tipo</div></div></div><canvas id="chartMensual" height="90"></canvas></div>
+        <div class="table-container mb-4"><div class="table-header"><div><div class="table-title"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción Mensual por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('mensualSucursal')">?</span></div><div class="table-sub">Total por mes discriminado por sucursal</div></div></div><canvas id="chartMensualSucursal" height="90"></canvas></div>
         <div class="row g-4 mb-4">
-            <div class="col-lg-6">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-2"><i class="bi bi-grid-3x3 me-2" style="color:var(--azul);"></i>Producción por Hora del Día</div>
-                    <div class="table-sub mb-3">Total de solicitudes cerradas en cada franja horaria (equipo completo)</div>
-                    <canvas id="chartHeatmapHora" height="140"></canvas>
-                </div>
-            </div>
-            <div class="col-lg-6">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Tipo</div>
-                    <div class="table-sub mb-3">Promedio de tiempo de gestión por tipo de solicitud</div>
-                    <canvas id="chartTiemposPorTipo" height="140"></canvas>
-                </div>
-            </div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-grid-3x3 me-2" style="color:var(--azul);"></i>Producción por Hora del Día<span class="btn-help-chart" onclick="ayudaGrafico('heatmapHora')">?</span></div><div class="table-sub mb-3">Solicitudes cerradas por franja horaria</div><canvas id="chartHeatmapHora" height="140"></canvas></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('tiemposPorTipo')">?</span></div><div class="table-sub mb-3">Promedio de tiempo de gestión por tipo</div><canvas id="chartTiemposPorTipo" height="140"></canvas></div></div>
         </div>
         </div><!-- /tab-produccion -->
 
         <!-- TAB: Tiempos -->
         <div id="tab-tiempos" class="tab-panel" style="display:none;">
-        <!-- Tiempos de Respuesta -->
         <div class="table-container mb-4">
-            <div class="table-header">
-                <div>
-                    <div class="table-title"><i class="bi bi-speedometer2 me-2" style="color:var(--azul);"></i>Tiempos de Respuesta</div>
-                    <div class="table-sub">Promedio diario de tiempo de gestión y tiempo general</div>
-                </div>
-            </div>
+            <div class="table-header"><div><div class="table-title"><i class="bi bi-speedometer2 me-2" style="color:var(--azul);"></i>Tiempos de Respuesta<span class="btn-help-chart" onclick="ayudaGrafico('tiemposRespuesta')">?</span></div><div class="table-sub">Promedio diario de tiempo de gestión y tiempo general</div></div></div>
             <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-                <select id="filtroTiempoSucursal" class="form-select" onchange="renderTiemposRespuesta()" style="width:auto;font-size:0.75rem;padding:5px 10px;border-radius:8px;">
-                    <option value="todas">Todas las sucursales</option>
-                </select>
-                <select id="filtroTiempoTipo" class="form-select" onchange="renderTiemposRespuesta()" style="width:auto;font-size:0.75rem;padding:5px 10px;border-radius:8px;">
-                    <option value="todos">Todos los tipos</option>
-                    <option value="Digital">Digital</option>
-                    <option value="UAR">UAR</option>
-                    <option value="Reestudio">Reestudio</option>
-                    <option value="Biometría">Biometría</option>
-                    <option value="Inducción">Inducción</option>
-                </select>
+                <select id="filtroTiempoSucursal" class="form-select" onchange="renderTiemposRespuesta()" style="width:auto;font-size:0.75rem;padding:5px 10px;border-radius:8px;"><option value="todas">Todas las sucursales</option></select>
+                <select id="filtroTiempoTipo" class="form-select" onchange="renderTiemposRespuesta()" style="width:auto;font-size:0.75rem;padding:5px 10px;border-radius:8px;"><option value="todos">Todos los tipos</option><option value="Digital">Digital</option><option value="UAR">UAR</option><option value="Reestudio">Reestudio</option><option value="Biometría">Biometría</option><option value="Inducción">Inducción</option></select>
                 <button class="btn-outline-brand" onclick="limpiarFiltrosTiempos()" style="padding:5px 12px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-x-circle me-1"></i>Quitar filtros</button>
             </div>
             <div class="row g-3">
-                <div class="col-lg-6">
-                    <div style="background:var(--bg-page);border-radius:12px;padding:14px;">
-                        <div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-stopwatch me-1"></i>T. Gestión (min) — Asignación → Cierre</div>
-                        <canvas id="chartTiempoGestion" height="180"></canvas>
-                    </div>
-                </div>
-                <div class="col-lg-6">
-                    <div style="background:var(--bg-page);border-radius:12px;padding:14px;">
-                        <div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-clock-history me-1"></i>T. General (h) — Radicación → Cierre</div>
-                        <canvas id="chartTiempoResolucion" height="180"></canvas>
-                    </div>
-                </div>
+                <div class="col-lg-6"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-stopwatch me-1"></i>T. Gestión (min)</div><canvas id="chartTiempoGestion" height="180"></canvas></div></div>
+                <div class="col-lg-6"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-clock-history me-1"></i>T. General (h)</div><canvas id="chartTiempoResolucion" height="180"></canvas></div></div>
             </div>
         </div>
-
-        <!-- Gráfico de Dispersión: Rapidez y Productividad -->
+        <!-- Búsqueda por Solicitud -->
         <div class="table-container mb-4">
-            <div class="table-header">
-                <div>
-                    <div class="table-title"><i class="bi bi-bullseye me-2" style="color:var(--rojo);"></i>Rapidez y Productividad</div>
-                    <div class="table-sub">Relación entre volumen de solicitudes y tiempo promedio de gestión por analista</div>
-                </div>
+            <div class="table-header"><div><div class="table-title"><i class="bi bi-search me-2" style="color:var(--azul);"></i>Tiempos por Solicitud</div><div class="table-sub">Busca solicitudes específicas para ver sus tiempos</div></div></div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <input type="text" id="buscarSolicitudId" class="form-control" placeholder="Ej: 123456" style="width:160px;padding:6px 12px !important;font-size:0.8rem;border-radius:8px;">
+                <input type="date" id="buscarSolicitudFecha" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;border-radius:8px;">
+                <button class="btn-primary-brand" onclick="buscarTiemposPorSolicitud()" style="border-radius:10px;padding:8px 18px;"><i class="bi bi-search"></i> Buscar</button>
+                <button class="btn-outline-brand" onclick="limpiarBusquedaSolicitud()" style="padding:6px 14px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-x-circle me-1"></i>Limpiar</button>
             </div>
-            <div class="row g-3 mb-3">
-                <div class="col-12">
-                    <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:0.65rem;font-weight:600;color:var(--gris);">
-                        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e;display:inline-block;"></span> Eficientes (alto volumen, bajo tiempo)</span>
-                        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#BD0F14;display:inline-block;"></span> Alerta (bajo volumen, alto tiempo)</span>
-                        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#253150;display:inline-block;"></span> Operación estable</span>
-                    </div>
-                </div>
+            <div id="resultadosBusquedaSolicitud" style="display:none;">
+                <canvas id="chartTiemposSolicitud" height="120"></canvas>
+                <div class="table-responsive mt-3"><table class="table w-100 align-middle"><thead><tr><th>Solicitud</th><th>Fecha</th><th>Analista</th><th>Sucursal</th><th>Tipo</th><th>T. Gestión</th><th>T. General</th></tr></thead><tbody id="cuerpoTiemposSolicitud"></tbody></table></div>
             </div>
+            <div id="sinResultadosSolicitud" style="display:none;text-align:center;padding:20px;"><i class="bi bi-info-circle" style="font-size:2rem;color:var(--text-light);"></i><p style="font-size:0.85rem;color:var(--text-muted);margin-top:8px;">Sin resultados.</p></div>
+        </div>
+        <!-- Dispersión -->
+        <div class="table-container mb-4">
+            <div class="table-header"><div><div class="table-title"><i class="bi bi-bullseye me-2" style="color:var(--rojo);"></i>Rapidez y Productividad<span class="btn-help-chart" onclick="ayudaGrafico('dispersion')">?</span></div><div class="table-sub">Volumen vs tiempo promedio por analista</div></div></div>
             <canvas id="chartDispersion" height="120"></canvas>
         </div>
         </div><!-- /tab-tiempos -->
 
         <!-- TAB: Analistas -->
         <div id="tab-analistas" class="tab-panel" style="display:none;">
-        <!-- Tabla Rendimiento Analistas -->
         <div class="table-container">
-            <div class="table-header">
-                <div>
-                    <div class="table-title">Rendimiento Individual</div>
-                    <div class="table-sub">Eficiencia y volúmenes de casos cerrados por cada analista</div>
+            <div class="table-header" style="flex-wrap:wrap;gap:12px;">
+                <div><div class="table-title">Rendimiento Individual</div><div class="table-sub" id="rendimientoSubtitulo">Mostrando datos del día seleccionado</div></div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div style="display:inline-flex;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;font-size:0.72rem;font-weight:700;">
+                        <button id="btnModoDia" class="rendimiento-toggle active" onclick="setModoRendimiento('dia')"><i class="bi bi-calendar-day me-1"></i>Día</button>
+                        <button id="btnModoRango" class="rendimiento-toggle" onclick="setModoRendimiento('rango')"><i class="bi bi-calendar-range me-1"></i>Rango</button>
+                    </div>
+                    <div id="controlesDia" class="d-flex align-items-center gap-1">
+                        <button class="btn-nav-fecha" onclick="navegarDiaRendimiento(-1)"><i class="bi bi-chevron-left"></i></button>
+                        <input type="date" id="filtroFechaRendimiento" class="form-control" onchange="cargarRendimientoPorDia()" style="width:150px;padding:6px 10px !important;font-size:0.78rem;border-radius:9px !important;">
+                        <button class="btn-nav-fecha" onclick="navegarDiaRendimiento(1)"><i class="bi bi-chevron-right"></i></button>
+                        <button class="btn-nav-fecha" onclick="irAHoyRendimiento()" style="font-size:0.65rem;padding:4px 8px;width:auto;"><i class="bi bi-calendar-check me-1"></i>Hoy</button>
+                    </div>
+                    <div id="controlesRango" class="d-flex align-items-center gap-1" style="display:none;">
+                        <button class="btn-nav-fecha" onclick="limpiarFiltroRendimiento()" style="font-size:0.65rem;padding:4px 10px;width:auto;"><i class="bi bi-arrow-repeat me-1"></i>Cargar rango global</button>
+                    </div>
                 </div>
             </div>
-            <div>
-                <table id="tablaMetricasAnalistas" class="table w-100 align-middle">
-                    <thead>
-                        <tr>
-                            <th>Analista</th>
-                            <th>Total</th>
-                            <th>Aprobadas</th>
-                            <th>Negadas</th>
-                            <th>Aplazadas</th>
-                            <th>T. Gestión Prom</th>
-                            <th>T. General Prom</th>
-                            <th>Prom/Hora</th>
-                            <th>Detalle/Hora</th>
-                            <th>Fuera SLA</th>
-                        </tr>
-                    </thead>
+            <div class="table-responsive">
+                <table id="tablaMetricasAnalistas" class="table table-sm w-100 align-middle" style="font-size:0.82rem;">
+                    <thead><tr><th style="min-width:140px;">Analista</th><th class="text-center">Total</th><th class="text-center">Aprob.</th><th class="text-center">Neg.</th><th class="text-center">Aplaz.</th><th class="text-center">T. Gestión</th><th class="text-center">T. General</th><th class="text-center">Ritmo/h</th><th class="text-center">Prod/h</th><th class="text-center">Detalle</th><th class="text-center">Fuera SLA</th></tr></thead>
                     <tbody id="cuerpoMetricasAnalistas"></tbody>
                 </table>
             </div>
         </div>
-
-        <!-- Panel Seguimiento Analistas -->
+        <!-- Seguimiento -->
         <div class="table-container mt-4">
             <div class="table-header">
-                <div>
-                    <div class="table-title"><i class="bi bi-activity me-2" style="color:var(--azul);"></i>Monitoreo y Log de Actividad</div>
-                    <div class="table-sub">SLA diario, horas del primer/último caso resuelto</div>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <input type="date" id="filtroFechaSeguimiento" class="form-control" onchange="cargarAsesoresActivosPrimerResultado()" style="width:160px;padding:6px 10px !important;font-size:0.78rem;border-radius:9px !important;">
-                </div>
+                <div><div class="table-title"><i class="bi bi-activity me-2" style="color:var(--azul);"></i>Monitoreo y Log de Actividad</div><div class="table-sub">SLA diario, primer/último caso</div></div>
+                <div class="d-flex align-items-center gap-2"><input type="date" id="filtroFechaSeguimiento" class="form-control" onchange="cargarAsesoresActivosPrimerResultado()" style="width:160px;padding:6px 10px !important;font-size:0.78rem;border-radius:9px !important;"></div>
             </div>
             <div class="table-responsive">
                 <table id="tablaAsesoresPrimerResultado" class="table w-100 align-middle">
-                    <thead>
-                        <tr>
-                            <th>Asesor</th>
-                            <th>Especialidad</th>
-                            <th>Estado</th>
-                            <th class="text-center">Gestionadas</th>
-                            <th class="text-center">Pendientes</th>
-                            <th>Primer Resultado</th>
-                            <th>Último Resultado</th>
-                            <th class="text-center">Historial</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>Analista</th><th>Especialidad</th><th>Estado</th><th class="text-center">Gestionadas</th><th class="text-center">Pendientes</th><th>Primer Resultado</th><th>Último Resultado</th><th class="text-center">Historial</th></tr></thead>
                     <tbody id="cuerpoAsesoresPrimerResultado"></tbody>
                 </table>
             </div>
@@ -572,989 +363,6 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
     </div>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
-<script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.5/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-<script>
-Chart.register(ChartDataLabels);
-
-function cambiarTab(tabId, el) {
-    document.querySelectorAll('.tab-panel').forEach(function(p) { p.style.display = 'none'; });
-    document.querySelectorAll('.nav-link-admin').forEach(function(a) { a.classList.remove('active'); });
-    var panel = document.getElementById('tab-' + tabId);
-    if (panel) panel.style.display = 'block';
-    if (el) el.classList.add('active');
-}
-
-var chartProduccion = null;
-var chartEstados = null;
-var chartAnalistas = null;
-var chartSLA = null;
-var metricasInicializado = false;
-
-window.onload = function() {
-    google.script.run.withSuccessHandler(function(email) {
-        if (email) {
-            var prefijo = email.split('@')[0];
-            var nombre = prefijo.split('.').map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
-            document.getElementById('adminEmail').innerText = nombre;
-        }
-    }).getEmailUsuario();
-
-    var hoy = new Date();
-    var yyyy = hoy.getFullYear();
-    var mm = String(hoy.getMonth() + 1).padStart(2, '0');
-    var dd = String(hoy.getDate()).padStart(2, '0');
-    
-    document.getElementById('filtroFechaSeguimiento').value = yyyy + '-' + mm + '-' + dd;
-    document.getElementById('filtroFechaSeguimiento').max = yyyy + '-' + mm + '-' + dd;
-
-    setRangoRapido('semana');
-};
-
-function setRangoRapido(tipo) {
-    var hoy = new Date();
-    var desde = new Date();
-    if (tipo === 'hoy') {
-        desde = new Date(hoy);
-    } else if (tipo === 'semana') {
-        desde.setDate(hoy.getDate() - 7);
-    } else if (tipo === 'mes') {
-        desde.setDate(hoy.getDate() - 30);
-    } else if (tipo === '4meses') {
-        desde.setMonth(hoy.getMonth() - 4);
-    }
-    
-    document.getElementById('metricaDesde').value = formatDateInput(desde);
-    document.getElementById('metricaHasta').value = formatDateInput(hoy);
-    cargarMetricas();
-}
-
-function formatDateInput(d) {
-    var y = d.getFullYear();
-    var m = String(d.getMonth() + 1).padStart(2, '0');
-    var day = String(d.getDate()).padStart(2, '0');
-    return y + '-' + m + '-' + day;
-}
-
-function formatDateBackend(inputValue) {
-    if (!inputValue) return '';
-    var parts = inputValue.split('-');
-    return parts[2] + '/' + parts[1] + '/' + parts[0];
-}
-
-function aplicarFiltroFechas() {
-    var desde = document.getElementById('metricaDesde').value;
-    var hasta = document.getElementById('metricaHasta').value;
-    if (!desde || !hasta) {
-        Swal.fire({ icon: 'warning', title: 'Fechas incompletas', text: 'Selecciona ambas fechas.' });
-        return;
-    }
-    cargarMetricas();
-}
-
-function cargarMetricas() {
-    var desde = formatDateBackend(document.getElementById('metricaDesde').value);
-    var hasta = formatDateBackend(document.getElementById('metricaHasta').value);
-    
-    document.getElementById('metricasSpinner').style.display = 'block';
-    document.getElementById('metricasContenido').style.display = 'none';
-    
-    google.script.run
-        .withSuccessHandler(renderizarMetricas)
-        .withFailureHandler(function(err) {
-            Swal.fire({ icon: 'error', title: 'Error de carga', text: err.message });
-        })
-        .obtenerDatosMetricas(desde, hasta);
-}
-
-function renderizarMetricas(datos) {
-    document.getElementById('metricasSpinner').style.display = 'none';
-    document.getElementById('metricasContenido').style.display = 'block';
-    
-    // Registrar hora de última sincronización
-    var ahora = new Date();
-    var hh = String(ahora.getHours()).padStart(2, '0');
-    var mm = String(ahora.getMinutes()).padStart(2, '0');
-    var dd = String(ahora.getDate()).padStart(2, '0');
-    var mo = String(ahora.getMonth() + 1).padStart(2, '0');
-    var yy = ahora.getFullYear();
-    document.getElementById('ultimaSincronizacion').textContent = 'Última sincronización: ' + dd + '/' + mo + '/' + yy + ' ' + hh + ':' + mm;
-    
-    // KPI Cards
-    document.getElementById('kpiTotal').textContent = datos.totalGestionadas;
-    document.getElementById('kpiTiempo').innerHTML = formatearDuracion(datos.tiempoPromedioMinutos);
-    document.getElementById('kpiTiempoGeneral').innerHTML = formatearTiempoGeneral(datos.tiempoPromedioGeneralHoras);
-    document.getElementById('kpiAprobacion').innerHTML = datos.tasaAprobacion + '%';
-    document.getElementById('kpiFueraSLA').textContent = datos.fueraDeSLA;
-
-    // Cards por tipo
-    var totalesTipo = { Digital: 0, UAR: 0, Reestudio: 0, Biometria: 0, Induccion: 0 };
-    var numDias = datos.porTipo.length || 1;
-    datos.porTipo.forEach(function(d) {
-        totalesTipo.Digital += d.Digital;
-        totalesTipo.UAR += d.UAR;
-        totalesTipo.Reestudio += d.Reestudio;
-        totalesTipo.Biometria += d.Biometria;
-        totalesTipo.Induccion += d.Induccion;
-    });
-    var totalGeneral = totalesTipo.Digital + totalesTipo.UAR + totalesTipo.Reestudio + totalesTipo.Biometria + totalesTipo.Induccion;
-    document.getElementById('kpiTipoGeneral').textContent = totalGeneral;
-    document.getElementById('kpiTipoGeneralProm').textContent = Math.round(totalGeneral / numDias);
-    document.getElementById('kpiTipoDigital').textContent = totalesTipo.Digital;
-    document.getElementById('kpiTipoDigitalProm').textContent = Math.round(totalesTipo.Digital / numDias);
-    document.getElementById('kpiTipoUAR').textContent = totalesTipo.UAR;
-    document.getElementById('kpiTipoUARProm').textContent = Math.round(totalesTipo.UAR / numDias);
-    document.getElementById('kpiTipoReestudio').textContent = totalesTipo.Reestudio;
-    document.getElementById('kpiTipoReestudioProm').textContent = Math.round(totalesTipo.Reestudio / numDias);
-    document.getElementById('kpiTipoBiometria').textContent = totalesTipo.Biometria;
-    document.getElementById('kpiTipoBiometriaProm').textContent = Math.round(totalesTipo.Biometria / numDias);
-    document.getElementById('kpiTipoInduccion').textContent = totalesTipo.Induccion;
-    document.getElementById('kpiTipoInduccionProm').textContent = Math.round(totalesTipo.Induccion / numDias);
-
-    renderGraficoProduccion(datos.produccionDiaria);
-    renderGraficoEstados(datos.distribucionEstados);
-    renderGraficoAnalistas(datos.porAnalista);
-    renderGraficoSLA(datos.slaDiario);
-    renderGraficoSucursal(datos.porSucursal);
-    renderGraficoTipo(datos.porTipo);
-    renderGraficoMensual(datos.porTipo);
-    renderGraficoMensualSucursal(datos.porSucursal);
-    renderNegacionSucursal(datos.tasaNegacionSucursal);
-    renderTendenciaSLA(datos.tendenciaSLA);
-    document.getElementById('kpiBacklog').textContent = datos.backlog;
-    renderHeatmapHora(datos.heatmapHora);
-    renderTiemposPorTipo(datos.tiemposDetalle);
-    inicializarFiltrosTiempos(datos.tiemposDetalle);
-    renderGraficoDispersion(datos.porAnalista);
-    renderTablaAnalistas(datos.porAnalista);
-    
-    cargarAsesoresActivosPrimerResultado();
-}
-
-function renderGraficoProduccion(produccionDiaria) {
-    if (chartProduccion) chartProduccion.destroy();
-    var ctx = document.getElementById('chartProduccion').getContext('2d');
-    chartProduccion = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: produccionDiaria.map(function(d) { return d.fecha; }),
-            datasets: [{
-                label: 'Gestionadas',
-                data: produccionDiaria.map(function(d) { return d.cantidad; }),
-                borderColor: '#BD0F14',
-                backgroundColor: 'rgba(189,15,20,0.06)',
-                borderWidth: 2.5,
-                fill: true,
-                tension: 0.25,
-                pointBackgroundColor: '#BD0F14',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                datalabels: {
-                    color: '#253150',
-                    font: { weight: 'bold', size: 11 },
-                    anchor: 'end',
-                    align: 'top',
-                    formatter: function(value) { return value > 0 ? value : ''; }
-                }
-            }
-        }
-    });
-}
-
-function renderGraficoEstados(dist) {
-    if (chartEstados) chartEstados.destroy();
-    var ctx = document.getElementById('chartEstados').getContext('2d');
-    chartEstados = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Aprobadas', 'Negadas', 'Aplazadas'],
-            datasets: [{
-                data: [dist.aprobadas, dist.negadas, dist.aplazadas],
-                backgroundColor: ['#253150', '#BD0F14', '#706F6F'],
-                borderWidth: 2,
-                borderColor: '#ffffff'
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                datalabels: {
-                    color: '#ffffff',
-                    font: { weight: 'bold', size: 12 },
-                    formatter: function(value, ctx) {
-                        var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
-                        if (total === 0 || value === 0) return '';
-                        var pct = Math.round((value / total) * 100);
-                        return value + ' (' + pct + '%)';
-                    }
-                }
-            }
-        }
-    });
-}
-
-function renderGraficoAnalistas(porAnalista) {
-    if (chartAnalistas) chartAnalistas.destroy();
-    var ctx = document.getElementById('chartAnalistas').getContext('2d');
-    var top10 = porAnalista.slice(0, 10);
-    chartAnalistas = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: top10.map(function(a) { return a.nombre; }),
-            datasets: [{
-                label: 'Solicitudes',
-                data: top10.map(function(a) { return a.total; }),
-                backgroundColor: '#BD0F14',
-                borderRadius: 6
-            }]
-        },
-        options: {
-            responsive: true,
-            indexAxis: 'y',
-            plugins: {
-                datalabels: {
-                    color: '#ffffff',
-                    font: { weight: 'bold', size: 11 },
-                    anchor: 'center',
-                    align: 'center',
-                    formatter: function(value) { return value > 0 ? value : ''; }
-                }
-            }
-        }
-    });
-}
-
-function renderGraficoSLA(slaDiario) {
-    if (chartSLA) chartSLA.destroy();
-    var ctx = document.getElementById('chartSLA').getContext('2d');
-    chartSLA = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: slaDiario.map(function(d) { return d.fecha; }),
-            datasets: [
-                { label: 'Dentro SLA (<=2h)', data: slaDiario.map(function(d) { return d.dentroSLA; }), backgroundColor: '#253150', borderRadius: 4 },
-                { label: 'Fuera SLA (>2h)', data: slaDiario.map(function(d) { return d.fueraSLA; }), backgroundColor: '#BD0F14', borderRadius: 4 }
-            ]
-        },
-        options: {
-            responsive: true,
-            scales: { x: { stacked: true }, y: { stacked: true } },
-            plugins: {
-                datalabels: {
-                    color: '#ffffff',
-                    font: { weight: 'bold', size: 10 },
-                    anchor: 'center',
-                    align: 'center',
-                    formatter: function(value) { return value > 0 ? value : ''; }
-                }
-            }
-        }
-    });
-}
-
-var chartSucursal = null;
-
-function renderGraficoSucursal(porSucursal) {
-    if (chartSucursal) chartSucursal.destroy();
-    var ctx = document.getElementById('chartSucursal').getContext('2d');
-    var colores = ['#BD0F14', '#253150', '#706F6F', '#3a4d7a', '#8b0a0e', '#a0a0a0', '#4a4a4a', '#c75050', '#5a7ab5'];
-    var datasets = porSucursal.sucursales.map(function(s, i) {
-        return {
-            label: s,
-            data: porSucursal.datos[s],
-            backgroundColor: colores[i % colores.length],
-            borderRadius: 3
-        };
-    });
-    chartSucursal = new Chart(ctx, {
-        type: 'bar',
-        data: { labels: porSucursal.fechas, datasets: datasets },
-        options: {
-            responsive: true,
-            scales: { x: { stacked: true }, y: { stacked: true } },
-            plugins: {
-                datalabels: {
-                    color: '#ffffff',
-                    font: { weight: 'bold', size: 9 },
-                    anchor: 'center',
-                    align: 'center',
-                    formatter: function(value) { return value > 0 ? value : ''; }
-                }
-            }
-        }
-    });
-}
-
-var chartTipo = null;
-
-function renderGraficoTipo(porTipo) {
-    if (chartTipo) chartTipo.destroy();
-    var ctx = document.getElementById('chartTipo').getContext('2d');
-    chartTipo = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: porTipo.map(function(d) { return d.fecha; }),
-            datasets: [
-                { label: 'Digital', data: porTipo.map(function(d) { return d.Digital; }), backgroundColor: '#253150', borderRadius: 3 },
-                { label: 'UAR', data: porTipo.map(function(d) { return d.UAR; }), backgroundColor: '#BD0F14', borderRadius: 3 },
-                { label: 'Reestudio', data: porTipo.map(function(d) { return d.Reestudio; }), backgroundColor: '#706F6F', borderRadius: 3 },
-                { label: 'Biometría', data: porTipo.map(function(d) { return d.Biometria; }), backgroundColor: '#3a4d7a', borderRadius: 3 },
-                { label: 'Inducción', data: porTipo.map(function(d) { return d.Induccion; }), backgroundColor: '#8b0a0e', borderRadius: 3 }
-            ]
-        },
-        options: {
-            responsive: true,
-            scales: { x: { stacked: true }, y: { stacked: true } },
-            plugins: {
-                datalabels: {
-                    color: '#ffffff',
-                    font: { weight: 'bold', size: 9 },
-                    anchor: 'center',
-                    align: 'center',
-                    formatter: function(value) { return value > 0 ? value : ''; }
-                }
-            }
-        }
-    });
-}
-
-var chartMensual = null;
-
-function renderGraficoMensual(porTipo) {
-    if (chartMensual) chartMensual.destroy();
-    var meses = {};
-    porTipo.forEach(function(d) {
-        var partes = d.fecha.split('/');
-        var mesKey = partes[1] + '/' + partes[2];
-        if (!meses[mesKey]) meses[mesKey] = { total: 0, Digital: 0, UAR: 0, Reestudio: 0, Biometria: 0, Induccion: 0 };
-        meses[mesKey].Digital += d.Digital;
-        meses[mesKey].UAR += d.UAR;
-        meses[mesKey].Reestudio += d.Reestudio;
-        meses[mesKey].Biometria += d.Biometria;
-        meses[mesKey].Induccion += d.Induccion;
-        meses[mesKey].total += d.Digital + d.UAR + d.Reestudio + d.Biometria + d.Induccion;
-    });
-    var mesesOrdenados = Object.keys(meses).sort(function(a, b) {
-        var pa = a.split('/'); var pb = b.split('/');
-        return new Date(pa[1], pa[0] - 1) - new Date(pb[1], pb[0] - 1);
-    });
-    var nombresMes = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    var labels = mesesOrdenados.map(function(m) { var p = m.split('/'); return nombresMes[parseInt(p[0]) - 1] + ' ' + p[1]; });
-    var totalesMes = mesesOrdenados.map(function(m) { return meses[m].total; });
-
-    var ctx = document.getElementById('chartMensual').getContext('2d');
-    chartMensual = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                { label: 'Digital', data: mesesOrdenados.map(function(m) { return meses[m].Digital; }), backgroundColor: '#253150', borderRadius: 3 },
-                { label: 'UAR', data: mesesOrdenados.map(function(m) { return meses[m].UAR; }), backgroundColor: '#BD0F14', borderRadius: 3 },
-                { label: 'Reestudio', data: mesesOrdenados.map(function(m) { return meses[m].Reestudio; }), backgroundColor: '#706F6F', borderRadius: 3 },
-                { label: 'Biometría', data: mesesOrdenados.map(function(m) { return meses[m].Biometria; }), backgroundColor: '#3a4d7a', borderRadius: 3 },
-                { label: 'Inducción', data: mesesOrdenados.map(function(m) { return meses[m].Induccion; }), backgroundColor: '#8b0a0e', borderRadius: 3 }
-            ]
-        },
-        options: {
-            responsive: true,
-            scales: { x: { stacked: true }, y: { stacked: true } },
-            plugins: {
-                datalabels: {
-                    color: function(ctx) { return ctx.datasetIndex === ctx.chart.data.datasets.length - 1 ? '#253150' : '#fff'; },
-                    font: { weight: 'bold', size: 10 },
-                    anchor: function(ctx) { return ctx.datasetIndex === ctx.chart.data.datasets.length - 1 ? 'end' : 'center'; },
-                    align: function(ctx) { return ctx.datasetIndex === ctx.chart.data.datasets.length - 1 ? 'end' : 'center'; },
-                    formatter: function(value, ctx) {
-                        if (ctx.datasetIndex === ctx.chart.data.datasets.length - 1) return totalesMes[ctx.dataIndex];
-                        return value > 0 ? value : '';
-                    }
-                }
-            }
-        }
-    });
-}
-
-var chartMensualSucursal = null;
-
-function renderGraficoMensualSucursal(porSucursal) {
-    if (chartMensualSucursal) chartMensualSucursal.destroy();
-    var meses = {};
-    var sucursalesSet = {};
-    porSucursal.fechas.forEach(function(fecha, idx) {
-        var partes = fecha.split('/');
-        var mesKey = partes[1] + '/' + partes[2];
-        if (!meses[mesKey]) meses[mesKey] = {};
-        porSucursal.sucursales.forEach(function(s) {
-            sucursalesSet[s] = true;
-            meses[mesKey][s] = (meses[mesKey][s] || 0) + porSucursal.datos[s][idx];
-        });
-    });
-    var mesesOrdenados = Object.keys(meses).sort(function(a, b) {
-        var pa = a.split('/'); var pb = b.split('/');
-        return new Date(pa[1], pa[0] - 1) - new Date(pb[1], pb[0] - 1);
-    });
-    var nombresMes = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    var labels = mesesOrdenados.map(function(m) { var p = m.split('/'); return nombresMes[parseInt(p[0]) - 1] + ' ' + p[1]; });
-    var sucursales = Object.keys(sucursalesSet).sort();
-    var colores = ['#BD0F14', '#253150', '#706F6F', '#3a4d7a', '#8b0a0e', '#a0a0a0', '#4a4a4a', '#c75050', '#5a7ab5'];
-    var totalesMes = mesesOrdenados.map(function(m) {
-        var t = 0; sucursales.forEach(function(s) { t += meses[m][s] || 0; }); return t;
-    });
-
-    var datasets = sucursales.map(function(s, i) {
-        return { label: s, data: mesesOrdenados.map(function(m) { return meses[m][s] || 0; }), backgroundColor: colores[i % colores.length], borderRadius: 3 };
-    });
-
-    var ctx = document.getElementById('chartMensualSucursal').getContext('2d');
-    chartMensualSucursal = new Chart(ctx, {
-        type: 'bar',
-        data: { labels: labels, datasets: datasets },
-        options: {
-            responsive: true,
-            scales: { x: { stacked: true }, y: { stacked: true } },
-            plugins: {
-                datalabels: {
-                    color: function(ctx) { return ctx.datasetIndex === ctx.chart.data.datasets.length - 1 ? '#253150' : '#fff'; },
-                    font: { weight: 'bold', size: 10 },
-                    anchor: function(ctx) { return ctx.datasetIndex === ctx.chart.data.datasets.length - 1 ? 'end' : 'center'; },
-                    align: function(ctx) { return ctx.datasetIndex === ctx.chart.data.datasets.length - 1 ? 'end' : 'center'; },
-                    formatter: function(value, ctx) {
-                        if (ctx.datasetIndex === ctx.chart.data.datasets.length - 1) return totalesMes[ctx.dataIndex];
-                        return value > 0 ? value : '';
-                    }
-                }
-            }
-        }
-    });
-}
-
-var chartNegacionSucursal = null;
-var chartTendenciaSLA = null;
-var chartHeatmapHora = null;
-var chartTiemposPorTipo = null;
-
-function renderNegacionSucursal(datos) {
-    if (chartNegacionSucursal) chartNegacionSucursal.destroy();
-    var ctx = document.getElementById('chartNegacionSucursal').getContext('2d');
-    if (!datos || datos.length === 0) {
-        ctx.font = '12px Manrope'; ctx.fillStyle = '#706F6F'; ctx.textAlign = 'center';
-        ctx.fillText('Sin datos de negación en el período', ctx.canvas.width / 2, 80);
-        return;
-    }
-    chartNegacionSucursal = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: datos.map(function(d) { return d.sucursal; }),
-            datasets: [{
-                label: '% Negación',
-                data: datos.map(function(d) { return d.tasa; }),
-                backgroundColor: datos.map(function(d) { return d.tasa > 20 ? '#BD0F14' : d.tasa > 10 ? '#706F6F' : '#253150'; }),
-                borderRadius: 5
-            }]
-        },
-        options: {
-            responsive: true,
-            indexAxis: 'y',
-            scales: { x: { max: 100, ticks: { callback: function(v) { return v + '%'; } } } },
-            plugins: {
-                datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, anchor: 'center', align: 'center', formatter: function(v) { return v > 0 ? v + '%' : ''; } },
-                legend: { display: false }
-            }
-        }
-    });
-}
-
-function renderTendenciaSLA(datos) {
-    if (chartTendenciaSLA) chartTendenciaSLA.destroy();
-    var ctx = document.getElementById('chartTendenciaSLA').getContext('2d');
-    if (!datos || datos.length === 0) {
-        ctx.font = '12px Manrope'; ctx.fillStyle = '#706F6F'; ctx.textAlign = 'center';
-        ctx.fillText('Sin datos de SLA en el período', ctx.canvas.width / 2, 80);
-        return;
-    }
-    chartTendenciaSLA = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: datos.map(function(d) { return d.semana; }),
-            datasets: [{
-                label: '% Cumplimiento SLA',
-                data: datos.map(function(d) { return d.pctCumplimiento; }),
-                borderColor: '#253150',
-                backgroundColor: 'rgba(37,49,80,0.06)',
-                borderWidth: 2.5,
-                fill: true,
-                tension: 0.3,
-                pointBackgroundColor: datos.map(function(d) { return d.pctCumplimiento < 80 ? '#BD0F14' : '#253150'; }),
-                pointRadius: 5,
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: { y: { min: 0, max: 100, ticks: { callback: function(v) { return v + '%'; } } } },
-            plugins: {
-                datalabels: { color: '#253150', font: { weight: 'bold', size: 9 }, anchor: 'end', align: 'top', formatter: function(v) { return v + '%'; } },
-                legend: { display: false }
-            }
-        }
-    });
-}
-
-function renderHeatmapHora(datos) {
-    if (chartHeatmapHora) chartHeatmapHora.destroy();
-    var ctx = document.getElementById('chartHeatmapHora').getContext('2d');
-    var horas = [];
-    var valores = [];
-    for (var h = 7; h <= 18; h++) {
-        horas.push(h + ':00');
-        valores.push(datos[h] || 0);
-    }
-    var maxVal = Math.max.apply(null, valores) || 1;
-    chartHeatmapHora = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: horas,
-            datasets: [{
-                label: 'Solicitudes',
-                data: valores,
-                backgroundColor: valores.map(function(v) {
-                    var pct = v / maxVal;
-                    if (pct > 0.7) return '#BD0F14';
-                    if (pct > 0.4) return '#253150';
-                    if (pct > 0) return '#3a4d7a';
-                    return '#e5e7eb';
-                }),
-                borderRadius: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, anchor: 'center', align: 'center', formatter: function(v) { return v > 0 ? v : ''; } },
-                legend: { display: false }
-            }
-        }
-    });
-}
-
-function renderTiemposPorTipo(tiemposDetalle) {
-    if (chartTiemposPorTipo) chartTiemposPorTipo.destroy();
-    var tipos = ['Digital', 'UAR', 'Reestudio', 'Biometría', 'Inducción'];
-    var sumaG = {}; var countG = {};
-    tipos.forEach(function(t) { sumaG[t] = 0; countG[t] = 0; });
-    tiemposDetalle.forEach(function(r) {
-        if (r.tGestion !== null && tipos.indexOf(r.tipo) >= 0) {
-            sumaG[r.tipo] += r.tGestion;
-            countG[r.tipo]++;
-        }
-    });
-    var promedios = tipos.map(function(t) { return countG[t] > 0 ? Math.round((sumaG[t] / countG[t]) * 10) / 10 : 0; });
-    var colores = ['#253150', '#BD0F14', '#706F6F', '#3a4d7a', '#8b0a0e'];
-
-    var ctx = document.getElementById('chartTiemposPorTipo').getContext('2d');
-    chartTiemposPorTipo = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: tipos,
-            datasets: [{
-                label: 'Prom. Gestión',
-                data: promedios,
-                backgroundColor: colores,
-                borderRadius: 5
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: { y: { ticks: { callback: function(v) { return formatMinLabel(v); } } } },
-            plugins: {
-                datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, anchor: 'center', align: 'center', formatter: function(v) { return formatMinLabel(v); } },
-                legend: { display: false }
-            }
-        }
-    });
-}
-
-var chartTiempoGestion = null;
-var chartTiempoResolucion = null;
-var _tiemposDetalleData = [];
-
-function inicializarFiltrosTiempos(tiemposDetalle) {
-    _tiemposDetalleData = tiemposDetalle;
-    var sucursales = {};
-    tiemposDetalle.forEach(function(r) { sucursales[r.sucursal] = true; });
-    var sel = document.getElementById('filtroTiempoSucursal');
-    sel.innerHTML = '<option value="todas">Todas las sucursales</option>';
-    Object.keys(sucursales).sort().forEach(function(s) {
-        sel.innerHTML += '<option value="' + s + '">' + s + '</option>';
-    });
-    renderTiemposRespuesta();
-}
-
-function limpiarFiltrosTiempos() {
-    document.getElementById('filtroTiempoSucursal').value = 'todas';
-    document.getElementById('filtroTiempoTipo').value = 'todos';
-    renderTiemposRespuesta();
-}
-
-function formatMinLabel(min) {
-    if (!min || min === 0) return '';
-    var h = Math.floor(min / 60);
-    var m = Math.round(min % 60);
-    return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
-}
-
-function formatHorasLabel(horas) {
-    if (!horas || horas === 0) return '';
-    var h = Math.floor(horas);
-    var m = Math.round((horas - h) * 60);
-    return h > 0 ? h + 'h ' + m + 'm' : m + 'min';
-}
-
-function renderTiemposRespuesta() {
-    var sucFiltro = document.getElementById('filtroTiempoSucursal').value;
-    var tipoFiltro = document.getElementById('filtroTiempoTipo').value;
-
-    var filtrado = _tiemposDetalleData.filter(function(r) {
-        if (sucFiltro !== 'todas' && r.sucursal !== sucFiltro) return false;
-        if (tipoFiltro !== 'todos' && r.tipo !== tipoFiltro) return false;
-        return true;
-    });
-
-    // Agrupar por fecha
-    var porFecha = {};
-    filtrado.forEach(function(r) {
-        if (!porFecha[r.fecha]) porFecha[r.fecha] = { sumaG: 0, countG: 0, sumaR: 0, countR: 0 };
-        if (r.tGestion !== null) { porFecha[r.fecha].sumaG += r.tGestion; porFecha[r.fecha].countG++; }
-        if (r.tResolucion !== null) { porFecha[r.fecha].sumaR += r.tResolucion; porFecha[r.fecha].countR++; }
-    });
-
-    var fechas = Object.keys(porFecha).sort(function(a, b) {
-        var pa = a.split('/'); var pb = b.split('/');
-        return new Date(pa[2], pa[1]-1, pa[0]) - new Date(pb[2], pb[1]-1, pb[0]);
-    });
-
-    var promediosGestion = fechas.map(function(f) { return porFecha[f].countG > 0 ? Math.round((porFecha[f].sumaG / porFecha[f].countG) * 10) / 10 : 0; });
-    var promediosResolucion = fechas.map(function(f) { return porFecha[f].countR > 0 ? Number((porFecha[f].sumaR / porFecha[f].countR).toFixed(2)) : 0; });
-
-    // Chart Gestión
-    if (chartTiempoGestion) chartTiempoGestion.destroy();
-    var ctx1 = document.getElementById('chartTiempoGestion').getContext('2d');
-    chartTiempoGestion = new Chart(ctx1, {
-        type: 'bar',
-        data: {
-            labels: fechas,
-            datasets: [{
-                label: 'Prom. Gestión',
-                data: promediosGestion,
-                backgroundColor: '#253150',
-                borderRadius: 5
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: { y: { ticks: { callback: function(v) { return formatMinLabel(v); } } } },
-            plugins: {
-                tooltip: { callbacks: { label: function(ctx) { return 'Promedio: ' + formatMinLabel(ctx.raw); } } },
-                datalabels: { color: '#fff', font: { weight: 'bold', size: 9 }, anchor: 'center', align: 'center', formatter: function(v) { return formatMinLabel(v); } }
-            }
-        }
-    });
-
-    // Chart General
-    if (chartTiempoResolucion) chartTiempoResolucion.destroy();
-    var ctx2 = document.getElementById('chartTiempoResolucion').getContext('2d');
-    chartTiempoResolucion = new Chart(ctx2, {
-        type: 'bar',
-        data: {
-            labels: fechas,
-            datasets: [{
-                label: 'Prom. General',
-                data: promediosResolucion,
-                backgroundColor: '#BD0F14',
-                borderRadius: 5
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: { y: { ticks: { callback: function(v) { return formatHorasLabel(v); } } } },
-            plugins: {
-                tooltip: { callbacks: { label: function(ctx) { return 'Promedio: ' + formatHorasLabel(ctx.raw); } } },
-                datalabels: { color: '#fff', font: { weight: 'bold', size: 9 }, anchor: 'center', align: 'center', formatter: function(v) { return formatHorasLabel(v); } }
-            }
-        }
-    });
-}
-
-var chartDispersion = null;
-
-function renderGraficoDispersion(porAnalista) {
-    if (chartDispersion) chartDispersion.destroy();
-    var ctx = document.getElementById('chartDispersion').getContext('2d');
-
-    var puntos = porAnalista
-        .filter(function(a) { return a.total > 0 && a.tiempoPromedio > 0; })
-        .map(function(a) {
-            var color;
-            if (a.total >= 5 && a.tiempoPromedio <= 15) color = '#22c55e';
-            else if (a.total <= 3 && a.tiempoPromedio >= 30) color = '#BD0F14';
-            else color = '#253150';
-            return { x: a.total, y: a.tiempoPromedio, nombre: a.nombre, color: color };
-        });
-
-    chartDispersion = new Chart(ctx, {
-        type: 'scatter',
-        data: {
-            datasets: [{
-                label: 'Analistas',
-                data: puntos.map(function(p) { return { x: p.x, y: p.y }; }),
-                backgroundColor: puntos.map(function(p) { return p.color; }),
-                pointRadius: 8,
-                pointHoverRadius: 11,
-                borderColor: puntos.map(function(p) { return p.color; }),
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                x: {
-                    title: { display: true, text: 'Cantidad de solicitudes', font: { weight: 'bold', size: 11 }, color: '#253150' },
-                    beginAtZero: true
-                },
-                y: {
-                    title: { display: true, text: 'Tiempo promedio gestión (min)', font: { weight: 'bold', size: 11 }, color: '#253150' },
-                    beginAtZero: true,
-                    ticks: { callback: function(v) { return formatMinLabel(v); } }
-                }
-            },
-            plugins: {
-                datalabels: {
-                    color: '#253150',
-                    font: { weight: 'bold', size: 8 },
-                    anchor: 'end',
-                    align: 'top',
-                    offset: 4,
-                    formatter: function(value, ctx) {
-                        return puntos[ctx.dataIndex] ? puntos[ctx.dataIndex].nombre.split(' ')[0] : '';
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(ctx) {
-                            var p = puntos[ctx.dataIndex];
-                            return p.nombre + ' — ' + p.x + ' solicitudes, ' + formatMinLabel(p.y);
-                        }
-                    }
-                },
-                legend: { display: false }
-            }
-        }
-    });
-}
-
-function renderTablaAnalistas(porAnalista) {
-    if ($.fn.DataTable.isDataTable('#tablaMetricasAnalistas')) $('#tablaMetricasAnalistas').DataTable().destroy();
-    var html = '';
-    var detalleHorasData = {};
-    porAnalista.forEach(function(a) {
-        var claseFueraSLA = a.fueraSLA > 0 ? 'table-danger' : '';
-        var nombreKey = a.nombre.replace(/'/g, "\\'");
-        detalleHorasData[a.nombre] = a.detalleHoras;
-        html += '<tr>' +
-            '<td class="fw-bold">' + a.nombre + '</td>' +
-            '<td>' + a.total + '</td>' +
-            '<td style="color:#253150;font-weight:700;">' + a.aprobadas + '</td>' +
-            '<td style="color:#BD0F14;font-weight:700;">' + a.negadas + '</td>' +
-            '<td style="color:#706F6F;font-weight:700;">' + a.aplazadas + '</td>' +
-            '<td>' + formatearDuracion(a.tiempoPromedio) + '</td>' +
-            '<td>' + formatearTiempoGeneral(a.tiempoPromedioGeneral) + '</td>' +
-            '<td style="font-weight:700;">' + (a.promedioPorHora > 0 ? a.promedioPorHora : '—') + '</td>' +
-            '<td class="text-center"><button class="btn-action" onclick="verDetalleHoras(\'' + nombreKey + '\')"><i class="bi bi-bar-chart-steps"></i></button></td>' +
-            '<td class="' + claseFueraSLA + '">' + a.fueraSLA + '</td>' +
-        '</tr>';
-    });
-    window._detalleHorasData = detalleHorasData;
-    document.getElementById('cuerpoMetricasAnalistas').innerHTML = html;
-    $('#tablaMetricasAnalistas').DataTable({ language: { url: '//cdn.datatables.net/plug-ins/1.13.5/i18n/es-ES.json' }, pageLength: 5 });
-}
-
-function cargarAsesoresActivosPrimerResultado() {
-    var fecha = document.getElementById('filtroFechaSeguimiento').value;
-    google.script.run
-        .withSuccessHandler(renderAsesoresPrimerResultado)
-        .withFailureHandler(function(err){
-            console.error(err);
-        })
-        .admin_obtenerAsesoresActivosPrimerResultado(fecha);
-}
-
-function renderAsesoresPrimerResultado(respuesta) {
-    if ($.fn.DataTable.isDataTable('#tablaAsesoresPrimerResultado')) $('#tablaAsesoresPrimerResultado').DataTable().destroy();
-    var html = '';
-    var ahora = new Date();
-    respuesta.datos.forEach(function(a) {
-        var hPrimer = a.primerResultado ? '<span class="badge-hora"><i class="bi bi-clock"></i> ' + a.primerResultado + '</span>' : '---';
-        var hUltimo = a.ultimoResultado ? '<span class="badge-hora"><i class="bi bi-clock-history"></i> ' + a.ultimoResultado + '</span>' : '---';
-        
-        var sinResultado = '';
-        if (respuesta.esHoy && a.ultimoResultado) {
-            var partes = a.ultimoResultado.split(':');
-            var ultimaHora = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate(), parseInt(partes[0]), parseInt(partes[1]), partes[2] ? parseInt(partes[2]) : 0);
-            var diffMs = ahora - ultimaHora;
-            if (diffMs > 0) {
-                var diffMin = Math.floor(diffMs / 60000);
-                var h = Math.floor(diffMin / 60);
-                var m = diffMin % 60;
-                var duracion = h > 0 ? h + 'h ' + m + 'm' : m + ' min';
-                sinResultado = '<div style="margin-top:4px;"><span style="font-size:0.65rem;font-weight:700;color:#BD0F14;background:#fde8e8;border:1px solid #f8c4c4;padding:2px 7px;border-radius:6px;display:inline-flex;align-items:center;gap:3px;"><i class="bi bi-pause-circle"></i> Hace ' + duracion + '</span></div>';
-            }
-        } else if (respuesta.esHoy && !a.ultimoResultado && a.pendientes > 0) {
-            sinResultado = '<div style="margin-top:4px;"><span style="font-size:0.65rem;font-weight:700;color:#BD0F14;background:#fde8e8;border:1px solid #f8c4c4;padding:2px 7px;border-radius:6px;display:inline-flex;align-items:center;gap:3px;"><i class="bi bi-pause-circle"></i> Sin iniciar</span></div>';
-        }
-
-        html += '<tr>' +
-            '<td class="fw-bold">' + a.nombre + '</td>' +
-            '<td><span class="badge-pill badge-esp-digital">' + a.especialidad + '</span></td>' +
-            '<td><span class="badge-pill badge-est-activo">' + a.estado + '</span></td>' +
-            '<td class="text-center">' + a.gestionadas + '</td>' +
-            '<td class="text-center">' + a.pendientes + '</td>' +
-            '<td>' + hPrimer + '</td>' +
-            '<td>' + hUltimo + sinResultado + '</td>' +
-            '<td class="text-center"><button class="btn-action" onclick="verDetalleAnalista(\'' + a.correo.replace(/'/g, "\\'") + '\')"><i class="bi bi-eye"></i></button></td>' +
-        '</tr>';
-    });
-    document.getElementById('cuerpoAsesoresPrimerResultado').innerHTML = html;
-    $('#tablaAsesoresPrimerResultado').DataTable({ language: { url: '//cdn.datatables.net/plug-ins/1.13.5/i18n/es-ES.json' }, pageLength: 5 });
-}
-
-function verDetalleAnalista(correo) {
-    Swal.fire({ title: 'Cargando log de analista...', didOpen: function() { Swal.showLoading(); } });
-    var fecha = document.getElementById('filtroFechaSeguimiento').value;
-    google.script.run
-        .withSuccessHandler(function(res) {
-            Swal.close();
-            var html = '<div style="text-align:left;font-family:Manrope,sans-serif;">';
-            html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">';
-            html += '<div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#BD0F14,#8b0a0e);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.1rem;font-weight:800;">' + res.nombre.charAt(0).toUpperCase() + '</div>';
-            html += '<div><div style="font-weight:800;font-size:1rem;color:#253150;">' + res.nombre + '</div>';
-            html += '<div style="font-size:0.75rem;color:#706F6F;">' + res.correo + ' · ' + res.fecha + '</div></div></div>';
-
-            html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">';
-            html += '<div style="background:var(--azul-light,#e8edf6);border:1px solid #c7d2e8;border-radius:14px;padding:14px 18px;text-align:center;">';
-            html += '<div style="font-size:0.7rem;font-weight:700;color:#253150;text-transform:uppercase;letter-spacing:0.5px;">Gestionadas</div>';
-            html += '<div style="font-size:1.8rem;font-weight:800;color:#253150;">' + res.gestionadas.length + '</div></div>';
-            html += '<div style="background:#fde8e8;border:1px solid #f8c4c4;border-radius:14px;padding:14px 18px;text-align:center;">';
-            html += '<div style="font-size:0.7rem;font-weight:700;color:#BD0F14;text-transform:uppercase;letter-spacing:0.5px;">Pendientes</div>';
-            html += '<div style="font-size:1.8rem;font-weight:800;color:#BD0F14;">' + res.pendientes.length + '</div></div></div>';
-
-            if (res.gestionadas.length > 0) {
-                html += '<div style="margin-bottom:16px;">';
-                html += '<div style="font-size:0.78rem;font-weight:800;color:#253150;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="bi bi-check-circle-fill" style="color:#253150;"></i> Solicitudes Gestionadas</div>';
-                html += '<div style="max-height:200px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:12px;">';
-                html += '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">';
-                html += '<thead><tr style="background:#f4f5f8;"><th style="padding:8px 12px;text-align:left;font-weight:700;color:#706F6F;font-size:0.68rem;text-transform:uppercase;">ID</th><th style="padding:8px 12px;text-align:left;font-weight:700;color:#706F6F;font-size:0.68rem;text-transform:uppercase;">Tipo</th><th style="padding:8px 12px;text-align:left;font-weight:700;color:#706F6F;font-size:0.68rem;text-transform:uppercase;">Estado</th><th style="padding:8px 12px;text-align:left;font-weight:700;color:#706F6F;font-size:0.68rem;text-transform:uppercase;">Hora Cierre</th></tr></thead><tbody>';
-                res.gestionadas.forEach(function(g) {
-                    var estadoColor = g.estado.toUpperCase().indexOf('APROB') >= 0 ? '#253150' : g.estado.toUpperCase().indexOf('NEGAD') >= 0 || g.estado.toUpperCase().indexOf('RECHAZ') >= 0 ? '#BD0F14' : '#706F6F';
-                    var horaCierre = g.fechaFin ? g.fechaFin.split(' ')[1] || '' : '';
-                    html += '<tr style="border-top:1px solid #f1f5f9;"><td style="padding:8px 12px;font-weight:600;color:#253150;">' + g.id + '</td><td style="padding:8px 12px;color:#706F6F;">' + (g.tipo || '—') + '</td><td style="padding:8px 12px;"><span style="background:' + estadoColor + '12;color:' + estadoColor + ';padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;">' + g.estado + '</span></td><td style="padding:8px 12px;color:#706F6F;">' + horaCierre + '</td></tr>';
-                });
-                html += '</tbody></table></div></div>';
-            }
-
-            if (res.pendientes.length > 0) {
-                html += '<div>';
-                html += '<div style="font-size:0.78rem;font-weight:800;color:#253150;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="bi bi-hourglass-split" style="color:#BD0F14;"></i> Solicitudes Pendientes</div>';
-                html += '<div style="max-height:160px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:12px;">';
-                html += '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">';
-                html += '<thead><tr style="background:#f4f5f8;"><th style="padding:8px 12px;text-align:left;font-weight:700;color:#706F6F;font-size:0.68rem;text-transform:uppercase;">ID</th><th style="padding:8px 12px;text-align:left;font-weight:700;color:#706F6F;font-size:0.68rem;text-transform:uppercase;">Tipo</th><th style="padding:8px 12px;text-align:left;font-weight:700;color:#706F6F;font-size:0.68rem;text-transform:uppercase;">Estado</th></tr></thead><tbody>';
-                res.pendientes.forEach(function(p) {
-                    html += '<tr style="border-top:1px solid #f1f5f9;"><td style="padding:8px 12px;font-weight:600;color:#253150;">' + p.id + '</td><td style="padding:8px 12px;color:#706F6F;">' + (p.tipo || '—') + '</td><td style="padding:8px 12px;"><span style="background:#fde8e8;color:#BD0F14;padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;">' + (p.estado || 'En gestión') + '</span></td></tr>';
-                });
-                html += '</tbody></table></div></div>';
-            }
-
-            if (res.gestionadas.length === 0 && res.pendientes.length === 0) {
-                html += '<div style="text-align:center;padding:30px 0;color:#706F6F;"><i class="bi bi-inbox" style="font-size:2rem;"></i><p style="margin-top:8px;font-weight:600;">Sin registros para esta fecha</p></div>';
-            }
-
-            html += '</div>';
-            Swal.fire({
-                html: html,
-                width: 620,
-                showCloseButton: true,
-                showConfirmButton: false,
-                customClass: { popup: 'swal-detalle-popup' }
-            });
-        })
-        .admin_obtenerDetallePorAnalista(correo, fecha);
-}
-
-function verDetalleHoras(nombre) {
-    var detalle = window._detalleHorasData[nombre];
-    if (!detalle) { Swal.fire({ icon: 'info', title: 'Sin datos', text: 'No hay detalle de horas para este analista.' }); return; }
-    var html = '<div style="font-family:Manrope,sans-serif;text-align:left;">';
-    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">';
-    html += '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#BD0F14,#8b0a0e);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1rem;font-weight:800;">' + nombre.charAt(0).toUpperCase() + '</div>';
-    html += '<div style="font-weight:800;font-size:1rem;color:#253150;">' + nombre + '</div></div>';
-    html += '<div style="font-size:0.72rem;font-weight:700;color:#706F6F;text-transform:uppercase;margin-bottom:10px;">Promedio solicitudes cerradas por franja horaria</div>';
-    html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">';
-    for (var h = 7; h <= 18; h++) {
-        var cant = detalle[h] || 0;
-        var bgColor = cant === 0 ? '#f4f5f8' : cant <= 2 ? '#e8edf6' : cant <= 5 ? '#253150' : '#BD0F14';
-        var txtColor = cant <= 2 ? '#253150' : '#ffffff';
-        html += '<div style="background:' + bgColor + ';color:' + txtColor + ';border-radius:10px;padding:10px 8px;text-align:center;border:1px solid #e5e7eb;">';
-        html += '<div style="font-size:0.65rem;font-weight:700;opacity:0.7;">' + h + ':00 - ' + (h + 1) + ':00</div>';
-        html += '<div style="font-size:1.4rem;font-weight:800;">' + cant + '</div>';
-        html += '</div>';
-    }
-    html += '</div></div>';
-    Swal.fire({ html: html, width: 520, showCloseButton: true, showConfirmButton: false });
-}
-
-function formatearDuracion(minutos) {
-    if (!minutos || minutos === 0) return '—';
-    var h = Math.floor(minutos / 60);
-    var m = Math.round(minutos % 60);
-    return h === 0 ? m + ' min' : h + 'h ' + m + 'm';
-}
-
-function formatearTiempoGeneral(horas) {
-    if (!horas || horas === 0) return '—';
-    var h = Math.floor(horas);
-    var m = Math.round((horas - h) * 60);
-    return h === 0 ? m + ' min' : h + 'h ' + m + 'm';
-}
-</script>
-<script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
-<script>
-particlesJS('particles-js', {
-    particles: {
-        number: { value: 50, density: { enable: true, value_area: 900 } },
-        color: { value: ['#BD0F14', '#253150', '#706F6F'] },
-        shape: { type: 'circle' },
-        opacity: { value: 0.15, random: true, anim: { enable: true, speed: 0.6, opacity_min: 0.05, sync: false } },
-        size: { value: 3, random: true, anim: { enable: true, speed: 1.5, size_min: 0.5, sync: false } },
-        line_linked: { enable: true, distance: 140, color: '#253150', opacity: 0.08, width: 1 },
-        move: { enable: true, speed: 1.2, direction: 'none', random: true, straight: false, out_mode: 'out', bounce: false }
-    },
-    interactivity: {
-        detect_on: 'canvas',
-        events: { onhover: { enable: true, mode: 'grab' }, onclick: { enable: true, mode: 'push' }, resize: true },
-        modes: { grab: { distance: 160, line_linked: { opacity: 0.25 } }, push: { particles_nb: 3 } }
-    },
-    retina_detect: true
-});
-</script>
+<?!= HtmlService.createHtmlOutputFromFile('JSClient').getContent(); ?>
 </body>
 </html>
