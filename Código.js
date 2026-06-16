@@ -4,7 +4,7 @@
 const TARGET_SOLICITUDES_SS_ID = "1x9groW5-I7Xg5ULh7DXfa2XGmS_RMdfqfW1iDWB8bJ0";
 const SHEET_NAME_SOLICITUDES = "Historico_Gestiones";
 const ID_HOJA_REESTUDIOS = "1slgykTgjoAtCd6KmlG7Lqiuw-nM1hSguQbi0XqeLu7U";
-const NOMBRE_PESTANA_REESTUDIOS = "ORIGEN";
+const NOMBRE_PESTANA_REESTUDIOS = "Historico_Gestiones";
 const TIMEZONE = "America/Bogota";
 const HORA_INICIO_OPERACION = "08:00";
 const HORA_FIN_TURNO = "17:00";
@@ -201,7 +201,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   // 1. Procesar Histórico de Gestiones
   for (let i = 1; i < data.length; i++) {
     const fila = data[i];
-    const fechaGestionStr = String(fila[33] || "").trim();
+    const fechaGestionStr = String(fila[30] || "").trim();
     if (!fechaGestionStr) continue;
 
     const fechaGestion = parseFechaDDMMYYYY(fechaGestionStr);
@@ -209,9 +209,9 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
 
     totalGestionadas++;
     const estado = String(fila[16] || "").toUpperCase().trim();
-    const nombre = String(fila[30] || "Sin nombre").trim();
-    const tiempoGestionRaw = String(fila[34] || "").trim();
-    const tiempoResolucionRaw = String(fila[29] || "").trim();
+    const nombre = String(fila[27] || "Sin nombre").trim();
+    const tiempoGestionRaw = String(fila[35] || "").trim();
+    const tiempoResolucionRaw = String(fila[36] || "").trim();
 
     if (estado.includes("APROB")) aprobadas++;
     else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) negadas++;
@@ -225,26 +225,24 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     if (!tipoMap[fechaGestionStr]) tipoMap[fechaGestionStr] = { Digital: 0, UAR: 0, Reestudio: 0, 'Biometría': 0, 'Inducción': 0 };
     tipoMap[fechaGestionStr][tipoSol]++;
 
-    const tiempoGestion = parseFloat(tiempoGestionRaw);
+    const tiempoGestion = parseFloat(tiempoGestionRaw.replace(',', '.'));
     if (!isNaN(tiempoGestion) && tiempoGestion >= 0) {
       sumaTiempos += tiempoGestion;
       countTiempos++;
     }
-    const tiempoResolucion = parseFloat(tiempoResolucionRaw.replace(',', '.'));
+    const tiempoResolucionMin = parseFloat(tiempoResolucionRaw.replace(',', '.'));
+    const tiempoResolucion = !isNaN(tiempoResolucionMin) ? tiempoResolucionMin / 60 : NaN;
     if (!isNaN(tiempoResolucion) && tiempoResolucion > 0) {
       sumaTiemposResolucion += tiempoResolucion;
       countTiemposResolucion++;
     }
     if (!isNaN(tiempoResolucion) && tiempoResolucion > 2) fueraDeSLA++;
 
-    // Cálculo de Tiempo de Cola: fechaAsignacion - fechaRadicacion (en minutos)
-    var fechaRadicStr = String(fila[37] || "").trim();
-    var fechaAsigStr = String(fila[26] || "").trim();
-    var dtRadicacion = parseDatetimeStr(fechaRadicStr);
-    var dtAsignacion = parseDatetimeStr(fechaAsigStr);
+    // Tiempo de Cola: leído directamente de minutos_cola (col AI)
     var tiempoColaMin = null;
-    if (dtRadicacion && dtAsignacion && dtAsignacion >= dtRadicacion) {
-      tiempoColaMin = (dtAsignacion - dtRadicacion) / 60000;
+    var tiempoColaRawVal = parseFloat(String(fila[34] || "").replace(',', '.'));
+    if (!isNaN(tiempoColaRawVal) && tiempoColaRawVal >= 0) {
+      tiempoColaMin = tiempoColaRawVal;
       sumaTiempoCola += tiempoColaMin;
       countTiempoCola++;
     }
@@ -285,7 +283,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     const a = analistaMap[nombre];
     a.total++;
 
-    const fechaFinCompleta = String(fila[28] || "").trim();
+    const fechaFinCompleta = String(fila[26] || "").trim();
     const horaFin = fechaFinCompleta.split(' ')[1] || "";
     if (horaFin && fechaGestionStr) {
       const horaFinNorm = normalizarHora(horaFin);
@@ -315,7 +313,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
 
     const solicitudId = String(fila[0] || "").trim();
     var estadoLabel = estado.includes("APROB") ? "APROBADA" : (estado.includes("NEGAD") || estado.includes("RECHAZ")) ? "NEGADA" : estado.includes("APLAZ") ? "APLAZADA" : "OTRO";
-    tiemposDetalle.push({ solicitud: solicitudId, poliza: polizaVal, fecha: fechaGestionStr, sucursal: sucursal, tipo: tipoSol, analista: nombre, segmento: seg, inmobiliaria: inmob, estado: estadoLabel, tGestion: !isNaN(tiempoGestion) && tiempoGestion >= 0 ? tiempoGestion : null, tResolucion: !isNaN(tiempoResolucion) && tiempoResolucion > 0 ? tiempoResolucion : null, tCola: tiempoColaMin });
+    tiemposDetalle.push({ solicitud: solicitudId, poliza: polizaVal, fecha: fechaGestionStr, sucursal: sucursal, tipo: tipoSol, analista: nombre, segmento: seg, inmobiliaria: inmob, estado: estadoLabel, tGestion: !isNaN(tiempoGestion) && tiempoGestion >= 0 ? tiempoGestion : null, tResolucion: !isNaN(tiempoResolucion) && tiempoResolucion > 0 ? tiempoResolucion : null, tCola: tiempoColaMin !== null ? tiempoColaMin : null });
   }
 
   // 2. Procesar Reestudios
@@ -323,7 +321,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     try {
       const lastRowR = hojaReest.getLastRow();
       if (lastRowR > 1) {
-        const dataReest = hojaReest.getRange(2, 1, lastRowR - 1, 17).getDisplayValues();
+        const dataReest = hojaReest.getRange(2, 1, lastRowR - 1, 18).getDisplayValues();
         for (let i = 0; i < dataReest.length; i++) {
           const fechaFinStr = String(dataReest[i][9]).trim();
           if (!fechaFinStr) continue;
@@ -335,7 +333,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
           totalGestionadas++;
           const estadoR = String(dataReest[i][10]).toUpperCase().trim();
           const nombreR = String(dataReest[i][7] || "Sin nombre").trim();
-          const tiempoResolucionReestRaw = String(dataReest[i][14] || "").trim();
+          const tiempoResolucionReestRaw = String(dataReest[i][16] || "").trim();
           const tiempoGestionReestRaw = String(dataReest[i][15] || "").trim();
 
           if (estadoR.includes("APROB")) aprobadas++;
@@ -363,20 +361,17 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
           }
           if (!isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 2) fueraDeSLA++;
 
-          // Tiempo de Cola para reestudios: fechaAsignacion (col 8) - fechaRadicacion (col 0)
-          var fechaRadicReestStr = String(dataReest[i][0] || "").trim();
-          var fechaAsigReestStr = String(dataReest[i][8] || "").trim();
-          var dtRadicReest = parseDatetimeStr(fechaRadicReestStr);
-          var dtAsigReest = parseDatetimeStr(fechaAsigReestStr);
+          // Tiempo de Cola: leído directamente de minutos_cola (col O)
           var tiempoColaReest = null;
-          if (dtRadicReest && dtAsigReest && dtAsigReest >= dtRadicReest) {
-            tiempoColaReest = (dtAsigReest - dtRadicReest) / 60000;
+          var tiempoColaReestVal = parseFloat(String(dataReest[i][14] || "").replace(',', '.'));
+          if (!isNaN(tiempoColaReestVal) && tiempoColaReestVal >= 0) {
+            tiempoColaReest = tiempoColaReestVal;
             sumaTiempoCola += tiempoColaReest;
             countTiempoCola++;
           }
 
-          // Segmentación por Inmobiliaria para reestudios (usando poliza col 16 si existe, o col 2)
-          var polizaReest = String(dataReest[i][16] || dataReest[i][2] || "").trim();
+          // Segmentación por Inmobiliaria para reestudios (poliza col R = 17)
+          var polizaReest = String(dataReest[i][17] || dataReest[i][2] || "").trim();
           var infoSegR = obtenerSegmentoInmobiliaria(polizaReest, scoreMap);
           var segR = infoSegR.segmento;
           var inmobR = infoSegR.inmobiliaria;
@@ -427,7 +422,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
           if (!isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 0) { aR.sumaTiempoResolucion += tiempoResolucionReestHoras; aR.countTiempoResolucion++; }
           if (!isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 2) aR.fueraSLA++;
 
-          const sucursalR = obtenerSucursalPorPoliza(dataReest[i][16]);
+          const sucursalR = obtenerSucursalPorPoliza(dataReest[i][17]);
           if (!sucursalMap[fechaParte]) sucursalMap[fechaParte] = {};
           sucursalMap[fechaParte][sucursalR] = (sucursalMap[fechaParte][sucursalR] || 0) + 1;
 
@@ -437,7 +432,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
 
           const solicitudIdR = String(dataReest[i][1] || "").trim();
           var estadoLabelR = estadoR.includes("APROB") ? "APROBADA" : (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) ? "NEGADA" : estadoR.includes("APLAZ") ? "APLAZADA" : "OTRO";
-          tiemposDetalle.push({ solicitud: solicitudIdR, poliza: polizaReest, fecha: fechaParte, sucursal: sucursalR, tipo: tipoReest, analista: nombreR, segmento: segR, inmobiliaria: inmobR, estado: estadoLabelR, tGestion: !isNaN(tiempoGestionReest) && tiempoGestionReest >= 0 ? tiempoGestionReest : null, tResolucion: !isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 0 ? tiempoResolucionReestHoras : null, tCola: tiempoColaReest });
+          tiemposDetalle.push({ solicitud: solicitudIdR, poliza: polizaReest, fecha: fechaParte, sucursal: sucursalR, tipo: tipoReest, analista: nombreR, segmento: segR, inmobiliaria: inmobR, estado: estadoLabelR, tGestion: !isNaN(tiempoGestionReest) && tiempoGestionReest >= 0 ? tiempoGestionReest : null, tResolucion: !isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 0 ? tiempoResolucionReestHoras : null, tCola: tiempoColaReest !== null ? tiempoColaReest : null });
         }
       }
     } catch (e) {
@@ -475,6 +470,10 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
         // Obtener segmento para backlog
         var polizaBack = String(dataSolicitud[i][1] || "").trim();
         var infoSegBack = obtenerSegmentoInmobiliaria(polizaBack, scoreMap);
+        var claseBack = String(dataSolicitud[i][20] || "").toUpperCase().trim();
+        var tipoBack = 'Digital';
+        if (claseBack === 'BIOMETRIA' || claseBack === 'BIOMETRÍA') tipoBack = 'Biometría';
+        else if (claseBack === 'INDUCCION' || claseBack === 'INDUCCIÓN') tipoBack = 'Inducción';
         backlogDetalle.push({
           solicitud: String(dataSolicitud[i][0] || "").trim(),
           fechaAsignacion: fechaAsig,
@@ -482,7 +481,9 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
           minutosEspera: minutosEspera,
           alertaSLA: alertaSLA,
           inmobiliaria: infoSegBack.inmobiliaria,
-          segmento: infoSegBack.segmento
+          segmento: infoSegBack.segmento,
+          tipo: tipoBack,
+          origen: 'Digital/Inducción'
         });
       }
     }
@@ -493,9 +494,9 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     try {
       const lastRowB = hojaReest.getLastRow();
       if (lastRowB > 1) {
-        const dataB = hojaReest.getRange(2, 1, lastRowB - 1, 17).getDisplayValues();
+        const dataB = hojaReest.getRange(2, 1, lastRowB - 1, 18).getDisplayValues();
         for (let i = 0; i < dataB.length; i++) {
-          const fAsig = String(dataB[i][8] || dataB[i][7]).trim();
+          const fAsig = String(dataB[i][8]).trim();
           const fFin = String(dataB[i][9] || "").trim();
           if (fAsig !== "" && fFin === "") {
             backlog++;
@@ -509,8 +510,9 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
               else if (minutosEsperaR >= 45) alertaSLAR = "amarillo";
               else alertaSLAR = "verde";
             }
-            var polizaBackR = String(dataB[i][16] || dataB[i][2] || "").trim();
+            var polizaBackR = String(dataB[i][17] || dataB[i][2] || "").trim();
             var infoSegBackR = obtenerSegmentoInmobiliaria(polizaBackR, scoreMap);
+            var tipoProcesoBack = String(dataB[i][4] || "").trim() || 'Reestudio';
             backlogDetalle.push({
               solicitud: String(dataB[i][1] || "").trim(),
               fechaAsignacion: fAsig,
@@ -518,7 +520,9 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
               minutosEspera: minutosEsperaR,
               alertaSLA: alertaSLAR,
               inmobiliaria: infoSegBackR.inmobiliaria,
-              segmento: infoSegBackR.segmento
+              segmento: infoSegBackR.segmento,
+              tipo: tipoProcesoBack,
+              origen: 'Reestudios/UAR'
             });
           }
         }
@@ -701,20 +705,22 @@ function obtenerRendimientoPorDia(fechaFiltro) {
   const analistaMap = {};
 
   for (let i = 1; i < data.length; i++) {
-    const fechaGestionStr = String(data[i][33] || "").trim();
+    const fechaGestionStr = String(data[i][30] || "").trim();
     if (!fechaGestionStr || fechaGestionStr !== fechaStr) continue;
 
     const estado = String(data[i][16] || "").toUpperCase().trim();
-    const nombre = String(data[i][30] || "Sin nombre").trim();
-    const tiempoGestionRaw = String(data[i][34] || "").trim();
-    const tiempoResolucionRaw = String(data[i][29] || "").trim();
-    const fechaFinCompleta = String(data[i][28] || "").trim();
+    const nombre = String(data[i][27] || "Sin nombre").trim();
+    const correo = String(data[i][25] || "").toLowerCase().trim();
+    const clave = correo || nombre;
+    const tiempoGestionRaw = String(data[i][35] || "").trim();
+    const tiempoResolucionRaw = String(data[i][36] || "").trim();
+    const fechaFinCompleta = String(data[i][26] || "").trim();
     const horaFin = fechaFinCompleta.split(' ')[1] || "";
 
-    if (!analistaMap[nombre]) {
-      analistaMap[nombre] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, primera: "", ultima: "", count: 0, horasSlot: {} };
+    if (!analistaMap[clave]) {
+      analistaMap[clave] = { nombre: nombre, total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, primera: "", ultima: "", count: 0, horasSlot: {} };
     }
-    const a = analistaMap[nombre];
+    const a = analistaMap[clave];
     a.total++;
     a.count++;
 
@@ -722,10 +728,11 @@ function obtenerRendimientoPorDia(fechaFiltro) {
     else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) a.negadas++;
     else if (estado.includes("APLAZ")) a.aplazadas++;
 
-    const tiempoGestion = parseFloat(tiempoGestionRaw);
+    const tiempoGestion = parseFloat(tiempoGestionRaw.replace(',', '.'));
     if (!isNaN(tiempoGestion) && tiempoGestion >= 0) { a.sumaTiempo += tiempoGestion; a.countTiempo++; }
 
-    const tiempoResolucion = parseFloat(tiempoResolucionRaw.replace(',', '.'));
+    const tiempoResolucionMinD = parseFloat(tiempoResolucionRaw.replace(',', '.'));
+    const tiempoResolucion = !isNaN(tiempoResolucionMinD) ? tiempoResolucionMinD / 60 : NaN;
     if (!isNaN(tiempoResolucion) && tiempoResolucion > 0) { a.sumaTiempoResolucion += tiempoResolucion; a.countTiempoResolucion++; }
     if (!isNaN(tiempoResolucion) && tiempoResolucion > 2) a.fueraSLA++;
 
@@ -753,14 +760,16 @@ function obtenerRendimientoPorDia(fechaFiltro) {
 
           const estadoR = String(dataReest[i][10]).toUpperCase().trim();
           const nombreR = String(dataReest[i][7] || "Sin nombre").trim();
-          const tiempoResolucionReestRaw = String(dataReest[i][14] || "").trim();
+          const correoR = String(dataReest[i][6] || "").toLowerCase().trim();
+          const claveR = correoR || nombreR;
+          const tiempoResolucionReestRaw = String(dataReest[i][16] || "").trim();
           const tiempoGestionReestRaw = String(dataReest[i][15] || "").trim();
           const horaFinR = fechaFinStr.split(' ')[1] || "";
 
-          if (!analistaMap[nombreR]) {
-            analistaMap[nombreR] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, primera: "", ultima: "", count: 0, horasSlot: {} };
+          if (!analistaMap[claveR]) {
+            analistaMap[claveR] = { nombre: nombreR, total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, primera: "", ultima: "", count: 0, horasSlot: {} };
           }
-          const aR = analistaMap[nombreR];
+          const aR = analistaMap[claveR];
           aR.total++;
           aR.count++;
 
@@ -794,18 +803,16 @@ function obtenerRendimientoPorDia(fechaFiltro) {
   const inicioParts = HORA_INICIO_OPERACION.split(':');
   const inicioMin = parseInt(inicioParts[0], 10) * 60 + parseInt(inicioParts[1], 10);
 
-  return Object.keys(analistaMap).map(nombre => {
-    const a = analistaMap[nombre];
+  return Object.keys(analistaMap).map(clave => {
+    const a = analistaMap[clave];
     let ritmoEfec = 0;
-    if (a.count > 1 && a.primera && a.ultima) {
+    if (a.count >= 2 && a.primera && a.ultima) {
       const pParts = a.primera.split(':');
       const uParts = a.ultima.split(':');
       const pMin = parseInt(pParts[0], 10) * 60 + parseInt(pParts[1], 10);
       const uMin = parseInt(uParts[0], 10) * 60 + parseInt(uParts[1], 10);
       const diffHoras = (uMin - pMin) / 60;
-      ritmoEfec = diffHoras > 0 ? Math.round(a.count / diffHoras) : a.count;
-    } else {
-      ritmoEfec = a.count;
+      ritmoEfec = diffHoras > 0 ? Math.round(a.count / diffHoras) : 0;
     }
 
     let corteMin;
@@ -817,12 +824,18 @@ function obtenerRendimientoPorDia(fechaFiltro) {
       const finParts = HORA_FIN_TURNO.split(':');
       corteMin = parseInt(finParts[0], 10) * 60 + parseInt(finParts[1], 10);
     }
-    let horasTranscurridas = (corteMin - inicioMin) / 60;
+    let startMin = inicioMin;
+    if (a.primera) {
+      const pInicioParts = a.primera.split(':');
+      const primeroMin = parseInt(pInicioParts[0], 10) * 60 + parseInt(pInicioParts[1], 10);
+      startMin = Math.max(inicioMin, primeroMin);
+    }
+    let horasTranscurridas = (corteMin - startMin) / 60;
     if (horasTranscurridas <= 0) horasTranscurridas = 1;
     const prodReal = Math.round(a.total / horasTranscurridas);
 
     return {
-      nombre: nombre,
+      nombre: a.nombre || clave,
       total: a.total,
       aprobadas: a.aprobadas,
       negadas: a.negadas,
@@ -917,22 +930,22 @@ function admin_obtenerAsesoresActivosPrimerResultado(fechaFiltro) {
   const tiemposGeneralMap = {};
 
   for (let i = 1; i < dataSol.length; i++) {
-    const asignado = String(dataSol[i][27] || "").toLowerCase().trim();
-    const fechaFinRaw = String(dataSol[i][28] || "").trim();
-    const tiempoGestionVal = String(dataSol[i][34] || "").trim();
+    const asignado = String(dataSol[i][25] || "").toLowerCase().trim();
+    const fechaFinRaw = String(dataSol[i][26] || "").trim();
+    const tiempoGestionVal = String(dataSol[i][35] || "").trim();
     const tiempoGeneralVal = String(dataSol[i][36] || "").trim();
     if (!asignado) continue;
     if (fechaFinRaw && coincideFecha(fechaFinRaw, fechaStr)) {
       gestionadasMap[asignado] = (gestionadasMap[asignado] || 0) + 1;
-      const tg = parseFloat(tiempoGestionVal);
+      const tg = parseFloat(tiempoGestionVal.replace(',', '.'));
       if (!isNaN(tg) && tg > 0) {
         if (!tiemposGestionMap[asignado]) tiemposGestionMap[asignado] = [];
         tiemposGestionMap[asignado].push(tg);
       }
-      const tGen = parseFloat(tiempoGeneralVal);
-      if (!isNaN(tGen) && tGen > 0) {
+      const tGenMin = parseFloat(tiempoGeneralVal.replace(',', '.'));
+      if (!isNaN(tGenMin) && tGenMin > 0) {
         if (!tiemposGeneralMap[asignado]) tiemposGeneralMap[asignado] = [];
-        tiemposGeneralMap[asignado].push(tGen);
+        tiemposGeneralMap[asignado].push(Number((tGenMin / 60).toFixed(2)));
       }
       const partes = fechaFinRaw.split(" ");
       const hora = partes.length > 1 ? normalizarHora(partes[1]) : "";
@@ -947,11 +960,11 @@ function admin_obtenerAsesoresActivosPrimerResultado(fechaFiltro) {
     try {
       const lastRowR = hojaReest.getLastRow();
       if (lastRowR > 1) {
-        const dataReest = hojaReest.getRange(2, 1, lastRowR - 1, 16).getDisplayValues();
+        const dataReest = hojaReest.getRange(2, 1, lastRowR - 1, 17).getDisplayValues();
         for (let i = 0; i < dataReest.length; i++) {
           const asignado = String(dataReest[i][6]).trim().toLowerCase();
           const fechaFinRaw = String(dataReest[i][9]).trim();
-          const tiempoTotalReest = String(dataReest[i][14] || "").trim();
+          const tiempoTotalReest = String(dataReest[i][16] || "").trim();
           const tiempoGestionReest = String(dataReest[i][15] || "").trim();
 
           if (!asignado) continue;
@@ -1086,19 +1099,20 @@ function admin_obtenerDetallePorAnalista(correoAnalista, fechaFiltro) {
   const gestionadas = [];
   const pendientes = [];
   for (let i = 1; i < dataSol.length; i++) {
-    const asignado = String(dataSol[i][27] || "").toLowerCase().trim();
+    const asignado = String(dataSol[i][25] || "").toLowerCase().trim();
     if (asignado !== correoAnalista) continue;
 
     const solicitudId = String(dataSol[i][0] || "").trim();
     const poliza = String(dataSol[i][1] || "");
     const estado = String(dataSol[i][16] || "").toUpperCase();
     const clase = String(dataSol[i][20] || "").toUpperCase();
-    const fechaRadicacion = String(dataSol[i][37] || "").trim();
-    const fechaAsignacion = String(dataSol[i][26] || "").trim();
-    const fechaFin = String(dataSol[i][28] || "").trim();
-    const tiempoGestion = String(dataSol[i][34] || "").trim();
-    const tiempoSLA = String(dataSol[i][29] || "").trim();
-    const tiempoGeneral = String(dataSol[i][36] || "").trim();
+    const fechaRadicacion = String(dataSol[i][17] || "").trim();
+    const fechaAsignacion = String(dataSol[i][24] || "").trim();
+    const fechaFin = String(dataSol[i][26] || "").trim();
+    const tiempoGestion = String(dataSol[i][35] || "").trim();
+    const tiempoGeneralMin = parseFloat(String(dataSol[i][36] || "").replace(',', '.'));
+    const tiempoSLA = !isNaN(tiempoGeneralMin) && tiempoGeneralMin > 0 ? String(Number((tiempoGeneralMin / 60).toFixed(2))) : "";
+    const tiempoGeneral = tiempoSLA;
 
     if (!solicitudId) continue;
     let tipo = 'Digital';
@@ -1142,7 +1156,7 @@ function admin_obtenerDetallePorAnalista(correoAnalista, fechaFiltro) {
           const fechaAsig = String(dataReest[i][8]).trim();
           const fechaFin = String(dataReest[i][9]).trim();
           const estadoG = String(dataReest[i][10]).trim();
-          const tiempoTotalR = String(dataReest[i][14] || "").trim();
+          const tiempoTotalR = String(dataReest[i][16] || "").trim();
           const tiempoG = String(dataReest[i][15]).trim();
 
           if (!solicitud) continue;

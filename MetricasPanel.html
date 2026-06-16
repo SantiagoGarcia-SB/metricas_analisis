@@ -143,6 +143,11 @@
                 <div class="metric-value" id="kpiTotal">0</div>
                 <div class="metric-trend"><span class="trend-chip">Período</span> Solicitudes</div>
             </div>
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('tiempoGeneral')">
+                <div class="card-top"><span class="metric-label">T. General Promedio</span><div class="card-arrow"><i class="bi bi-clock-history"></i></div></div>
+                <div class="metric-value" id="kpiTiempoGeneral" style="color:var(--gris-dark);">0<span style="font-size:1rem;font-weight:600;"> h</span></div>
+                <div class="metric-trend"><span class="trend-chip">Radicación → Cierre</span> Ciclo total</div>
+            </div>
             <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('tiempoCola')">
                 <div class="card-top"><span class="metric-label">T. Cola Promedio</span><div class="card-arrow"><i class="bi bi-hourglass-split"></i></div></div>
                 <div class="metric-value" id="kpiTiempoCola" style="color:var(--azul);">0<span style="font-size:1rem;font-weight:600;"> min</span></div>
@@ -152,11 +157,6 @@
                 <div class="card-top"><span class="metric-label">T. Gestión Promedio</span><div class="card-arrow"><i class="bi bi-stopwatch"></i></div></div>
                 <div class="metric-value" id="kpiTiempo">0<span style="font-size:1rem;font-weight:600;"> min</span></div>
                 <div class="metric-trend"><span class="trend-chip">Asignación → Cierre</span> Trabajo</div>
-            </div>
-            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('tiempoGeneral')">
-                <div class="card-top"><span class="metric-label">T. General Promedio</span><div class="card-arrow"><i class="bi bi-clock-history"></i></div></div>
-                <div class="metric-value" id="kpiTiempoGeneral" style="color:var(--gris-dark);">0<span style="font-size:1rem;font-weight:600;"> h</span></div>
-                <div class="metric-trend"><span class="trend-chip">Radicación → Cierre</span> Ciclo total</div>
             </div>
             <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('aprobacion')">
                 <div class="card-top"><span class="metric-label">Tasa Aprobación</span><div class="card-arrow"><i class="bi bi-check-circle"></i></div></div>
@@ -177,8 +177,8 @@
 
         <!-- Gráficos Resumen -->
         <div class="row g-4 mb-4">
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Producción Diaria<span class="btn-help-chart" onclick="ayudaGrafico('produccionDiaria')">?</span></div><canvas id="chartProduccion" height="220"></canvas></div></div>
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-pie-chart me-2" style="color:var(--azul);"></i>Distribución por Estado<span class="btn-help-chart" onclick="ayudaGrafico('estados')">?</span></div><canvas id="chartEstados" height="220"></canvas></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Producción Diaria<span class="btn-help-chart" onclick="ayudaGrafico('produccionDiaria')">?</span></div><div style="position:relative;height:240px;"><canvas id="chartProduccion"></canvas></div></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-pie-chart me-2" style="color:var(--azul);"></i>Distribución por Estado<span class="btn-help-chart" onclick="ayudaGrafico('estados')">?</span></div><div style="position:relative;height:240px;"><canvas id="chartEstados"></canvas></div></div></div>
             <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-people me-2" style="color:var(--azul);"></i>Productividad por Analista<span class="btn-help-chart" onclick="ayudaGrafico('analistas')">?</span></div><canvas id="chartAnalistas" height="220"></canvas></div></div>
             <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-shield-check me-2" style="color:var(--azul);"></i>Cumplimiento SLA<span class="btn-help-chart" onclick="ayudaGrafico('sla')">?</span></div><canvas id="chartSLA" height="220"></canvas></div></div>
         </div>
@@ -257,9 +257,9 @@
                             <th style="width:40px;">SLA</th>
                             <th>Solicitud</th>
                             <th>Analista</th>
-                            <th>Inmobiliaria</th>
-                            <th class="text-center">Tiempo Espera</th>
-                            <th>Fecha Asignación</th>
+                            <th>Origen</th>
+                            <th>Tipo de Estudio</th>
+                            <th class="text-center">Tiempo en Gestión</th>
                         </tr>
                     </thead>
                     <tbody id="cuerpoBacklogSemaforo"></tbody>
@@ -292,8 +292,9 @@
                 <button class="btn-outline-brand" onclick="limpiarFiltrosTiempos()" style="padding:5px 12px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-x-circle me-1"></i>Quitar filtros</button>
             </div>
             <div class="row g-3">
-                <div class="col-lg-6"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-stopwatch me-1"></i>T. Gestión (min)</div><canvas id="chartTiempoGestion" height="180"></canvas></div></div>
-                <div class="col-lg-6"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-clock-history me-1"></i>T. General (h)</div><canvas id="chartTiempoResolucion" height="180"></canvas></div></div>
+                <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-clock-history me-1"></i>T. General Promedio</div><canvas id="chartTiempoResolucion" height="180"></canvas></div></div>
+                <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-hourglass-split me-1"></i>T. Cola Promedio</div><canvas id="chartTiempoCola" height="180"></canvas></div></div>
+                <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-stopwatch me-1"></i>T. Gestión Promedio</div><canvas id="chartTiempoGestion" height="180"></canvas></div></div>
             </div>
         </div>
         <!-- Búsqueda por Solicitud -->
