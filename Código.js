@@ -82,18 +82,22 @@ function obtenerSucursalPorPoliza(polizaStr) {
  * Mapea Poliza -> { inmobiliaria, segmento }
  */
 function cargarDiccionarioScore() {
+  var cache = CacheService.getScriptCache();
+  try {
+    var cached = cache.get('scoreMap');
+    if (cached) return JSON.parse(cached);
+  } catch (e) {}
+
   var scoreMap = {};
   try {
     var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
     var hojaScore = ss.getSheetByName("score");
     if (hojaScore) {
       var data = hojaScore.getDataRange().getDisplayValues();
-      // Buscar columnas por encabezado
       var headers = data[0].map(function(h) { return h.trim().toLowerCase(); });
       var idxPoliza = headers.indexOf("poliza");
       var idxInmobiliaria = headers.indexOf("inmobiliaria");
       var idxSegmento = headers.indexOf("segmentación final");
-      // Fallbacks por nombre alternativo
       if (idxPoliza < 0) idxPoliza = headers.indexOf("póliza");
       if (idxSegmento < 0) idxSegmento = headers.indexOf("segmentacion final");
       if (idxSegmento < 0) idxSegmento = headers.indexOf("segmentación");
@@ -113,6 +117,12 @@ function cargarDiccionarioScore() {
   } catch (e) {
     Logger.log("Aviso: No se pudo cargar la hoja score: " + e.message);
   }
+
+  try {
+    var json = JSON.stringify(scoreMap);
+    if (json.length < 90000) cache.put('scoreMap', json, 21600);
+  } catch (e) {}
+
   return scoreMap;
 }
 
@@ -449,43 +459,40 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   let backlog = 0;
   const backlogDetalle = [];
   const ahora = new Date();
-  const hojaSolicitud = ss.getSheetByName("solicitud");
-  if (hojaSolicitud) {
-    const dataSolicitud = hojaSolicitud.getDataRange().getDisplayValues();
-    for (let i = 1; i < dataSolicitud.length; i++) {
-      const fechaAsig = String(dataSolicitud[i][26] || "").trim();
-      const fechaFin = String(dataSolicitud[i][28] || "").trim();
-      if (fechaAsig !== "" && fechaFin === "") {
-        backlog++;
-        var dtAsigBack = parseDatetimeStr(fechaAsig);
-        var minutosEspera = 0;
-        var alertaSLA = "verde";
-        if (dtAsigBack) {
-          minutosEspera = Math.round((ahora - dtAsigBack) / 60000);
-          if (minutosEspera < 0) minutosEspera = 0;
-          if (minutosEspera > 90) alertaSLA = "rojo";
-          else if (minutosEspera >= 45) alertaSLA = "amarillo";
-          else alertaSLA = "verde";
-        }
-        // Obtener segmento para backlog
-        var polizaBack = String(dataSolicitud[i][1] || "").trim();
-        var infoSegBack = obtenerSegmentoInmobiliaria(polizaBack, scoreMap);
-        var claseBack = String(dataSolicitud[i][20] || "").toUpperCase().trim();
-        var tipoBack = 'Digital';
-        if (claseBack === 'BIOMETRIA' || claseBack === 'BIOMETRÍA') tipoBack = 'Biometría';
-        else if (claseBack === 'INDUCCION' || claseBack === 'INDUCCIÓN') tipoBack = 'Inducción';
-        backlogDetalle.push({
-          solicitud: String(dataSolicitud[i][0] || "").trim(),
-          fechaAsignacion: fechaAsig,
-          analista: String(dataSolicitud[i][30] || "Sin nombre").trim(),
-          minutosEspera: minutosEspera,
-          alertaSLA: alertaSLA,
-          inmobiliaria: infoSegBack.inmobiliaria,
-          segmento: infoSegBack.segmento,
-          tipo: tipoBack,
-          origen: 'Digital/Inducción'
-        });
+  // Backlog Digital/Biometría/Inducción desde Historico_Gestiones (ya cargado en `data`)
+  // Columnas: [24] fecha asignación · [26] fecha fin gestión · [27] Nombre analista
+  for (let i = 1; i < data.length; i++) {
+    const fechaAsig = String(data[i][24] || "").trim();
+    const fechaFin  = String(data[i][26] || "").trim();
+    if (fechaAsig !== "" && fechaFin === "") {
+      backlog++;
+      var dtAsigBack = parseDatetimeStr(fechaAsig);
+      var minutosEspera = 0;
+      var alertaSLA = "verde";
+      if (dtAsigBack) {
+        minutosEspera = Math.round((ahora - dtAsigBack) / 60000);
+        if (minutosEspera < 0) minutosEspera = 0;
+        if (minutosEspera > 90) alertaSLA = "rojo";
+        else if (minutosEspera >= 45) alertaSLA = "amarillo";
+        else alertaSLA = "verde";
       }
+      var polizaBack = String(data[i][1] || "").trim();
+      var infoSegBack = obtenerSegmentoInmobiliaria(polizaBack, scoreMap);
+      var claseBack = String(data[i][20] || "").toUpperCase().trim();
+      var tipoBack = 'Digital';
+      if (claseBack === 'BIOMETRIA' || claseBack === 'BIOMETRÍA') tipoBack = 'Biometría';
+      else if (claseBack === 'INDUCCION' || claseBack === 'INDUCCIÓN') tipoBack = 'Inducción';
+      backlogDetalle.push({
+        solicitud:      String(data[i][0]  || "").trim(),
+        fechaAsignacion: fechaAsig,
+        analista:       String(data[i][27] || "Sin nombre").trim(),
+        minutosEspera:  minutosEspera,
+        alertaSLA:      alertaSLA,
+        inmobiliaria:   infoSegBack.inmobiliaria,
+        segmento:       infoSegBack.segmento,
+        tipo:           tipoBack,
+        origen:         'Digital/Inducción'
+      });
     }
   }
 
@@ -669,6 +676,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     tiempoColaPromedio: tiempoColaPromedio,
     tasaAprobacion: tasaAprobacion,
     fueraDeSLA: fueraDeSLA,
+    reestudiosDisponibles: tieneReestudios,
     backlog: backlog,
     backlogDetalle: backlogDetalle,
     segmentacion: segmentacion,
