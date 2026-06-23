@@ -211,8 +211,9 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   // 1. Procesar Histórico de Gestiones
   for (let i = 1; i < data.length; i++) {
     const fila = data[i];
-    const fechaGestionStr = String(fila[30] || "").trim();
-    if (!fechaGestionStr) continue;
+    const fechaFinRaw = String(fila[26] || "").trim();
+    if (!fechaFinRaw) continue;
+    const fechaGestionStr = fechaFinRaw.split(' ')[0];
 
     const fechaGestion = parseFechaDDMMYYYY(fechaGestionStr);
     if (!fechaGestion || fechaGestion < desde || fechaGestion > hasta) continue;
@@ -572,7 +573,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   });
 
   const heatmapHora = {};
-  for (let h = 7; h <= 18; h++) heatmapHora[h] = 0;
+  for (let h = 6; h <= 21; h++) heatmapHora[h] = 0;
   Object.keys(analistaMap).forEach(nombre => {
     const slots = analistaMap[nombre].horasSlot;
     Object.keys(slots).forEach(h => { heatmapHora[h] = (heatmapHora[h] || 0) + slots[h]; });
@@ -645,7 +646,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
         detalleHoras: (function() {
           const numDias = Object.keys(a.diasInfo).length || 1;
           const detalle = {};
-          for (let h = 7; h <= 18; h++) {
+          for (let h = 6; h <= 21; h++) {
             detalle[h] = a.horasSlot[h] ? Math.round(a.horasSlot[h] / numDias) : 0;
           }
           return detalle;
@@ -713,8 +714,10 @@ function obtenerRendimientoPorDia(fechaFiltro) {
   const analistaMap = {};
 
   for (let i = 1; i < data.length; i++) {
-    const fechaGestionStr = String(data[i][30] || "").trim();
-    if (!fechaGestionStr || fechaGestionStr !== fechaStr) continue;
+    const fechaFinRawR = String(data[i][26] || "").trim();
+    if (!fechaFinRawR) continue;
+    const fechaGestionStr = fechaFinRawR.split(' ')[0];
+    if (fechaGestionStr !== fechaStr) continue;
 
     const estado = String(data[i][16] || "").toUpperCase().trim();
     const nombre = String(data[i][27] || "Sin nombre").trim();
@@ -854,7 +857,7 @@ function obtenerRendimientoPorDia(fechaFiltro) {
       prodRealPorHora: prodReal,
       detalleHoras: (function() {
         const detalle = {};
-        for (let h = 7; h <= 18; h++) {
+        for (let h = 6; h <= 21; h++) {
           detalle[h] = a.horasSlot[h] || 0;
         }
         return detalle;
@@ -1205,4 +1208,1389 @@ function admin_obtenerDetallePorAnalista(correoAnalista, fechaFiltro) {
     gestionadas: gestionadas,
     pendientes: pendientes
   };
+}
+
+// ============================================================================
+// AGENTE COORDINADOR INTELIGENTE
+// ============================================================================
+
+var AGENT_CONFIG_KEY = "AGENT_CONFIG";
+var AGENT_HISTORY_KEY = "AGENT_ALERT_HISTORY";
+var AGENT_HIST_CACHE_KEY = "AGENT_HIST_30D";
+var AGENT_DIAG_CACHE_KEY = "AGENT_LAST_DIAGNOSTICO";
+var MAX_ALERT_HISTORY = 50;
+
+var DEFAULT_AGENT_CONFIG = {
+  coordinatorEmail: "",
+  enabled: true,
+  metas: {
+    solicitudesPorDiaPorAnalista: 25,
+    slaPct: 90,
+    maxTiempoGestionMin: 20,
+    maxTiempoGeneralHoras: 2,
+    maxTiempoColaMin: 45,
+    maxBacklog: 15,
+    maxTasaNegacionPct: 25,
+    minSolicitudesDiaEquipo: 80
+  },
+  umbrales: {
+    desviacionHistoricaPct: 20,
+    inactividadMinutos: 90,
+    outlierStdDev: 3
+  },
+  notificaciones: {
+    enviarAlertasCriticas: true,
+    enviarResumenDiario: true
+  }
+};
+
+// --- CONFIGURACIÓN ---
+
+function agente_obtenerConfig() {
+  var props = PropertiesService.getScriptProperties();
+  var raw = props.getProperty(AGENT_CONFIG_KEY);
+  if (raw) {
+    try { return JSON.parse(raw); } catch (e) {}
+  }
+  var cfg = JSON.parse(JSON.stringify(DEFAULT_AGENT_CONFIG));
+  cfg.coordinatorEmail = Session.getActiveUser().getEmail() || "";
+  props.setProperty(AGENT_CONFIG_KEY, JSON.stringify(cfg));
+  return cfg;
+}
+
+function agente_guardarConfig(configObj) {
+  var current = agente_obtenerConfig();
+  if (configObj.metas) {
+    Object.keys(configObj.metas).forEach(function(k) { current.metas[k] = configObj.metas[k]; });
+  }
+  if (configObj.umbrales) {
+    Object.keys(configObj.umbrales).forEach(function(k) { current.umbrales[k] = configObj.umbrales[k]; });
+  }
+  if (configObj.notificaciones) {
+    Object.keys(configObj.notificaciones).forEach(function(k) { current.notificaciones[k] = configObj.notificaciones[k]; });
+  }
+  if (configObj.coordinatorEmail !== undefined) current.coordinatorEmail = configObj.coordinatorEmail;
+  if (configObj.enabled !== undefined) current.enabled = configObj.enabled;
+  PropertiesService.getScriptProperties().setProperty(AGENT_CONFIG_KEY, JSON.stringify(current));
+  return { success: true, config: current };
+}
+
+// --- LECTURA DE DATOS PARA EL AGENTE ---
+
+function _agente_leerDatosHoy() {
+  var hoyStr = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
+  return _agente_leerDatosRango(hoyStr, hoyStr);
+}
+
+function _agente_leerDatosRango(fechaDesdeStr, fechaHastaStr) {
+  var desde = parseFechaDDMMYYYY(fechaDesdeStr);
+  var hasta = parseFechaDDMMYYYY(fechaHastaStr);
+  if (!desde || !hasta) return null;
+  hasta.setHours(23, 59, 59, 999);
+
+  var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+  var hoja = ss.getSheetByName(SHEET_NAME_SOLICITUDES);
+  var data = hoja.getDataRange().getDisplayValues();
+  var scoreMap = cargarDiccionarioScore();
+
+  var registros = [];
+  var backlogDetalle = [];
+  var ahora = new Date();
+
+  for (var i = 1; i < data.length; i++) {
+    var fila = data[i];
+    var fechaFinAgent = String(fila[26] || "").trim();
+    var fechaGestionStr = fechaFinAgent ? fechaFinAgent.split(" ")[0] : "";
+    var fechaAsig = String(fila[24] || "").trim();
+
+    if (fechaAsig !== "" && fechaFinAgent === "") {
+      var dtAsig = parseDatetimeStr(fechaAsig);
+      var minEspera = dtAsig ? Math.max(0, Math.round((ahora - dtAsig) / 60000)) : 0;
+      var polB = String(fila[1] || "").trim();
+      var infoB = obtenerSegmentoInmobiliaria(polB, scoreMap);
+      backlogDetalle.push({
+        solicitud: String(fila[0] || "").trim(),
+        analista: String(fila[27] || "Sin nombre").trim(),
+        minutosEspera: minEspera,
+        alertaSLA: minEspera > 90 ? "rojo" : minEspera >= 45 ? "amarillo" : "verde",
+        tipo: "Digital"
+      });
+    }
+
+    if (!fechaGestionStr) continue;
+    var fechaGestion = parseFechaDDMMYYYY(fechaGestionStr);
+    if (!fechaGestion || fechaGestion < desde || fechaGestion > hasta) continue;
+
+    var estado = String(fila[16] || "").toUpperCase().trim();
+    var nombre = String(fila[27] || "Sin nombre").trim();
+    var correo = String(fila[25] || "").toLowerCase().trim();
+    var tGestionRaw = parseFloat(String(fila[35] || "").replace(",", "."));
+    var tResolucionRaw = parseFloat(String(fila[36] || "").replace(",", "."));
+    var tColaRaw = parseFloat(String(fila[34] || "").replace(",", "."));
+    var poliza = String(fila[1] || "").trim();
+    var sucursal = obtenerSucursalPorPoliza(poliza);
+
+    var estadoLabel = estado.includes("APROB") ? "APROBADA" :
+                     (estado.includes("NEGAD") || estado.includes("RECHAZ")) ? "NEGADA" :
+                     estado.includes("APLAZ") ? "APLAZADA" : "OTRO";
+
+    registros.push({
+      solicitud: String(fila[0] || "").trim(),
+      fecha: fechaGestionStr,
+      analista: nombre,
+      correo: correo,
+      estado: estadoLabel,
+      sucursal: sucursal,
+      tGestion: !isNaN(tGestionRaw) && tGestionRaw >= 0 ? tGestionRaw : null,
+      tResolucion: !isNaN(tResolucionRaw) ? tResolucionRaw / 60 : null,
+      tCola: !isNaN(tColaRaw) && tColaRaw >= 0 ? tColaRaw : null,
+      tieneId: String(fila[0] || "").trim() !== "",
+      tieneEstado: estado !== "",
+      tieneAnalista: nombre !== "Sin nombre" && nombre !== "",
+      tieneFecha: fechaGestionStr !== ""
+    });
+  }
+
+  // Reestudios
+  try {
+    var ssReest = SpreadsheetApp.openById(ID_HOJA_REESTUDIOS);
+    var hojaReest = ssReest.getSheetByName(NOMBRE_PESTANA_REESTUDIOS);
+    if (hojaReest) {
+      var lastRow = hojaReest.getLastRow();
+      if (lastRow > 1) {
+        var dataReest = hojaReest.getRange(2, 1, lastRow - 1, 18).getDisplayValues();
+        for (var j = 0; j < dataReest.length; j++) {
+          var fAsig = String(dataReest[j][8]).trim();
+          var fFin = String(dataReest[j][9] || "").trim();
+          if (fAsig !== "" && fFin === "") {
+            var dtAsigR = parseDatetimeStr(fAsig);
+            var minEsperaR = dtAsigR ? Math.max(0, Math.round((ahora - dtAsigR) / 60000)) : 0;
+            backlogDetalle.push({
+              solicitud: String(dataReest[j][1] || "").trim(),
+              analista: String(dataReest[j][7] || "Sin nombre").trim(),
+              minutosEspera: minEsperaR,
+              alertaSLA: minEsperaR > 90 ? "rojo" : minEsperaR >= 45 ? "amarillo" : "verde",
+              tipo: "Reestudio"
+            });
+          }
+
+          var fechaFinStr = String(dataReest[j][9]).trim();
+          if (!fechaFinStr) continue;
+          var fechaParte = fechaFinStr.split(" ")[0];
+          var fechaR = parseFechaDDMMYYYY(fechaParte);
+          if (!fechaR || fechaR < desde || fechaR > hasta) continue;
+
+          var estadoR = String(dataReest[j][10]).toUpperCase().trim();
+          var nombreR = String(dataReest[j][7] || "Sin nombre").trim();
+          var correoR = String(dataReest[j][6] || "").toLowerCase().trim();
+          var tGestionR = parseFloat(String(dataReest[j][15] || "").replace(",", "."));
+          var tResolucionR = parseFloat(String(dataReest[j][16] || "").replace(",", "."));
+          var tColaR = parseFloat(String(dataReest[j][14] || "").replace(",", "."));
+          var polizaR = String(dataReest[j][17] || dataReest[j][2] || "").trim();
+          var sucursalR = obtenerSucursalPorPoliza(polizaR);
+
+          var estadoLabelR = estadoR.includes("APROB") ? "APROBADA" :
+                            (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) ? "NEGADA" :
+                            estadoR.includes("APLAZ") ? "APLAZADA" : "OTRO";
+
+          registros.push({
+            solicitud: String(dataReest[j][1] || "").trim(),
+            fecha: fechaParte,
+            analista: nombreR,
+            correo: correoR,
+            estado: estadoLabelR,
+            sucursal: sucursalR,
+            tGestion: !isNaN(tGestionR) && tGestionR >= 0 ? tGestionR : null,
+            tResolucion: !isNaN(tResolucionR) ? tResolucionR / 60 : null,
+            tCola: !isNaN(tColaR) && tColaR >= 0 ? tColaR : null,
+            tieneId: String(dataReest[j][1] || "").trim() !== "",
+            tieneEstado: estadoR !== "",
+            tieneAnalista: nombreR !== "Sin nombre" && nombreR !== "",
+            tieneFecha: fechaParte !== ""
+          });
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log("Agente: No se pudieron leer reestudios: " + e.message);
+  }
+
+  // Todos los analistas + equipo
+  var analistasActivos = [];
+  var todosAnalistas = [];
+  var equipoPorCorreo = {};
+  try {
+    var hojaUser = ss.getSheetByName("Usuarios");
+    if (hojaUser) {
+      var dataUser = hojaUser.getDataRange().getValues();
+      for (var u = 1; u < dataUser.length; u++) {
+        var estUser = String(dataUser[u][5] || "").toUpperCase().trim();
+        var correoUser = String(dataUser[u][2] || "").toLowerCase().trim();
+        var equipoUser = String(dataUser[u][4] || "").trim();
+        var nombreUser = String(dataUser[u][1] || "").trim();
+        if (!correoUser) continue;
+        equipoPorCorreo[correoUser] = equipoUser;
+        var userObj = { nombre: nombreUser, correo: correoUser, especialidad: equipoUser, equipo: equipoUser, estado: estUser };
+        todosAnalistas.push(userObj);
+        if (estUser === "ACTIVO") analistasActivos.push(userObj);
+      }
+    }
+  } catch (e) {
+    Logger.log("Agente: No se pudo leer Usuarios: " + e.message);
+  }
+
+  // Mapear TODOS los analistas por equipo (para distribución de cupos GENERAL)
+  var analistasPorEquipo = {};
+  todosAnalistas.forEach(function(a) {
+    var eq = a.equipo || "Sin equipo";
+    if (!analistasPorEquipo[eq]) analistasPorEquipo[eq] = [];
+    analistasPorEquipo[eq].push(a);
+  });
+
+  // Cupos asignados (historico_cupos) — soporta tipo GENERAL (equipo) e INDIVIDUAL (analista)
+  var cuposMap = {};
+  var cuposEquipo = {};
+  try {
+    var hojaCupos = ss.getSheetByName("historico_cupos");
+    if (hojaCupos) {
+      var dataCupos = hojaCupos.getDataRange().getDisplayValues();
+      for (var c = 1; c < dataCupos.length; c++) {
+        var fechaCupo = String(dataCupos[c][0] || "").trim().split(" ")[0];
+        var fechaCupoP = parseFechaDDMMYYYY(fechaCupo);
+        if (!fechaCupoP || fechaCupoP < desde || fechaCupoP > hasta) continue;
+
+        var tipoCupo = String(dataCupos[c][1] || "").toLowerCase().trim();
+        var equipoCupo = String(dataCupos[c][2] || "").trim();
+        var correoCupo = String(dataCupos[c][3] || "").toLowerCase().trim();
+        var nombreCupo = String(dataCupos[c][4] || "").trim();
+        var cupoData = {
+          total: parseInt(dataCupos[c][5]) || 0,
+          nuevas: parseInt(dataCupos[c][6]) || 0,
+          reestudios: parseInt(dataCupos[c][7]) || 0,
+          inducciones: parseInt(dataCupos[c][8]) || 0,
+          biometria: parseInt(dataCupos[c][9]) || 0,
+          nuevaUAR: parseInt(dataCupos[c][10]) || 0,
+          deudorUAR: parseInt(dataCupos[c][11]) || 0
+        };
+
+        if (tipoCupo === "individual" && correoCupo) {
+          if (!cuposMap[correoCupo]) cuposMap[correoCupo] = { nombre: nombreCupo, equipo: equipoCupo || equipoPorCorreo[correoCupo] || "", total: 0, nuevas: 0, reestudios: 0, inducciones: 0, biometria: 0, nuevaUAR: 0, deudorUAR: 0, tipo: "individual" };
+          var cu = cuposMap[correoCupo];
+          cu.total += cupoData.total; cu.nuevas += cupoData.nuevas; cu.reestudios += cupoData.reestudios;
+          cu.inducciones += cupoData.inducciones; cu.biometria += cupoData.biometria;
+          cu.nuevaUAR += cupoData.nuevaUAR; cu.deudorUAR += cupoData.deudorUAR;
+        } else if (tipoCupo === "general" && equipoCupo) {
+          if (!cuposEquipo[equipoCupo]) cuposEquipo[equipoCupo] = { total: 0, nuevas: 0, reestudios: 0, inducciones: 0, biometria: 0, nuevaUAR: 0, deudorUAR: 0 };
+          var ce = cuposEquipo[equipoCupo];
+          ce.total += cupoData.total; ce.nuevas += cupoData.nuevas; ce.reestudios += cupoData.reestudios;
+          ce.inducciones += cupoData.inducciones; ce.biometria += cupoData.biometria;
+          ce.nuevaUAR += cupoData.nuevaUAR; ce.deudorUAR += cupoData.deudorUAR;
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log("Agente: No se pudo leer historico_cupos: " + e.message);
+  }
+
+  // Si hay cupos por equipo, distribuir entre analistas del equipo que no tengan cupo individual
+  // Normalizar: buscar coincidencia flexible entre nombre de equipo en cupos y Especialidad en Usuarios
+  var _normEq = function(s) { return String(s || "").toUpperCase().replace(/[_\s]+/g, "").trim(); };
+  var equipoNormMap = {};
+  Object.keys(analistasPorEquipo).forEach(function(eq) { equipoNormMap[_normEq(eq)] = eq; });
+
+  Object.keys(cuposEquipo).forEach(function(eq) {
+    var eqNorm = _normEq(eq);
+    var eqReal = equipoNormMap[eqNorm] || eq;
+    var miembros = analistasPorEquipo[eqReal] || analistasPorEquipo[eq] || [];
+    var sinCupoIndividual = miembros.filter(function(m) { return !cuposMap[m.correo]; });
+    if (sinCupoIndividual.length > 0) {
+      var ce = cuposEquipo[eq];
+      sinCupoIndividual.forEach(function(m) {
+        cuposMap[m.correo] = { nombre: m.nombre, equipo: eq, total: ce.total, nuevas: ce.nuevas, reestudios: ce.reestudios, inducciones: ce.inducciones, biometria: ce.biometria, nuevaUAR: ce.nuevaUAR, deudorUAR: ce.deudorUAR, tipo: "general", totalEquipo: ce.total, miembrosEquipo: sinCupoIndividual.length };
+      });
+    }
+  });
+
+  return {
+    registros: registros,
+    backlogDetalle: backlogDetalle,
+    analistasActivos: analistasActivos,
+    cuposMap: cuposMap,
+    cuposEquipo: cuposEquipo,
+    equipoPorCorreo: equipoPorCorreo,
+    fechaDesde: fechaDesdeStr,
+    fechaHasta: fechaHastaStr
+  };
+}
+
+// --- PROMEDIOS HISTÓRICOS ---
+
+function agente_calcularPromediosHistoricos() {
+  var cache = CacheService.getScriptCache();
+  try {
+    var cached = cache.get(AGENT_HIST_CACHE_KEY);
+    if (cached) return JSON.parse(cached);
+  } catch (e) {}
+
+  var hoy = new Date();
+  var hace30 = new Date(hoy);
+  hace30.setDate(hoy.getDate() - 30);
+  var desdeStr = Utilities.formatDate(hace30, TIMEZONE, "dd/MM/yyyy");
+  var hastaStr = Utilities.formatDate(hoy, TIMEZONE, "dd/MM/yyyy");
+
+  var datos = _agente_leerDatosRango(desdeStr, hastaStr);
+  if (!datos || datos.registros.length === 0) {
+    return { periodo: "30d", solicitudesPorDia: 0, tiempoGestionMin: 0, tiempoGeneralHoras: 0, tiempoColaMin: 0, slaPct: 100, tasaNegacionPct: 0, backlogPromedio: 0, porAnalista: {} };
+  }
+
+  var regs = datos.registros;
+  var diasMap = {};
+  var sumaG = 0, cG = 0, sumaR = 0, cR = 0, sumaCola = 0, cCola = 0;
+  var aprobadas = 0, negadas = 0, dentroSLA = 0, totalSLA = 0;
+  var porAnalista = {};
+
+  regs.forEach(function(r) {
+    diasMap[r.fecha] = true;
+    if (r.estado === "APROBADA") aprobadas++;
+    if (r.estado === "NEGADA") negadas++;
+    if (r.tGestion !== null) { sumaG += r.tGestion; cG++; }
+    if (r.tResolucion !== null && r.tResolucion > 0) {
+      sumaR += r.tResolucion; cR++;
+      totalSLA++;
+      if (r.tResolucion <= 2) dentroSLA++;
+    }
+    if (r.tCola !== null) { sumaCola += r.tCola; cCola++; }
+
+    var key = r.analista;
+    if (!porAnalista[key]) porAnalista[key] = { total: 0, dias: {}, sumaG: 0, cG: 0 };
+    porAnalista[key].total++;
+    porAnalista[key].dias[r.fecha] = true;
+    if (r.tGestion !== null) { porAnalista[key].sumaG += r.tGestion; porAnalista[key].cG++; }
+  });
+
+  var numDias = Math.max(1, Object.keys(diasMap).length);
+  var analistaAvg = {};
+  Object.keys(porAnalista).forEach(function(k) {
+    var a = porAnalista[k];
+    var diasA = Math.max(1, Object.keys(a.dias).length);
+    analistaAvg[k] = {
+      solDia: Math.round(a.total / diasA * 10) / 10,
+      tGestion: a.cG > 0 ? Math.round(a.sumaG / a.cG * 10) / 10 : 0
+    };
+  });
+
+  var result = {
+    periodo: "30d",
+    solicitudesPorDia: Math.round(regs.length / numDias * 10) / 10,
+    tiempoGestionMin: cG > 0 ? Math.round(sumaG / cG * 10) / 10 : 0,
+    tiempoGeneralHoras: cR > 0 ? Number((sumaR / cR).toFixed(2)) : 0,
+    tiempoColaMin: cCola > 0 ? Math.round(sumaCola / cCola * 10) / 10 : 0,
+    slaPct: totalSLA > 0 ? Math.round(dentroSLA / totalSLA * 1000) / 10 : 100,
+    tasaNegacionPct: regs.length > 0 ? Math.round(negadas / regs.length * 1000) / 10 : 0,
+    backlogPromedio: 0,
+    porAnalista: analistaAvg
+  };
+
+  try {
+    var json = JSON.stringify(result);
+    if (json.length < 90000) cache.put(AGENT_HIST_CACHE_KEY, json, 21600);
+  } catch (e) {}
+
+  return result;
+}
+
+// --- 7 REGLAS DE DETECCIÓN ---
+
+function _alerta_slaCumplimiento(registros, config, historicos) {
+  var alertas = [];
+  var dentroSLA = 0, totalSLA = 0;
+  registros.forEach(function(r) {
+    if (r.tResolucion !== null && r.tResolucion > 0) {
+      totalSLA++;
+      if (r.tResolucion <= 2) dentroSLA++;
+    }
+  });
+  if (totalSLA === 0) return alertas;
+
+  var pctSLA = Math.round(dentroSLA / totalSLA * 1000) / 10;
+  var meta = config.metas.slaPct;
+
+  if (pctSLA < 70) {
+    alertas.push({ severity: "critico", category: "sla", title: "SLA crítico: " + pctSLA + "%", description: "El cumplimiento de SLA hoy es del " + pctSLA + "%, muy por debajo de la meta del " + meta + "%. Hay " + (totalSLA - dentroSLA) + " solicitudes fuera de SLA.", suggestion: "Revisar inmediatamente las solicitudes con mayor tiempo general. Priorizar backlog y reasignar carga.", affectedEntities: [] });
+  } else if (pctSLA < meta) {
+    alertas.push({ severity: "advertencia", category: "sla", title: "SLA por debajo de la meta: " + pctSLA + "%", description: "El cumplimiento SLA (" + pctSLA + "%) está por debajo de la meta (" + meta + "%). " + (totalSLA - dentroSLA) + " solicitudes fuera de SLA.", suggestion: "Monitorear analistas con mayor tiempo general y priorizar solicitudes antiguas en backlog.", affectedEntities: [] });
+  }
+
+  if (historicos.slaPct > 0) {
+    var desviacion = ((historicos.slaPct - pctSLA) / historicos.slaPct) * 100;
+    if (desviacion > config.umbrales.desviacionHistoricaPct) {
+      alertas.push({ severity: "advertencia", category: "sla", title: "SLA desviado del histórico", description: "El SLA hoy (" + pctSLA + "%) se desvía un " + Math.round(desviacion) + "% por debajo del promedio histórico de 30 días (" + historicos.slaPct + "%).", suggestion: "Investigar causas de la caída: mayor complejidad, analistas nuevos, o problemas de cola.", affectedEntities: [] });
+    }
+  }
+  return alertas;
+}
+
+function _alerta_backlogCritico(backlogDetalle, config) {
+  var alertas = [];
+  var total = backlogDetalle.length;
+  var rojos = backlogDetalle.filter(function(b) { return b.alertaSLA === "rojo"; });
+  var amarillos = backlogDetalle.filter(function(b) { return b.alertaSLA === "amarillo"; });
+
+  if (rojos.length > 0) {
+    var nombres = rojos.slice(0, 5).map(function(b) { return b.analista + " (" + b.minutosEspera + " min)"; });
+    alertas.push({ severity: "critico", category: "backlog", title: rojos.length + " solicitudes en backlog >90 min", description: "Hay " + rojos.length + " solicitudes esperando más de 90 minutos, fuera de SLA. Total backlog: " + total + ".", suggestion: "Atender inmediatamente estas solicitudes. Considerar redistribuir entre analistas disponibles.", affectedEntities: nombres });
+  }
+
+  if (total > config.metas.maxBacklog) {
+    alertas.push({ severity: total > config.metas.maxBacklog * 2 ? "critico" : "advertencia", category: "backlog", title: "Backlog alto: " + total + " solicitudes", description: "El backlog actual (" + total + ") supera la meta máxima de " + config.metas.maxBacklog + ". Rojos: " + rojos.length + ", Amarillos: " + amarillos.length + ".", suggestion: "Verificar que todos los analistas estén activos y gestionar prioridad de asignaciones.", affectedEntities: [] });
+  }
+
+  return alertas;
+}
+
+function _alerta_inactividadAnalistas(analistasActivos, registros, config, cuposMap) {
+  var alertas = [];
+  var ahora = new Date();
+  var horaActual = parseInt(Utilities.formatDate(ahora, TIMEZONE, "HH"), 10);
+  if (horaActual < 8 || horaActual >= 17) return alertas;
+
+  var horasTranscurridas = horaActual - 8;
+  if (horasTranscurridas < 1) return alertas;
+
+  var gestionesPorCorreo = {};
+  registros.forEach(function(r) {
+    if (r.correo) gestionesPorCorreo[r.correo] = (gestionesPorCorreo[r.correo] || 0) + 1;
+  });
+
+  // Detectar inactividad por cupos: quien tiene cupo asignado y 0 gestiones
+  var inactivos = [];
+  Object.keys(cuposMap || {}).forEach(function(correo) {
+    var count = gestionesPorCorreo[correo] || 0;
+    if (count === 0 && cuposMap[correo].total > 0) {
+      inactivos.push(cuposMap[correo].nombre + " (" + cuposMap[correo].total + " cupos asignados)");
+    }
+  });
+
+  // También analistas marcados ACTIVO sin gestiones ni cupos
+  analistasActivos.forEach(function(a) {
+    var count = gestionesPorCorreo[a.correo] || 0;
+    if (count === 0 && !cuposMap[a.correo]) {
+      inactivos.push(a.nombre);
+    }
+  });
+
+  if (inactivos.length > 0) {
+    var severity = horasTranscurridas >= 2 ? "critico" : "advertencia";
+    alertas.push({ severity: severity, category: "inactividad", title: inactivos.length + " analista(s) sin gestiones hoy", description: "Los siguientes analistas no han registrado ningún resultado después de " + horasTranscurridas + " horas de operación: " + inactivos.join(", ") + ".", suggestion: "Verificar si están conectados, si tienen solicitudes asignadas, o si necesitan apoyo.", affectedEntities: inactivos });
+  }
+
+  return alertas;
+}
+
+function _alerta_productividad(registros, config, historicos, analistasActivos, cuposMap) {
+  var alertas = [];
+  var ahora = new Date();
+  var horaActual = parseInt(Utilities.formatDate(ahora, TIMEZONE, "HH"), 10);
+  var minActual = parseInt(Utilities.formatDate(ahora, TIMEZONE, "mm"), 10);
+  var horasTranscurridas = Math.max(1, (horaActual - 8) + minActual / 60);
+  if (horaActual < 8) return alertas;
+  if (horaActual >= 17) horasTranscurridas = 9;
+
+  var totalHoy = registros.length;
+
+  // Calcular esperado desde cupos reales, si no hay cupos usar meta genérica
+  var totalCuposAsignados = 0;
+  Object.keys(cuposMap || {}).forEach(function(k) { totalCuposAsignados += (cuposMap[k].total || 0); });
+  var esperadoEquipo;
+  if (totalCuposAsignados > 0) {
+    esperadoEquipo = Math.round(totalCuposAsignados * (horasTranscurridas / 9));
+  } else {
+    var numAnalistas = Math.max(1, analistasActivos.length);
+    esperadoEquipo = Math.round(config.metas.solicitudesPorDiaPorAnalista * numAnalistas * (horasTranscurridas / 9));
+  }
+
+  if (esperadoEquipo > 0 && totalHoy < esperadoEquipo * 0.7) {
+    alertas.push({ severity: "advertencia", category: "productividad", title: "Producción por debajo del ritmo esperado", description: "Se han gestionado " + totalHoy + " solicitudes pero se esperaban ~" + esperadoEquipo + " a esta hora (basado en " + (totalCuposAsignados > 0 ? totalCuposAsignados + " cupos asignados" : "meta genérica") + ", " + Math.round(horasTranscurridas) + "h transcurridas).", suggestion: "Revisar si hay analistas inactivos, problemas de asignación, o solicitudes de alta complejidad.", affectedEntities: [] });
+  }
+
+  if (historicos.porAnalista && Object.keys(historicos.porAnalista).length > 0) {
+    var porAnalistaHoy = {};
+    registros.forEach(function(r) { porAnalistaHoy[r.analista] = (porAnalistaHoy[r.analista] || 0) + 1; });
+
+    var bajosRendimiento = [];
+    Object.keys(historicos.porAnalista).forEach(function(nombre) {
+      var histDia = historicos.porAnalista[nombre].solDia;
+      var hoy = porAnalistaHoy[nombre] || 0;
+      var esperadoAhora = Math.round(histDia * horasTranscurridas / 9);
+      if (esperadoAhora >= 3 && hoy < esperadoAhora * 0.5) {
+        bajosRendimiento.push(nombre + " (" + hoy + " vs ~" + esperadoAhora + " esperadas)");
+      }
+    });
+
+    if (bajosRendimiento.length > 0) {
+      alertas.push({ severity: "info", category: "productividad", title: bajosRendimiento.length + " analista(s) por debajo de su ritmo habitual", description: "Los siguientes analistas están significativamente por debajo de su promedio histórico para esta hora del día.", suggestion: "Revisar si tienen solicitudes complejas o si hay factores que afectan su productividad.", affectedEntities: bajosRendimiento });
+    }
+  }
+
+  return alertas;
+}
+
+function _alerta_tiemposAnomalos(registros, config, historicos) {
+  var alertas = [];
+  var sumaG = 0, cG = 0, sumaR = 0, cR = 0, sumaCola = 0, cCola = 0;
+  registros.forEach(function(r) {
+    if (r.tGestion !== null) { sumaG += r.tGestion; cG++; }
+    if (r.tResolucion !== null && r.tResolucion > 0) { sumaR += r.tResolucion; cR++; }
+    if (r.tCola !== null) { sumaCola += r.tCola; cCola++; }
+  });
+
+  var avgG = cG > 0 ? Math.round(sumaG / cG * 10) / 10 : 0;
+  var avgR = cR > 0 ? Number((sumaR / cR).toFixed(2)) : 0;
+  var avgCola = cCola > 0 ? Math.round(sumaCola / cCola * 10) / 10 : 0;
+
+  if (avgG > config.metas.maxTiempoGestionMin) {
+    alertas.push({ severity: "advertencia", category: "tiempos", title: "Tiempo gestión elevado: " + avgG + " min", description: "El promedio de tiempo de gestión hoy (" + avgG + " min) supera la meta de " + config.metas.maxTiempoGestionMin + " min.", suggestion: "Identificar analistas con tiempos de gestión más altos y verificar si hay solicitudes atípicas.", affectedEntities: [] });
+  }
+
+  if (avgR > config.metas.maxTiempoGeneralHoras) {
+    var sev = avgR > 3 ? "critico" : "advertencia";
+    alertas.push({ severity: sev, category: "tiempos", title: "Tiempo general elevado: " + avgR + " h", description: "El promedio de tiempo general hoy (" + avgR + " h) supera la meta de " + config.metas.maxTiempoGeneralHoras + " h.", suggestion: "Revisar tiempos de cola y asignación. Puede haber retrasos en la distribución de solicitudes.", affectedEntities: [] });
+  }
+
+  if (avgCola > config.metas.maxTiempoColaMin) {
+    alertas.push({ severity: "advertencia", category: "tiempos", title: "Tiempo de cola elevado: " + avgCola + " min", description: "El promedio de tiempo de cola (" + avgCola + " min) supera la meta de " + config.metas.maxTiempoColaMin + " min.", suggestion: "Revisar la velocidad de asignación. Considerar asignar más analistas o automatizar la distribución.", affectedEntities: [] });
+  }
+
+  var umbral = config.umbrales.desviacionHistoricaPct;
+  if (historicos.tiempoGestionMin > 0 && avgG > 0) {
+    var desvG = ((avgG - historicos.tiempoGestionMin) / historicos.tiempoGestionMin) * 100;
+    if (desvG > umbral) {
+      alertas.push({ severity: "info", category: "tiempos", title: "Tiempo gestión desviado del histórico", description: "El tiempo de gestión hoy (" + avgG + " min) es " + Math.round(desvG) + "% mayor que el promedio de 30 días (" + historicos.tiempoGestionMin + " min).", suggestion: "Analizar si hay cambios en la complejidad de solicitudes o en la composición del equipo.", affectedEntities: [] });
+    }
+  }
+
+  if (historicos.tiempoColaMin > 0 && avgCola > 0) {
+    var desvCola = ((avgCola - historicos.tiempoColaMin) / historicos.tiempoColaMin) * 100;
+    if (desvCola > umbral) {
+      alertas.push({ severity: "info", category: "tiempos", title: "Tiempo de cola desviado del histórico", description: "El tiempo de cola hoy (" + avgCola + " min) es " + Math.round(desvCola) + "% mayor que el promedio de 30 días (" + historicos.tiempoColaMin + " min).", suggestion: "Puede indicar menor disponibilidad de analistas o mayor volumen de ingreso de solicitudes.", affectedEntities: [] });
+    }
+  }
+
+  return alertas;
+}
+
+
+
+function _alerta_calidadDatos(registros) {
+  var alertas = [];
+  var totalRegs = registros.length;
+  if (totalRegs === 0) return alertas;
+
+  var valoresG = [], valoresR = [];
+
+  registros.forEach(function(r) {
+    if (r.tGestion !== null && r.tGestion > 0) valoresG.push(r.tGestion);
+    if (r.tResolucion !== null && r.tResolucion > 0) valoresR.push(r.tResolucion);
+  });
+
+  var outliersG = _detectarOutliers(valoresG, 3);
+  var outliersR = _detectarOutliers(valoresR, 3);
+  var totalOutliers = outliersG.count + outliersR.count;
+
+  if (totalOutliers > 0) {
+    var detallesOut = [];
+    if (outliersG.count > 0) detallesOut.push(outliersG.count + " en T. Gestión (>" + Math.round(outliersG.umbral) + " min)");
+    if (outliersR.count > 0) detallesOut.push(outliersR.count + " en T. General (>" + Number(outliersR.umbral * 60).toFixed(0) + " min)");
+    alertas.push({ severity: "info", category: "calidad", title: totalOutliers + " valores atípicos detectados", description: "Se encontraron valores atípicos (>3 desv. estándar): " + detallesOut.join(", ") + ".", suggestion: "Verificar si son errores de registro o solicitudes genuinamente complejas.", affectedEntities: [] });
+  }
+
+  return alertas;
+}
+
+function _detectarOutliers(valores, numStdDev) {
+  if (valores.length < 5) return { count: 0, umbral: 0 };
+  var sum = 0;
+  valores.forEach(function(v) { sum += v; });
+  var mean = sum / valores.length;
+  var sumSq = 0;
+  valores.forEach(function(v) { sumSq += (v - mean) * (v - mean); });
+  var std = Math.sqrt(sumSq / valores.length);
+  var umbral = mean + numStdDev * std;
+  var count = valores.filter(function(v) { return v > umbral; }).length;
+  return { count: count, umbral: umbral };
+}
+
+// --- HEALTH SCORE ---
+
+function _calcularHealthScore(registros, config, historicos, alertas, backlogDetalle, analistasActivos, cuposMap) {
+  var components = {};
+
+  // 1. SLA Cumplimiento (25%)
+  var dentroSLA = 0, totalSLA = 0;
+  registros.forEach(function(r) {
+    if (r.tResolucion !== null && r.tResolucion > 0) {
+      totalSLA++;
+      if (r.tResolucion <= 2) dentroSLA++;
+    }
+  });
+  var pctSLA = totalSLA > 0 ? (dentroSLA / totalSLA) * 100 : 100;
+  var scoreSLA = Math.min(100, (pctSLA / config.metas.slaPct) * 100);
+  components.slaCumplimiento = { value: Math.round(scoreSLA), weight: 25 };
+
+  // 2. Productividad (20%) — basada en cupos reales
+  var ahora = new Date();
+  var horaActual = parseInt(Utilities.formatDate(ahora, TIMEZONE, "HH"), 10);
+  var minActual = parseInt(Utilities.formatDate(ahora, TIMEZONE, "mm"), 10);
+  var horasT = horaActual >= 17 ? 9 : Math.max(1, (horaActual - 8) + minActual / 60);
+  var totalCupos = 0;
+  Object.keys(cuposMap || {}).forEach(function(k) { totalCupos += (cuposMap[k].total || 0); });
+  var esperado;
+  if (totalCupos > 0) {
+    esperado = Math.max(1, totalCupos * (horasT / 9));
+  } else {
+    var numAn = Math.max(1, analistasActivos.length);
+    esperado = Math.max(1, config.metas.solicitudesPorDiaPorAnalista * numAn * (horasT / 9));
+  }
+  var scoreProd = Math.min(100, (registros.length / esperado) * 100);
+  components.productividad = { value: Math.round(scoreProd), weight: 20 };
+
+  // 3. Tiempo Gestión (15%)
+  var sumaG = 0, cG = 0;
+  registros.forEach(function(r) { if (r.tGestion !== null) { sumaG += r.tGestion; cG++; } });
+  var avgG = cG > 0 ? sumaG / cG : 0;
+  var metaG = config.metas.maxTiempoGestionMin;
+  var scoreG = avgG <= metaG ? 100 : Math.max(0, 100 - ((avgG - metaG) / metaG * 100));
+  components.tiempoGestion = { value: Math.round(scoreG), weight: 15 };
+
+  // 4. Backlog Salud (15%)
+  var totalBack = backlogDetalle.length;
+  var rojos = backlogDetalle.filter(function(b) { return b.alertaSLA === "rojo"; }).length;
+  var metaBack = Math.max(1, config.metas.maxBacklog);
+  var scoreBack = Math.max(0, 100 - (totalBack / metaBack * 50) - (totalBack > 0 ? (rojos / totalBack * 50) : 0));
+  components.backlogSalud = { value: Math.round(Math.min(100, scoreBack)), weight: 15 };
+
+  // 5. Actividad del equipo (25%) — basada en cupos: cuántos analistas con cupo han gestionado
+  var gestionesPorCorreo = {};
+  registros.forEach(function(r) { if (r.correo) gestionesPorCorreo[r.correo] = true; });
+  var totalConCupo = Object.keys(cuposMap || {}).length;
+  var conCupoYGestion = 0;
+  Object.keys(cuposMap || {}).forEach(function(correo) { if (gestionesPorCorreo[correo]) conCupoYGestion++; });
+  var scoreInact = totalConCupo > 0 ? (conCupoYGestion / totalConCupo) * 100 : 100;
+  components.inactividad = { value: Math.round(scoreInact), weight: 25 };
+
+  // Score final
+  var total = 0;
+  Object.keys(components).forEach(function(k) {
+    var c = components[k];
+    c.weighted = Math.round(c.value * c.weight / 100 * 10) / 10;
+    total += c.weighted;
+  });
+
+  var score = Math.round(Math.min(100, Math.max(0, total)));
+  var grade = score >= 90 ? "A" : score >= 75 ? "B" : score >= 60 ? "C" : score >= 40 ? "D" : "F";
+
+  return { score: score, grade: grade, components: components, timestamp: Utilities.formatDate(ahora, TIMEZONE, "dd/MM/yyyy HH:mm") };
+}
+
+// --- DIAGNÓSTICO PRINCIPAL ---
+
+function agente_ejecutarDiagnostico() {
+  var config = agente_obtenerConfig();
+  var datos = _agente_leerDatosHoy();
+  if (!datos) return { alerts: [], healthScore: { score: 0, grade: "F", components: {}, timestamp: "" }, dataQuality: {}, timestamp: "" };
+
+  var historicos = agente_calcularPromediosHistoricos();
+  var regs = datos.registros;
+  var backlog = datos.backlogDetalle;
+  var analistas = datos.analistasActivos;
+  var cuposMap = datos.cuposMap || {};
+  var equipoPorCorreo = datos.equipoPorCorreo || {};
+
+  var alertas = [];
+  alertas = alertas.concat(_alerta_slaCumplimiento(regs, config, historicos));
+  alertas = alertas.concat(_alerta_backlogCritico(backlog, config));
+  alertas = alertas.concat(_alerta_inactividadAnalistas(analistas, regs, config, cuposMap));
+  alertas = alertas.concat(_alerta_productividad(regs, config, historicos, analistas, cuposMap));
+  alertas = alertas.concat(_alerta_tiemposAnomalos(regs, config, historicos));
+  alertas = alertas.concat(_alerta_calidadDatos(regs));
+
+  var healthScore = _calcularHealthScore(regs, config, historicos, alertas, backlog, analistas, cuposMap);
+
+  // Data quality report
+  var valG = regs.filter(function(r) { return r.tGestion !== null && r.tGestion > 0; }).map(function(r) { return r.tGestion; });
+  var valR = regs.filter(function(r) { return r.tResolucion !== null && r.tResolucion > 0; }).map(function(r) { return r.tResolucion; });
+  var outG = _detectarOutliers(valG, 3);
+  var outR = _detectarOutliers(valR, 3);
+
+  var dataQuality = {
+    totalRegistros: regs.length,
+    outliers: { gestion: outG.count, general: outR.count, total: outG.count + outR.count, umbralGestion: outG.umbral > 0 ? Math.round(outG.umbral) : 0, umbralGeneral: outR.umbral > 0 ? Math.round(outR.umbral * 60) : 0 },
+    backlogActual: backlog.length,
+    analistasActivos: analistas.length,
+    analistasConGestiones: Object.keys(regs.reduce(function(acc, r) { if (r.correo) acc[r.correo] = true; return acc; }, {})).length
+  };
+
+  // Resumen para emails
+  var sumaG = 0, cG = 0, sumaR = 0, cR = 0, aprobadas = 0, negadas = 0;
+  regs.forEach(function(r) {
+    if (r.tGestion !== null) { sumaG += r.tGestion; cG++; }
+    if (r.tResolucion !== null && r.tResolucion > 0) { sumaR += r.tResolucion; cR++; }
+    if (r.estado === "APROBADA") aprobadas++;
+    if (r.estado === "NEGADA") negadas++;
+  });
+
+  var kpis = {
+    totalGestionadas: regs.length,
+    tiempoGestionProm: cG > 0 ? Math.round(sumaG / cG * 10) / 10 : 0,
+    tiempoGeneralProm: cR > 0 ? Number((sumaR / cR).toFixed(2)) : 0,
+    tasaAprobacion: regs.length > 0 ? Math.round(aprobadas / regs.length * 1000) / 10 : 0,
+    tasaNegacion: regs.length > 0 ? Math.round(negadas / regs.length * 1000) / 10 : 0,
+    backlog: backlog.length
+  };
+
+  // Análisis detallado por analista
+  var porAn = {};
+  regs.forEach(function(r) {
+    if (!porAn[r.analista]) porAn[r.analista] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaG: 0, cG: 0, sumaR: 0, cR: 0, fueraSLA: 0 };
+    var a = porAn[r.analista];
+    a.total++;
+    if (r.estado === "APROBADA") a.aprobadas++;
+    if (r.estado === "NEGADA") a.negadas++;
+    if (r.estado === "APLAZADA") a.aplazadas++;
+    if (r.tGestion !== null) { a.sumaG += r.tGestion; a.cG++; }
+    if (r.tResolucion !== null && r.tResolucion > 0) { a.sumaR += r.tResolucion; a.cR++; if (r.tResolucion > 2) a.fueraSLA++; }
+  });
+
+  var totalEquipo = regs.length;
+  var numAnalistasConDatos = Object.keys(porAn).length;
+  var promEquipoG = 0, promEquipoTotal = 0;
+  if (numAnalistasConDatos > 0) {
+    var sTG = 0, sCG = 0, sTotal = 0;
+    Object.keys(porAn).forEach(function(k) { var a = porAn[k]; sTotal += a.total; if (a.cG > 0) { sTG += a.sumaG; sCG += a.cG; } });
+    promEquipoG = sCG > 0 ? Math.round(sTG / sCG * 10) / 10 : 0;
+    promEquipoTotal = Math.round(sTotal / numAnalistasConDatos * 10) / 10;
+  }
+
+  var rankAnalistas = Object.keys(porAn).map(function(n) {
+    var a = porAn[n];
+    return { nombre: n, total: a.total, tGestionProm: a.cG > 0 ? Math.round(a.sumaG / a.cG * 10) / 10 : 0 };
+  }).sort(function(a, b) { return b.total - a.total; });
+
+  function _desglosesCupo(cupo) {
+    var partes = [];
+    if (cupo.nuevas > 0) partes.push("nuevas:" + cupo.nuevas);
+    if (cupo.reestudios > 0) partes.push("reestudios:" + cupo.reestudios);
+    if (cupo.inducciones > 0) partes.push("inducciones:" + cupo.inducciones);
+    if (cupo.biometria > 0) partes.push("biometría:" + cupo.biometria);
+    if (cupo.nuevaUAR > 0) partes.push("UAR nueva:" + cupo.nuevaUAR);
+    if (cupo.deudorUAR > 0) partes.push("UAR deudor:" + cupo.deudorUAR);
+    return partes.join(", ");
+  }
+
+  // Seguimiento de personas (basado en cupos asignados)
+  var ahora = new Date();
+  var horaAct = parseInt(Utilities.formatDate(ahora, TIMEZONE, "HH"), 10);
+  var minAct = parseInt(Utilities.formatDate(ahora, TIMEZONE, "mm"), 10);
+  var horasOp = horaAct >= 17 ? 9 : Math.max(1, (horaAct - 8) + minAct / 60);
+  var pctJornada = horasOp / 9;
+  var tieneCupos = Object.keys(cuposMap).length > 0;
+
+  var seguimientoPersonas = [];
+
+  // Producción real por correo
+  var prodPorCorreo = {};
+  regs.forEach(function(r) {
+    if (!r.correo) return;
+    if (!prodPorCorreo[r.correo]) prodPorCorreo[r.correo] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaG: 0, cG: 0, sumaR: 0, cR: 0, fueraSLA: 0, nombre: r.analista };
+    var p = prodPorCorreo[r.correo];
+    p.total++;
+    if (r.estado === "APROBADA") p.aprobadas++;
+    if (r.estado === "NEGADA") p.negadas++;
+    if (r.estado === "APLAZADA") p.aplazadas++;
+    if (r.tGestion !== null) { p.sumaG += r.tGestion; p.cG++; }
+    if (r.tResolucion !== null && r.tResolucion > 0) { p.sumaR += r.tResolucion; p.cR++; if (r.tResolucion > 2) p.fueraSLA++; }
+  });
+
+  // Analistas sin gestiones (que tienen cupo asignado)
+  var correosConProd = {};
+  Object.keys(prodPorCorreo).forEach(function(k) { correosConProd[k] = true; });
+
+  Object.keys(cuposMap).forEach(function(correo) {
+    if (correosConProd[correo]) return;
+    var cupo = cuposMap[correo];
+    var equipoAn = cupo.equipo || equipoPorCorreo[correo] || "—";
+    var desglose = _desglosesCupo(cupo);
+    seguimientoPersonas.push({
+      nombre: cupo.nombre || correo,
+      tipo: "inactividad",
+      severidad: horasOp >= 2 ? "critico" : "advertencia",
+      resumen: "Sin gestiones hoy",
+      datos: [
+        { label: "Gestiones hoy", valor: "0", meta: "de " + cupo.total + " asignadas" },
+        { label: "Cupos asignados", valor: String(cupo.total), meta: desglose },
+        { label: "Equipo", valor: equipoAn, meta: "" },
+        { label: "Horas de operación", valor: _fmtMinEmail(horasOp * 60), meta: "" }
+      ],
+      puntoConversacion: "No ha registrado ninguna gestión en " + Math.round(horasOp) + " horas de operación. Tiene " + cupo.total + " cupos asignados para hoy. Verificar si tiene solicitudes asignadas o si necesita apoyo."
+    });
+  });
+
+  // También analistas activos sin gestiones NI cupos
+  analistas.forEach(function(an) {
+    if (correosConProd[an.correo] || cuposMap[an.correo]) return;
+    seguimientoPersonas.push({
+      nombre: an.nombre,
+      tipo: "inactividad",
+      severidad: horasOp >= 2 ? "advertencia" : "info",
+      resumen: "Sin gestiones y sin cupos asignados",
+      datos: [
+        { label: "Gestiones hoy", valor: "0", meta: "sin cupos asignados" },
+        { label: "Equipo", valor: an.equipo || "—", meta: "" }
+      ],
+      puntoConversacion: "No tiene gestiones hoy y no aparece en los cupos del día. Verificar si debería tener asignación."
+    });
+  });
+
+  // Evaluar analistas con producción
+  Object.keys(prodPorCorreo).forEach(function(correo) {
+    var prod = prodPorCorreo[correo];
+    var cupo = cuposMap[correo];
+    var nombre = prod.nombre;
+    var totalHoy = prod.total;
+    var equipoAn2 = cupo ? cupo.equipo : (equipoPorCorreo[correo] || "");
+    var motivos = [];
+
+    // Comparar contra cupos asignados
+    if (cupo && cupo.total > 0) {
+      var esperadoAhora = Math.round(cupo.total * pctJornada);
+      var pctCumplido = Math.round(totalHoy / cupo.total * 100);
+
+      if (totalHoy < esperadoAhora * 0.6 && esperadoAhora >= 2) {
+        var desglose = _desglosesCupo(cupo);
+        motivos.push({
+          tipo: "productividad",
+          datos: [
+            { label: "Gestionadas / Asignadas", valor: totalHoy + " / " + cupo.total, meta: "~" + esperadoAhora + " esperadas a esta hora" },
+            { label: "Avance", valor: pctCumplido + "%", meta: "de sus cupos del día" },
+            { label: "Equipo", valor: equipoAn2, meta: "" }
+          ],
+          punto: "Lleva " + totalHoy + " de " + cupo.total + " cupos asignados (" + pctCumplido + "%). A esta hora debería llevar ~" + esperadoAhora + "."
+        });
+        if (desglose) motivos[motivos.length - 1].datos.push({ label: "Desglose cupos", valor: desglose, meta: "" });
+      }
+    } else if (!cupo && tieneCupos) {
+      if (totalHoy > 0) {
+        motivos.push({
+          tipo: "info",
+          datos: [{ label: "Gestiones hoy", valor: String(totalHoy), meta: "Sin cupos asignados" }],
+          punto: "Tiene " + totalHoy + " gestiones pero no aparece en los cupos del día. Verificar asignación."
+        });
+      }
+    }
+
+    // Tiempo gestión alto
+    if (prod.cG >= 2) {
+      var tGProm = Math.round(prod.sumaG / prod.cG * 10) / 10;
+      if (tGProm > config.metas.maxTiempoGestionMin) {
+        motivos.push({
+          tipo: "tiempos",
+          datos: [
+            { label: "T. Gestión promedio", valor: _fmtMinEmail(tGProm), meta: "Meta: " + _fmtMinEmail(config.metas.maxTiempoGestionMin) },
+            { label: "Promedio equipo", valor: _fmtMinEmail(promEquipoG), meta: "" }
+          ],
+          punto: "Su tiempo de gestión promedio (" + _fmtMinEmail(tGProm) + ") supera la meta de " + _fmtMinEmail(config.metas.maxTiempoGestionMin) + ". El promedio del equipo es " + _fmtMinEmail(promEquipoG) + "."
+        });
+      }
+    }
+
+    // Fuera de SLA
+    if (prod.fueraSLA > 0 && prod.cR >= 2) {
+      var pctFuera = Math.round(prod.fueraSLA / prod.cR * 1000) / 10;
+      motivos.push({
+        tipo: "sla",
+        datos: [
+          { label: "Fuera de SLA", valor: prod.fueraSLA + " solicitudes", meta: ">" + config.metas.maxTiempoGeneralHoras + "h" },
+          { label: "% fuera SLA", valor: pctFuera + "%", meta: "Meta SLA: " + config.metas.slaPct + "%" }
+        ],
+        punto: prod.fueraSLA + " solicitud(es) superaron las " + config.metas.maxTiempoGeneralHoras + " horas de tiempo general (" + pctFuera + "% de sus gestiones)."
+      });
+    }
+
+    if (motivos.length > 0) {
+      var datosConsolidados = [];
+      datosConsolidados.push({ label: "Gestiones hoy", valor: String(totalHoy), meta: cupo ? "de " + cupo.total + " asignadas" : "" });
+      datosConsolidados.push({ label: "Aprobadas / Aplazadas", valor: prod.aprobadas + " / " + prod.aplazadas, meta: "" });
+      if (equipoAn2) datosConsolidados.push({ label: "Equipo", valor: equipoAn2, meta: "" });
+      if (prod && prod.cG > 0) datosConsolidados.push({ label: "T. Gestión prom", valor: _fmtMinEmail(Math.round(prod.sumaG / prod.cG * 10) / 10), meta: "Meta: " + _fmtMinEmail(config.metas.maxTiempoGestionMin) });
+      if (prod && prod.cR > 0) datosConsolidados.push({ label: "T. General prom", valor: _fmtHorasEmail(Number((prod.sumaR / prod.cR).toFixed(2))), meta: "Meta: " + _fmtHorasEmail(config.metas.maxTiempoGeneralHoras) });
+      motivos.forEach(function(m) {
+        m.datos.forEach(function(d) {
+          var existe = datosConsolidados.some(function(dc) { return dc.label === d.label; });
+          if (!existe) datosConsolidados.push(d);
+        });
+      });
+
+      var sevMax = motivos.some(function(m) { return m.tipo === "inactividad"; }) ? "critico" :
+                   motivos.some(function(m) { return m.tipo === "sla" || m.tipo === "productividad"; }) ? "advertencia" : "info";
+
+      seguimientoPersonas.push({
+        nombre: nombre,
+        tipo: motivos.map(function(m) { return m.tipo; }).join(", "),
+        severidad: sevMax,
+        resumen: motivos.map(function(m) { return m.punto; }).join(" "),
+        datos: datosConsolidados,
+        puntoConversacion: motivos.map(function(m, i) { return (i + 1) + ". " + m.punto; }).join("\n")
+      });
+    }
+  });
+
+  seguimientoPersonas.sort(function(a, b) {
+    var ord = { critico: 0, advertencia: 1, info: 2 };
+    return (ord[a.severidad] || 3) - (ord[b.severidad] || 3);
+  });
+
+  var timestamp = Utilities.formatDate(ahora, TIMEZONE, "dd/MM/yyyy HH:mm");
+
+  alertas.sort(function(a, b) {
+    var ord = { critico: 0, advertencia: 1, info: 2 };
+    return (ord[a.severity] || 3) - (ord[b.severity] || 3);
+  });
+
+  alertas.forEach(function(al, idx) {
+    al.id = al.category + "_" + idx + "_" + Utilities.formatDate(ahora, TIMEZONE, "yyyyMMdd_HHmmss");
+    al.timestamp = timestamp;
+  });
+
+  _agente_guardarHistorialAlertas(alertas);
+
+  // Cache del resultado
+  try {
+    var resultado = { alerts: alertas, healthScore: healthScore, dataQuality: dataQuality, kpis: kpis, rankAnalistas: rankAnalistas, seguimientoPersonas: seguimientoPersonas, historicos: historicos, timestamp: timestamp };
+    var json = JSON.stringify(resultado);
+    if (json.length < 90000) CacheService.getScriptCache().put(AGENT_DIAG_CACHE_KEY, json, 3600);
+  } catch (e) {}
+
+  return { alerts: alertas, healthScore: healthScore, dataQuality: dataQuality, kpis: kpis, rankAnalistas: rankAnalistas, seguimientoPersonas: seguimientoPersonas, historicos: historicos, timestamp: timestamp };
+}
+
+function _agente_guardarHistorialAlertas(newAlerts) {
+  var props = PropertiesService.getScriptProperties();
+  var history = [];
+  try {
+    var raw = props.getProperty(AGENT_HISTORY_KEY);
+    if (raw) history = JSON.parse(raw);
+  } catch (e) {}
+
+  var criticos = newAlerts.filter(function(a) { return a.severity === "critico"; });
+  var advertencias = newAlerts.filter(function(a) { return a.severity === "advertencia"; });
+  history = criticos.concat(advertencias).concat(history);
+  history = history.slice(0, MAX_ALERT_HISTORY);
+
+  try {
+    var json = JSON.stringify(history);
+    if (json.length < 9000) props.setProperty(AGENT_HISTORY_KEY, json);
+  } catch (e) {}
+}
+
+function agente_obtenerHistorialAlertas() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty(AGENT_HISTORY_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return [];
+}
+
+// --- EMAILS ---
+
+function _construirEmailAlertas(diagnostico) {
+  var d = diagnostico;
+  var hs = d.healthScore;
+  var gradeColor = hs.grade === "A" ? "#166534" : hs.grade === "B" ? "#253150" : hs.grade === "C" ? "#a16207" : hs.grade === "D" ? "#c2410c" : "#BD0F14";
+  var gradeBg = hs.grade === "A" ? "#d1fae5" : hs.grade === "B" ? "#e8edf6" : hs.grade === "C" ? "#fef9c3" : hs.grade === "D" ? "#fed7aa" : "#fde8e8";
+
+  var html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#f4f5f8;padding:20px;">';
+  html += '<div style="background:#253150;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;text-align:center;">';
+  html += '<h1 style="margin:0;font-size:20px;font-weight:800;">Métricas Análisis</h1>';
+  html += '<p style="margin:6px 0 0;font-size:13px;opacity:0.8;">Alertas Críticas — ' + d.timestamp + '</p></div>';
+
+  html += '<div style="background:#fff;padding:20px 24px;border:1px solid #e5e7eb;">';
+  html += '<div style="text-align:center;margin-bottom:16px;">';
+  html += '<span style="font-size:36px;font-weight:800;color:' + gradeColor + ';">' + hs.score + '</span>';
+  html += '<span style="font-size:14px;font-weight:700;color:' + gradeColor + ';background:' + gradeBg + ';padding:2px 10px;border-radius:6px;margin-left:8px;">' + hs.grade + '</span>';
+  html += '<div style="font-size:12px;color:#706F6F;margin-top:4px;">Salud Operativa</div></div>';
+
+  var criticas = d.alerts.filter(function(a) { return a.severity === "critico"; });
+  criticas.forEach(function(al) {
+    html += '<div style="background:#fde8e8;border-left:4px solid #BD0F14;border-radius:8px;padding:12px 14px;margin-bottom:10px;">';
+    html += '<div style="font-weight:700;font-size:14px;color:#BD0F14;">⚠️ ' + _escHtml(al.title) + '</div>';
+    html += '<div style="font-size:12px;color:#4a4a4a;margin-top:4px;">' + _escHtml(al.description) + '</div>';
+    if (al.suggestion) html += '<div style="font-size:12px;color:#253150;margin-top:6px;font-style:italic;">💡 ' + _escHtml(al.suggestion) + '</div>';
+    if (al.affectedEntities && al.affectedEntities.length > 0) html += '<div style="font-size:11px;color:#706F6F;margin-top:4px;">Afecta: ' + _escHtml(al.affectedEntities.join(", ")) + '</div>';
+    html += '</div>';
+  });
+
+  var advertencias = d.alerts.filter(function(a) { return a.severity === "advertencia"; });
+  if (advertencias.length > 0) {
+    html += '<div style="margin-top:12px;"><div style="font-size:12px;font-weight:700;color:#a16207;margin-bottom:6px;">🟡 ' + advertencias.length + ' Advertencia(s)</div>';
+    advertencias.forEach(function(al) {
+      html += '<div style="background:#fffbeb;border-left:3px solid #f59e0b;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">';
+      html += '<strong>' + _escHtml(al.title) + '</strong>';
+      if (al.suggestion) html += '<br><em style="color:#706F6F;">' + _escHtml(al.suggestion) + '</em>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Seguimiento de personas
+  var personas = d.seguimientoPersonas || [];
+  if (personas.length > 0) {
+    html += '<div style="margin-top:16px;border-top:2px solid #e5e7eb;padding-top:14px;">';
+    html += '<div style="font-size:13px;font-weight:800;color:#253150;margin-bottom:10px;">👤 Hablar con (' + personas.length + ')</div>';
+    personas.forEach(function(p) {
+      var bCol = p.severidad === "critico" ? "#BD0F14" : p.severidad === "advertencia" ? "#f59e0b" : "#253150";
+      html += '<div style="border-left:4px solid ' + bCol + ';border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#f9fafb;">';
+      html += '<div style="font-weight:800;font-size:14px;color:#253150;">' + _escHtml(p.nombre) + '</div>';
+      // Datos compactos
+      html += '<table style="width:100%;border-collapse:collapse;margin:8px 0;"><tr>';
+      p.datos.slice(0, 4).forEach(function(dat) {
+        html += '<td style="padding:4px 8px;font-size:10px;background:#e8edf6;border-radius:4px;text-align:center;border:2px solid #f9fafb;">';
+        html += '<div style="color:#706F6F;font-weight:700;">' + _escHtml(dat.label) + '</div>';
+        html += '<div style="font-size:13px;font-weight:800;color:#253150;">' + _escHtml(dat.valor) + '</div>';
+        if (dat.meta) html += '<div style="font-size:9px;color:#94a3b8;">' + _escHtml(dat.meta) + '</div>';
+        html += '</td>';
+      });
+      html += '</tr></table>';
+      // Punto de conversación
+      var lineas = p.puntoConversacion.split("\n");
+      lineas.forEach(function(l) {
+        html += '<div style="font-size:11px;color:#4a4a4a;line-height:1.4;margin-top:2px;">💬 ' + _escHtml(l) + '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  html += '<div style="background:#253150;color:#fff;padding:14px 24px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;">';
+  html += 'Generado automáticamente por Agente Coordinador — Métricas Análisis</div></div>';
+  return html;
+}
+
+function _construirEmailResumenDiario(diagnostico) {
+  var d = diagnostico;
+  var hs = d.healthScore;
+  var k = d.kpis;
+  var config = agente_obtenerConfig();
+  var hist = d.historicos || {};
+  var gradeColor = hs.grade === "A" ? "#166534" : hs.grade === "B" ? "#253150" : hs.grade === "C" ? "#a16207" : hs.grade === "D" ? "#c2410c" : "#BD0F14";
+  var gradeBg = hs.grade === "A" ? "#d1fae5" : hs.grade === "B" ? "#e8edf6" : hs.grade === "C" ? "#fef9c3" : hs.grade === "D" ? "#fed7aa" : "#fde8e8";
+
+  var html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;background:#f4f5f8;padding:20px;">';
+  html += '<div style="background:#253150;color:#fff;padding:24px;border-radius:12px 12px 0 0;text-align:center;">';
+  html += '<h1 style="margin:0;font-size:22px;font-weight:800;">Resumen Operativo</h1>';
+  html += '<p style="margin:6px 0 0;font-size:13px;opacity:0.8;">' + d.timestamp + '</p></div>';
+
+  html += '<div style="background:#fff;padding:24px;border:1px solid #e5e7eb;">';
+
+  // Health Score
+  html += '<div style="text-align:center;margin-bottom:20px;padding:16px;background:#f4f5f8;border-radius:10px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#706F6F;text-transform:uppercase;">Salud Operativa</div>';
+  html += '<span style="font-size:42px;font-weight:800;color:' + gradeColor + ';">' + hs.score + '</span>';
+  html += '<span style="font-size:14px;font-weight:600;color:#706F6F;">/100</span>';
+  html += '<span style="font-size:16px;font-weight:700;color:' + gradeColor + ';background:' + gradeBg + ';padding:3px 12px;border-radius:8px;margin-left:8px;">' + hs.grade + '</span>';
+  if (hs.components) {
+    html += '<div style="font-size:9px;color:#94a3b8;margin-top:6px;">Puntaje por componente (0 a 100):</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px;">';
+    var compNames = { slaCumplimiento: "SLA", productividad: "Productividad", tiempoGestion: "T.Gestión", backlogSalud: "Backlog", inactividad: "Actividad Equipo" };
+    Object.keys(hs.components).forEach(function(ck) {
+      var c = hs.components[ck];
+      var col = c.value >= 80 ? "#166534" : c.value >= 60 ? "#a16207" : "#BD0F14";
+      html += '<span style="font-size:10px;font-weight:700;color:' + col + ';background:#f4f5f8;border:1px solid #e5e7eb;padding:3px 8px;border-radius:6px;">' + (compNames[ck] || ck) + ': ' + c.value + '/100</span>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // KPIs tabla
+  html += '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;"><tr>';
+  var kpiItems = [
+    { label: "Total", value: k.totalGestionadas, meta: config.metas.minSolicitudesDiaEquipo },
+    { label: "T.Gestión", value: _fmtMinEmail(k.tiempoGestionProm), meta: _fmtMinEmail(config.metas.maxTiempoGestionMin) },
+    { label: "T.General", value: _fmtHorasEmail(k.tiempoGeneralProm), meta: _fmtHorasEmail(config.metas.maxTiempoGeneralHoras) },
+    { label: "Aprob.", value: k.tasaAprobacion + "%", meta: null },
+    { label: "Backlog", value: k.backlog, meta: config.metas.maxBacklog }
+  ];
+  kpiItems.forEach(function(ki) {
+    html += '<td style="text-align:center;padding:10px 4px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:10px;font-weight:700;color:#706F6F;">' + ki.label + '</div>';
+    html += '<div style="font-size:20px;font-weight:800;color:#253150;">' + ki.value + '</div>';
+    if (ki.meta !== null) html += '<div style="font-size:9px;color:#94a3b8;">Meta: ' + ki.meta + '</div>';
+    html += '</td>';
+  });
+  html += '</tr></table>';
+
+  // Alertas resumen
+  var criticas = d.alerts.filter(function(a) { return a.severity === "critico"; });
+  var advertencias = d.alerts.filter(function(a) { return a.severity === "advertencia"; });
+  var infos = d.alerts.filter(function(a) { return a.severity === "info"; });
+
+  html += '<div style="margin-bottom:16px;">';
+  html += '<div style="font-size:13px;font-weight:800;color:#253150;margin-bottom:8px;">Alertas (' + d.alerts.length + ')</div>';
+  if (criticas.length > 0) {
+    html += '<div style="background:#fde8e8;border-radius:6px;padding:8px 10px;margin-bottom:4px;font-size:11px;font-weight:700;color:#BD0F14;">🔴 ' + criticas.length + ' Crítica(s): ';
+    html += criticas.map(function(a) { return _escHtml(a.title); }).join(" | ") + '</div>';
+  }
+  if (advertencias.length > 0) {
+    html += '<div style="background:#fffbeb;border-radius:6px;padding:8px 10px;margin-bottom:4px;font-size:11px;font-weight:700;color:#a16207;">🟡 ' + advertencias.length + ' Advertencia(s): ';
+    html += advertencias.map(function(a) { return _escHtml(a.title); }).join(" | ") + '</div>';
+  }
+  if (infos.length > 0) {
+    html += '<div style="background:#e8edf6;border-radius:6px;padding:8px 10px;font-size:11px;font-weight:700;color:#253150;">🔵 ' + infos.length + ' Informativa(s)</div>';
+  }
+  if (d.alerts.length === 0) {
+    html += '<div style="background:#d1fae5;border-radius:6px;padding:8px 10px;font-size:11px;font-weight:700;color:#166534;">✅ Sin alertas — operación saludable</div>';
+  }
+  html += '</div>';
+
+  // Top analistas
+  if (d.rankAnalistas && d.rankAnalistas.length > 0) {
+    html += '<div style="margin-bottom:16px;">';
+    html += '<div style="font-size:13px;font-weight:800;color:#253150;margin-bottom:8px;">Top Analistas</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#f4f5f8;"><th style="padding:6px 8px;text-align:left;">Analista</th><th style="text-align:center;padding:6px;">Total</th><th style="text-align:center;padding:6px;">T.Gestión</th></tr>';
+    d.rankAnalistas.slice(0, 5).forEach(function(a) {
+      html += '<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:6px 8px;font-weight:600;">' + _escHtml(a.nombre) + '</td><td style="text-align:center;">' + a.total + '</td><td style="text-align:center;">' + a.tGestionProm + ' min</td></tr>';
+    });
+    html += '</table></div>';
+  }
+
+  // Sugerencias
+  var sugerencias = d.alerts.filter(function(a) { return a.suggestion; }).map(function(a) { return a.suggestion; });
+  if (sugerencias.length > 0) {
+    html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html += '<div style="font-size:12px;font-weight:800;color:#166534;margin-bottom:6px;">Sugerencias</div>';
+    sugerencias.slice(0, 5).forEach(function(s, i) {
+      html += '<div style="font-size:11px;color:#253150;margin-bottom:4px;">' + (i + 1) + '. ' + _escHtml(s) + '</div>';
+    });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  html += '<div style="background:#253150;color:#fff;padding:14px 24px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;">';
+  html += 'Generado automáticamente por Agente Coordinador — Métricas Análisis</div></div>';
+  return html;
+}
+
+function _escHtml(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function _fmtMinEmail(min) {
+  if (!min || min === 0) return "0m";
+  var h = Math.floor(min / 60);
+  var m = Math.round(min % 60);
+  if (m === 60) { h++; m = 0; }
+  if (h > 0 && m > 0) return h + "h " + m + "m";
+  if (h > 0) return h + "h";
+  return m + "m";
+}
+
+function _fmtHorasEmail(horas) {
+  if (!horas || horas === 0) return "0m";
+  var totalMin = Math.round(horas * 60);
+  var h = Math.floor(totalMin / 60);
+  var m = totalMin % 60;
+  if (h > 0 && m > 0) return h + "h " + m + "m";
+  if (h > 0) return h + "h";
+  return m + "m";
+}
+
+function _obtenerDestinatarios(config) {
+  var raw = config.coordinatorEmail || "";
+  var emails = raw.split(",").map(function(e) { return e.trim(); }).filter(function(e) { return e.length > 0 && e.indexOf("@") >= 0; });
+  if (emails.length === 0) {
+    var userEmail = Session.getActiveUser().getEmail();
+    if (userEmail) emails.push(userEmail);
+  }
+  return emails;
+}
+
+function agente_enviarAlertasCriticas(diagnostico) {
+  var config = agente_obtenerConfig();
+  if (!config.notificaciones.enviarAlertasCriticas) return { sent: false, reason: "desactivado" };
+
+  var criticas = diagnostico.alerts.filter(function(a) { return a.severity === "critico"; });
+  if (criticas.length === 0) return { sent: false, reason: "sin alertas criticas" };
+
+  var emails = _obtenerDestinatarios(config);
+  if (emails.length === 0) return { sent: false, reason: "sin destinatarios" };
+  var email = emails.join(",");
+
+  var fecha = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
+  var html = _construirEmailAlertas(diagnostico);
+
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject: "Métricas Análisis - " + criticas.length + " alerta(s) crítica(s) - " + fecha,
+      htmlBody: html,
+      noReply: true
+    });
+    return { sent: true, to: email, alertCount: criticas.length };
+  } catch (e) {
+    Logger.log("Error enviando email de alertas: " + e.message);
+    return { sent: false, reason: e.message };
+  }
+}
+
+function agente_enviarResumenDiario() {
+  var diagnostico = agente_ejecutarDiagnostico();
+  var config = agente_obtenerConfig();
+
+  var emails = _obtenerDestinatarios(config);
+  if (emails.length === 0) return { sent: false, reason: "sin destinatarios" };
+  var email = emails.join(",");
+
+  var fecha = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
+  var html = _construirEmailResumenDiario(diagnostico);
+
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject: "Métricas Análisis - Resumen Operativo " + fecha,
+      htmlBody: html,
+      noReply: true
+    });
+    return { sent: true, to: email };
+  } catch (e) {
+    Logger.log("Error enviando resumen diario: " + e.message);
+    return { sent: false, reason: e.message };
+  }
+}
+
+function agente_enviarResumenManual() {
+  return agente_enviarResumenDiario();
+}
+
+// --- TRIGGERS ---
+
+function agente_instalarTriggers() {
+  agente_desinstalarTriggers();
+
+  ScriptApp.newTrigger("agente_triggerHorario")
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  ScriptApp.newTrigger("agente_triggerResumenDiario")
+    .timeBased()
+    .atHour(17)
+    .nearMinute(0)
+    .everyDays(1)
+    .create();
+
+  return { success: true, message: "Triggers instalados: horario + resumen diario 17:00" };
+}
+
+function agente_desinstalarTriggers() {
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function(t) {
+    var fn = t.getHandlerFunction();
+    if (fn === "agente_triggerHorario" || fn === "agente_triggerResumenDiario") {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+  return { success: true };
+}
+
+function agente_obtenerEstadoTriggers() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var agentTriggers = [];
+  triggers.forEach(function(t) {
+    var fn = t.getHandlerFunction();
+    if (fn === "agente_triggerHorario" || fn === "agente_triggerResumenDiario") {
+      agentTriggers.push({ functionName: fn, type: String(t.getEventType()), id: t.getUniqueId() });
+    }
+  });
+  return { installed: agentTriggers.length > 0, triggers: agentTriggers, count: agentTriggers.length };
+}
+
+function agente_triggerHorario() {
+  var ahora = new Date();
+  var hora = parseInt(Utilities.formatDate(ahora, TIMEZONE, "HH"), 10);
+  if (hora < 8 || hora >= 17) return;
+
+  var dia = parseInt(Utilities.formatDate(ahora, TIMEZONE, "u"), 10);
+  if (dia > 5) return;
+
+  try {
+    var diagnostico = agente_ejecutarDiagnostico();
+    var criticas = diagnostico.alerts.filter(function(a) { return a.severity === "critico"; });
+    if (criticas.length > 0) {
+      agente_enviarAlertasCriticas(diagnostico);
+    }
+  } catch (e) {
+    Logger.log("Error en trigger horario del agente: " + e.message);
+  }
+}
+
+function agente_triggerResumenDiario() {
+  var ahora = new Date();
+  var dia = parseInt(Utilities.formatDate(ahora, TIMEZONE, "u"), 10);
+  if (dia > 5) return;
+
+  try {
+    agente_enviarResumenDiario();
+  } catch (e) {
+    Logger.log("Error en trigger resumen diario: " + e.message);
+  }
+}
+
+// --- FUNCIÓN PRINCIPAL PARA FRONTEND ---
+
+function agente_obtenerDatosDashboard() {
+  var cache = CacheService.getScriptCache();
+  var diagnostico = null;
+
+  try {
+    var cached = cache.get(AGENT_DIAG_CACHE_KEY);
+    if (cached) diagnostico = JSON.parse(cached);
+  } catch (e) {}
+
+  if (!diagnostico) {
+    diagnostico = agente_ejecutarDiagnostico();
+  }
+
+  var config = agente_obtenerConfig();
+  var history = agente_obtenerHistorialAlertas();
+  var triggerStatus = { installed: false, triggers: [], count: 0 };
+  try {
+    triggerStatus = agente_obtenerEstadoTriggers();
+  } catch (e) {
+    Logger.log("Agente: No se pudo consultar triggers: " + e.message);
+  }
+
+  return {
+    healthScore: diagnostico.healthScore,
+    alerts: diagnostico.alerts,
+    dataQuality: diagnostico.dataQuality,
+    kpis: diagnostico.kpis,
+    rankAnalistas: diagnostico.rankAnalistas,
+    seguimientoPersonas: diagnostico.seguimientoPersonas,
+    historicos: diagnostico.historicos,
+    alertHistory: history,
+    config: config,
+    triggers: triggerStatus,
+    timestamp: diagnostico.timestamp
+  };
+}
+
+function agente_autorizarPermisos() {
+  MailApp.getRemainingDailyQuota();
+  ScriptApp.getProjectTriggers();
+  return "Permisos autorizados correctamente";
+}
+
+function agente_ejecutarManual() {
+  CacheService.getScriptCache().remove(AGENT_DIAG_CACHE_KEY);
+  return agente_ejecutarDiagnostico();
 }

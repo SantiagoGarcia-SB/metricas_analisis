@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.5/css/dataTables.bootstrap5.min.css">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <?!= HtmlService.createHtmlOutputFromFile('Estilos').getContent(); ?>
 </head>
 <body>
@@ -34,6 +35,10 @@
         <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('analistas', this)" title="Analistas">
             <i class="bi bi-people"></i> <span class="nav-text">Analistas</span>
         </a>
+        <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('agente', this)" title="Agente Coordinador" id="navAgente">
+            <i class="bi bi-robot"></i> <span class="nav-text">Agente Coordinador</span>
+            <span id="badgeAlertasSidebar" class="agent-sidebar-badge" style="display:none;">0</span>
+        </a>
     </div>
     <div class="sidebar-footer" style="margin-top:auto; padding:16px 12px;">
          <span style="font-size: 0.7rem; font-weight: bold; color: var(--text-muted); padding: 8px;">Acceso como:</span>
@@ -49,6 +54,9 @@
         </div>
         <div class="d-flex align-items-center gap-3">
             <span id="ultimaSincronizacion" style="font-size:0.75rem;color:var(--text-muted);font-weight:600;"></span>
+            <button class="btn-outline-brand" onclick="descargarExcelConsolidado()" id="btnDescargarExcel" style="display:none;">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Descargar Excel
+            </button>
             <button class="btn-outline-brand" onclick="cargarMetricas()">
                 <i class="bi bi-arrow-clockwise"></i> Sincronizar Datos
             </button>
@@ -230,7 +238,6 @@
 
         <!-- Indicadores estratégicos -->
         <div class="row g-4 mb-4">
-            <div class="col-lg-4"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-x-octagon me-2" style="color:var(--rojo);"></i>Tasa Negación por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('negacionSucursal')">?</span></div><canvas id="chartNegacionSucursal" height="200"></canvas></div></div>
             <div class="col-lg-4"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-graph-down me-2" style="color:var(--azul);"></i>Tendencia SLA Diaria<span class="btn-help-chart" onclick="ayudaGrafico('tendenciaSLA')">?</span></div><canvas id="chartTendenciaSLA" height="200"></canvas></div></div>
             <div class="col-lg-4">
                 <div class="table-container" style="margin-top:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;" onclick="verBacklogDetalle()">
@@ -361,6 +368,191 @@
             </div>
         </div>
         </div><!-- /tab-analistas -->
+
+        <!-- TAB: Agente Coordinador -->
+        <div id="tab-agente" class="tab-panel" style="display:none;">
+            <div id="agenteSpinner" class="text-center py-5" style="display:none;">
+                <div class="spinner-border" role="status" style="color:var(--rojo);width:3rem;height:3rem;"></div>
+                <p class="mt-3 text-muted fw-bold">Ejecutando diagnóstico operativo...</p>
+            </div>
+            <div id="agenteContenido" style="display:none;">
+
+            <!-- Health Score + Quick Actions -->
+            <div class="row g-4 mb-4">
+                <div class="col-lg-4">
+                    <div class="table-container" style="margin-top:0;text-align:center;padding:30px 20px;">
+                        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-light);letter-spacing:1.2px;margin-bottom:2px;">Salud Operativa <span class="btn-help-chart" onclick="ayudaConfig('saludOperativa')">?</span></div>
+                        <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:10px;line-height:1.3;">Puntaje general de cómo va la operación hoy</div>
+                        <div style="position:relative;width:200px;height:120px;margin:0 auto;">
+                            <canvas id="gaugeHealthScore"></canvas>
+                            <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);text-align:center;">
+                                <div id="gaugeScoreValue" class="agent-gauge-score">0</div>
+                            </div>
+                        </div>
+                        <div id="gaugeGradeBadge" class="agent-gauge-grade agent-grade-F" style="display:inline-block;margin-top:8px;">F</div>
+                        <div id="gaugeGradeExplain" style="font-size:0.68rem;color:var(--text-muted);margin-top:6px;"></div>
+                        <div id="gaugeTimestamp" style="font-size:0.65rem;color:var(--text-light);margin-top:4px;"></div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="table-container" style="margin-top:0;">
+                        <div class="table-title mb-1"><i class="bi bi-bar-chart-fill me-2" style="color:var(--azul);"></i>Componentes del Score <span class="btn-help-chart" onclick="ayudaConfig('componentes')">?</span></div>
+                        <div class="table-sub mb-3">Cada barra muestra qué tan bien va ese aspecto de la operación</div>
+                        <div id="componentesScore"></div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="table-container" style="margin-top:0;">
+                        <div class="table-title mb-3"><i class="bi bi-lightning-charge me-2" style="color:var(--rojo);"></i>Acciones Rápidas</div>
+                        <div class="agent-quick-actions" style="flex-direction:column;">
+                            <button class="agent-quick-btn agent-quick-btn-primary" onclick="recalcularAgente()"><i class="bi bi-arrow-repeat"></i> Recalcular Diagnóstico</button>
+                            <button class="agent-quick-btn" onclick="enviarResumenManualAgente()"><i class="bi bi-envelope"></i> Enviar Resumen por Correo</button>
+                            <button class="agent-quick-btn" onclick="document.getElementById('seccionConfigMetas').scrollIntoView({behavior:'smooth'})"><i class="bi bi-gear"></i> Configurar Metas</button>
+                        </div>
+                        <div style="margin-top:16px;">
+                            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;">KPIs del Día</div>
+                            <div id="kpisResumenAgente" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alertas Activas -->
+            <div class="table-container mb-4">
+                <div class="table-header" style="flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <div class="table-title"><i class="bi bi-bell me-2" style="color:var(--rojo);"></i>Alertas Activas</div>
+                        <div class="table-sub" id="alertasResumen">Sin alertas</div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <select id="filtroAlertaSeverity" class="form-select" onchange="filtrarAlertasAgente()" style="width:auto;font-size:0.75rem;padding:5px 10px;border-radius:8px;">
+                            <option value="todas">Todas</option>
+                            <option value="critico">Críticas</option>
+                            <option value="advertencia">Advertencias</option>
+                            <option value="info">Informativas</option>
+                        </select>
+                        <select id="filtroAlertaCategory" class="form-select" onchange="filtrarAlertasAgente()" style="width:auto;font-size:0.75rem;padding:5px 10px;border-radius:8px;">
+                            <option value="todas">Todas las categorías</option>
+                            <option value="sla">SLA</option>
+                            <option value="backlog">Backlog</option>
+                            <option value="inactividad">Inactividad</option>
+                            <option value="productividad">Productividad</option>
+                            <option value="tiempos">Tiempos</option>
+                            <option value="calidad">Calidad Datos</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="alertasAgenteContainer"></div>
+            </div>
+
+            <!-- Sugerencias -->
+            <div class="table-container mb-4">
+                <div class="table-title mb-2"><i class="bi bi-lightbulb me-2" style="color:#166534;"></i>Sugerencias del Agente</div>
+                <div class="table-sub mb-3">Acciones recomendadas basadas en el diagnóstico actual</div>
+                <div id="sugerenciasAgente"></div>
+            </div>
+
+            <!-- Seguimiento de Personas -->
+            <div class="table-container mb-4">
+                <div class="table-title mb-2"><i class="bi bi-person-exclamation me-2" style="color:var(--rojo);"></i>Analistas que Requieren Seguimiento <span class="btn-help-chart" onclick="ayudaConfig('seguimiento')">?</span></div>
+                <div class="table-sub mb-3">Personas con las que debes conversar hoy, con datos de sustento para la conversación</div>
+                <div id="seguimientoPersonasContainer"></div>
+            </div>
+
+            <!-- Calidad de Datos -->
+            <div class="table-container mb-4">
+                <div class="table-title mb-2"><i class="bi bi-database-check me-2" style="color:var(--azul);"></i>Reporte de Calidad de Datos <span class="btn-help-chart" onclick="ayudaConfig('calidadDatos')">?</span></div>
+                <div class="table-sub mb-3">Verifica que los datos de las hojas estén completos y sin valores extraños. Click en cada tarjeta para ver el detalle.</div>
+                <div id="calidadDatosContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;"></div>
+            </div>
+
+            <!-- Configuración de Metas -->
+            <div class="table-container mb-4" id="seccionConfigMetas">
+                <div class="table-title mb-2"><i class="bi bi-sliders me-2" style="color:var(--azul);"></i>Configuración de Metas y Umbrales</div>
+                <div class="table-sub mb-3">Define los objetivos contra los cuales se evalúa la operación</div>
+                <div class="agent-config-form">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">SLA % meta <span class="btn-help-chart" onclick="ayudaConfig('slaPct')">?</span></label>
+                            <input type="number" class="form-control" id="cfgSlaPct" min="0" max="100">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Máx. T. Gestión (min) <span class="btn-help-chart" onclick="ayudaConfig('maxGestion')">?</span></label>
+                            <input type="number" class="form-control" id="cfgMaxGestion" min="1">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Máx. T. General (horas) <span class="btn-help-chart" onclick="ayudaConfig('maxGeneral')">?</span></label>
+                            <input type="number" class="form-control" id="cfgMaxGeneral" min="0.5" step="0.5">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Máx. T. Cola (min) <span class="btn-help-chart" onclick="ayudaConfig('maxCola')">?</span></label>
+                            <input type="number" class="form-control" id="cfgMaxCola" min="1">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Máx. Backlog <span class="btn-help-chart" onclick="ayudaConfig('maxBacklog')">?</span></label>
+                            <input type="number" class="form-control" id="cfgMaxBacklog" min="1">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Desviación histórica % <span class="btn-help-chart" onclick="ayudaConfig('desviacion')">?</span></label>
+                            <input type="number" class="form-control" id="cfgDesviacion" min="5" max="100">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Destinatarios de reportes <span class="btn-help-chart" onclick="ayudaConfig('email')">?</span></label>
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="email" class="form-control" id="cfgEmailInput" placeholder="correo@dominio.com" style="flex:1;">
+                                <button class="agent-quick-btn" onclick="agregarDestinatario()" style="padding:6px 14px;white-space:nowrap;"><i class="bi bi-plus-circle"></i> Agregar</button>
+                            </div>
+                            <div id="listaDestinatarios"></div>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="cfgEnviarCriticas" checked>
+                                <label class="form-check-label" style="font-size:0.75rem;font-weight:600;">Alertas críticas <span class="btn-help-chart" onclick="ayudaConfig('enviarCriticas')">?</span></label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="cfgEnviarResumen" checked>
+                                <label class="form-check-label" style="font-size:0.75rem;font-weight:600;">Resumen diario <span class="btn-help-chart" onclick="ayudaConfig('enviarResumen')">?</span></label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn-primary-brand" onclick="guardarConfigAgente()" style="border-radius:10px;padding:8px 22px;"><i class="bi bi-check-lg me-1"></i>Guardar Configuración</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historial de Alertas -->
+            <div class="table-container mb-4">
+                <div class="table-title mb-2"><i class="bi bi-clock-history me-2" style="color:var(--azul);"></i>Historial de Alertas</div>
+                <div class="table-sub mb-3">Últimas 50 alertas registradas por el agente</div>
+                <div class="table-responsive">
+                    <table id="tablaHistorialAlertas" class="table table-sm w-100 align-middle" style="font-size:0.82rem;">
+                        <thead><tr><th>Fecha</th><th>Severidad</th><th>Categoría</th><th>Título</th></tr></thead>
+                        <tbody id="cuerpoHistorialAlertas"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Estado de Triggers -->
+            <div class="table-container mb-4">
+                <div class="table-header">
+                    <div>
+                        <div class="table-title"><i class="bi bi-alarm me-2" style="color:var(--azul);"></i>Automatización (Triggers)</div>
+                        <div class="table-sub">Revisión horaria (8-17h L-V) + Resumen diario a las 17:00</div>
+                    </div>
+                    <div id="triggerStatusBadge"></div>
+                </div>
+                <div id="triggerDetalle" style="margin-bottom:12px;"></div>
+                <div class="d-flex gap-2">
+                    <button class="agent-quick-btn" onclick="instalarTriggersAgente()"><i class="bi bi-play-circle"></i> Instalar Triggers</button>
+                    <button class="agent-quick-btn" onclick="desinstalarTriggersAgente()"><i class="bi bi-stop-circle"></i> Desinstalar Triggers</button>
+                </div>
+            </div>
+
+            </div><!-- /agenteContenido -->
+        </div><!-- /tab-agente -->
     </div>
 </div>
 

@@ -370,6 +370,7 @@ function renderizarConDatos(datos, tiemposFiltrados, backlogFiltrado){
 
     var ahora=new Date();
     document.getElementById('ultimaSincronizacion').textContent='Última sync: '+String(ahora.getDate()).padStart(2,'0')+'/'+String(ahora.getMonth()+1).padStart(2,'0')+'/'+ahora.getFullYear()+' '+String(ahora.getHours()).padStart(2,'0')+':'+String(ahora.getMinutes()).padStart(2,'0');
+    document.getElementById('btnDescargarExcel').style.display='flex';
 
     // KPIs
     document.getElementById('kpiTotal').textContent=datos.totalGestionadas;
@@ -404,7 +405,6 @@ function renderizarConDatos(datos, tiemposFiltrados, backlogFiltrado){
     renderChartTipo(datos.porTipo);
     renderChartMensual(datos.porTipo);
     renderChartMensualSucursal(datos.porSucursal);
-    renderNegacionSucursal(datos.tasaNegacionSucursal);
     renderTendenciaSLA(datos.tendenciaSLA);
     document.getElementById('kpiBacklog').textContent=datos.backlog;
     window._backlogDetalle=backlogFiltrado;
@@ -717,8 +717,757 @@ function renderAsesoresPR(r){if($.fn.DataTable.isDataTable('#tablaAsesoresPrimer
 
 // === MODALES ===
 function verDetalleAnalista(c){Swal.fire({title:'Cargando...',didOpen:function(){Swal.showLoading();}});google.script.run.withSuccessHandler(function(res){Swal.close();var html='<div style="text-align:left;font-family:Manrope,sans-serif;"><div style="font-weight:800;font-size:1rem;color:#253150;margin-bottom:12px;">'+esc(res.nombre)+' · '+esc(res.fecha)+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;"><div style="background:#e8edf6;border-radius:14px;padding:14px;text-align:center;"><div style="font-size:0.7rem;font-weight:700;">Gestionadas</div><div style="font-size:1.8rem;font-weight:800;color:#253150;">'+res.gestionadas.length+'</div></div><div style="background:#fde8e8;border-radius:14px;padding:14px;text-align:center;"><div style="font-size:0.7rem;font-weight:700;color:#BD0F14;">Pendientes</div><div style="font-size:1.8rem;font-weight:800;color:#BD0F14;">'+res.pendientes.length+'</div></div></div>';if(res.gestionadas.length>0){html+='<div style="max-height:250px;overflow:auto;border:1px solid #e5e7eb;border-radius:12px;"><table style="width:100%;border-collapse:collapse;font-size:0.72rem;"><thead><tr style="background:#f4f5f8;"><th style="padding:8px;">ID</th><th style="padding:8px;">Tipo</th><th style="padding:8px;">Estado</th><th style="padding:8px;">T.Gestión</th></tr></thead><tbody>';res.gestionadas.forEach(function(g){html+='<tr style="border-top:1px solid #f1f5f9;"><td style="padding:6px 8px;">'+esc(g.id)+'</td><td style="padding:6px 8px;">'+esc(g.tipo||'—')+'</td><td style="padding:6px 8px;">'+esc(g.estado)+'</td><td style="padding:6px 8px;">'+(g.duracion?formatearDuracion(parseFloat(g.duracion)):'—')+'</td></tr>';});html+='</tbody></table></div>';}html+='</div>';Swal.fire({html:html,width:700,showCloseButton:true,showConfirmButton:false});}).admin_obtenerDetallePorAnalista(c,document.getElementById('filtroFechaSeguimiento').value);}
-function verDetalleHoras(n){var d=(window._detalleHorasData||{})[n];if(!d){Swal.fire({icon:'info',title:'Sin datos'});return;}var html='<div style="font-family:Manrope;"><div style="font-weight:800;margin-bottom:12px;">'+esc(n)+'</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">';for(var h=7;h<=18;h++){var c=d[h]||0;var bg=c===0?'#f4f5f8':c<=2?'#e8edf6':c<=5?'#253150':'#BD0F14';var tc=c<=2?'#253150':'#fff';html+='<div style="background:'+bg+';color:'+tc+';border-radius:10px;padding:10px 8px;text-align:center;border:1px solid #e5e7eb;"><div style="font-size:0.65rem;font-weight:700;opacity:0.7;">'+h+':00</div><div style="font-size:1.4rem;font-weight:800;">'+c+'</div></div>';}html+='</div></div>';Swal.fire({html:html,width:520,showCloseButton:true,showConfirmButton:false});}
+function verDetalleHoras(n){var d=(window._detalleHorasData||{})[n];if(!d){Swal.fire({icon:'info',title:'Sin datos'});return;}var html='<div style="font-family:Manrope;"><div style="font-weight:800;margin-bottom:12px;">'+esc(n)+'</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">';for(var h=6;h<=21;h++){var c=d[h]||0;var bg=c===0?'#f4f5f8':c<=2?'#e8edf6':c<=5?'#253150':'#BD0F14';var tc=c<=2?'#253150':'#fff';html+='<div style="background:'+bg+';color:'+tc+';border-radius:10px;padding:10px 8px;text-align:center;border:1px solid #e5e7eb;"><div style="font-size:0.65rem;font-weight:700;opacity:0.7;">'+h+':00</div><div style="font-size:1.4rem;font-weight:800;">'+c+'</div></div>';}html+='</div></div>';Swal.fire({html:html,width:520,showCloseButton:true,showConfirmButton:false});}
 function verBacklogDetalle(){var el=document.getElementById('seccionBacklogSemaforo');if(el)el.scrollIntoView({behavior:'smooth'});}
+
+// ============================================================================
+// DESCARGA EXCEL CONSOLIDADO
+// ============================================================================
+
+function descargarExcelConsolidado() {
+    if (!_datosCompletos || !_ultimosTiemposFiltrados || _ultimosTiemposFiltrados.length === 0) {
+        Swal.fire({ icon: 'warning', title: 'Sin datos', text: 'Primero carga los datos seleccionando un rango de fechas.' });
+        return;
+    }
+
+    try {
+        var wb = XLSX.utils.book_new();
+        var td = _ultimosTiemposFiltrados;
+        var datos = _datosCompletos;
+
+        // === HOJA 1: Detalle de Solicitudes ===
+        var detRows = [['Solicitud', 'Póliza', 'Fecha Gestión', 'Analista', 'Estado', 'Sucursal', 'Tipo', 'Segmento', 'Inmobiliaria', 'T. Cola (min)', 'T. Gestión (min)', 'T. General (horas)', 'Dentro SLA']];
+        td.forEach(function(r) {
+            detRows.push([
+                r.solicitud || '',
+                r.poliza || '',
+                r.fecha || '',
+                r.analista || '',
+                r.estado || '',
+                r.sucursal || '',
+                r.tipo || '',
+                r.segmento || '',
+                r.inmobiliaria || '',
+                r.tCola !== null && r.tCola !== undefined ? r.tCola : '',
+                r.tGestion !== null ? r.tGestion : '',
+                r.tResolucion !== null ? r.tResolucion : '',
+                r.tResolucion !== null ? (r.tResolucion <= 2 ? 'Sí' : 'No') : ''
+            ]);
+        });
+        var wsDetalle = XLSX.utils.aoa_to_sheet(detRows);
+        _ajustarAnchosColumnas(wsDetalle, detRows);
+        XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle Solicitudes');
+
+        // === HOJA 2: Resumen por Analista ===
+        var pa = datos.porAnalista || [];
+        var anRows = [['Analista', 'Total', 'Aprobadas', 'Negadas', 'Aplazadas', 'T. Gestión Prom (min)', 'T. General Prom (horas)', 'Ritmo/h', 'Prod/h', 'Fuera SLA', '% Aprobación', '% Negación']];
+        pa.forEach(function(a) {
+            var pctAprob = a.total > 0 ? Math.round(a.aprobadas / a.total * 1000) / 10 : 0;
+            var pctNeg = a.total > 0 ? Math.round(a.negadas / a.total * 1000) / 10 : 0;
+            anRows.push([
+                a.nombre, a.total, a.aprobadas, a.negadas, a.aplazadas,
+                a.tiempoPromedio, a.tiempoPromedioGeneral,
+                a.promedioPorHora || '', a.prodRealPorHora || '',
+                a.fueraSLA, pctAprob, pctNeg
+            ]);
+        });
+        var wsAnalista = XLSX.utils.aoa_to_sheet(anRows);
+        _ajustarAnchosColumnas(wsAnalista, anRows);
+        XLSX.utils.book_append_sheet(wb, wsAnalista, 'Resumen Analistas');
+
+        // === HOJA 3: Resumen por Sucursal ===
+        var sucMap = {};
+        td.forEach(function(r) {
+            if (!sucMap[r.sucursal]) sucMap[r.sucursal] = { total: 0, aprob: 0, neg: 0, aplaz: 0, sumaG: 0, cG: 0, sumaR: 0, cR: 0, sumaCola: 0, cCola: 0, fueraSLA: 0 };
+            var s = sucMap[r.sucursal];
+            s.total++;
+            if (r.estado === 'APROBADA') s.aprob++;
+            if (r.estado === 'NEGADA') s.neg++;
+            if (r.estado === 'APLAZADA') s.aplaz++;
+            if (r.tGestion !== null) { s.sumaG += r.tGestion; s.cG++; }
+            if (r.tResolucion !== null && r.tResolucion > 0) { s.sumaR += r.tResolucion; s.cR++; if (r.tResolucion > 2) s.fueraSLA++; }
+            if (r.tCola !== null) { s.sumaCola += r.tCola; s.cCola++; }
+        });
+        var sucRows = [['Sucursal', 'Total', 'Aprobadas', 'Negadas', 'Aplazadas', 'T. Cola Prom (min)', 'T. Gestión Prom (min)', 'T. General Prom (horas)', 'Fuera SLA', '% Aprobación', '% Negación']];
+        Object.keys(sucMap).sort().forEach(function(suc) {
+            var s = sucMap[suc];
+            sucRows.push([
+                suc, s.total, s.aprob, s.neg, s.aplaz,
+                s.cCola > 0 ? Math.round(s.sumaCola / s.cCola * 10) / 10 : 0,
+                s.cG > 0 ? Math.round(s.sumaG / s.cG * 10) / 10 : 0,
+                s.cR > 0 ? Number((s.sumaR / s.cR).toFixed(2)) : 0,
+                s.fueraSLA,
+                s.total > 0 ? Math.round(s.aprob / s.total * 1000) / 10 : 0,
+                s.total > 0 ? Math.round(s.neg / s.total * 1000) / 10 : 0
+            ]);
+        });
+        var wsSucursal = XLSX.utils.aoa_to_sheet(sucRows);
+        _ajustarAnchosColumnas(wsSucursal, sucRows);
+        XLSX.utils.book_append_sheet(wb, wsSucursal, 'Resumen Sucursales');
+
+        // === HOJA 4: Resumen por Tipo ===
+        var tipoMap = {};
+        td.forEach(function(r) {
+            if (!tipoMap[r.tipo]) tipoMap[r.tipo] = { total: 0, sumaG: 0, cG: 0, sumaR: 0, cR: 0, fueraSLA: 0 };
+            var t = tipoMap[r.tipo];
+            t.total++;
+            if (r.tGestion !== null) { t.sumaG += r.tGestion; t.cG++; }
+            if (r.tResolucion !== null && r.tResolucion > 0) { t.sumaR += r.tResolucion; t.cR++; if (r.tResolucion > 2) t.fueraSLA++; }
+        });
+        var tipoRows = [['Tipo', 'Total', 'T. Gestión Prom (min)', 'T. General Prom (horas)', 'Fuera SLA', '% del Total']];
+        Object.keys(tipoMap).sort().forEach(function(tipo) {
+            var t = tipoMap[tipo];
+            tipoRows.push([
+                tipo, t.total,
+                t.cG > 0 ? Math.round(t.sumaG / t.cG * 10) / 10 : 0,
+                t.cR > 0 ? Number((t.sumaR / t.cR).toFixed(2)) : 0,
+                t.fueraSLA,
+                td.length > 0 ? Math.round(t.total / td.length * 1000) / 10 : 0
+            ]);
+        });
+        var wsTipo = XLSX.utils.aoa_to_sheet(tipoRows);
+        _ajustarAnchosColumnas(wsTipo, tipoRows);
+        XLSX.utils.book_append_sheet(wb, wsTipo, 'Resumen Tipos');
+
+        // === HOJA 5: Producción Diaria ===
+        var prodRows = [['Fecha', 'Total', 'Digital', 'UAR', 'Reestudio', 'Biometría', 'Inducción']];
+        (datos.porTipo || []).forEach(function(d) {
+            prodRows.push([d.fecha, (d.Digital||0)+(d.UAR||0)+(d.Reestudio||0)+(d.Biometria||0)+(d.Induccion||0), d.Digital||0, d.UAR||0, d.Reestudio||0, d.Biometria||0, d.Induccion||0]);
+        });
+        var wsProd = XLSX.utils.aoa_to_sheet(prodRows);
+        _ajustarAnchosColumnas(wsProd, prodRows);
+        XLSX.utils.book_append_sheet(wb, wsProd, 'Producción Diaria');
+
+        // === HOJA 6: SLA Diario ===
+        var slaRows = [['Fecha', 'Dentro SLA', 'Fuera SLA', 'Total', '% Cumplimiento']];
+        (datos.slaDiario || []).forEach(function(d) {
+            var total = d.dentroSLA + d.fueraSLA;
+            slaRows.push([d.fecha, d.dentroSLA, d.fueraSLA, total, total > 0 ? Math.round(d.dentroSLA / total * 1000) / 10 : 100]);
+        });
+        var wsSLA = XLSX.utils.aoa_to_sheet(slaRows);
+        _ajustarAnchosColumnas(wsSLA, slaRows);
+        XLSX.utils.book_append_sheet(wb, wsSLA, 'SLA Diario');
+
+        // === HOJA 7: Backlog ===
+        var backlog = window._backlogDetalle || [];
+        var bkRows = [['Solicitud', 'Analista', 'Origen', 'Tipo', 'Inmobiliaria', 'Segmento', 'Fecha Asignación', 'Minutos en Espera', 'Semáforo']];
+        backlog.forEach(function(b) {
+            var semaforo = b.alertaSLA === 'rojo' ? 'ROJO (>90 min)' : b.alertaSLA === 'amarillo' ? 'AMARILLO (45-90 min)' : 'VERDE (<45 min)';
+            bkRows.push([b.solicitud || '', b.analista || '', b.origen || '', b.tipo || '', b.inmobiliaria || '', b.segmento || '', b.fechaAsignacion || '', b.minutosEspera || 0, semaforo]);
+        });
+        var wsBacklog = XLSX.utils.aoa_to_sheet(bkRows);
+        _ajustarAnchosColumnas(wsBacklog, bkRows);
+        XLSX.utils.book_append_sheet(wb, wsBacklog, 'Backlog Actual');
+
+        // === HOJA 8: KPIs Consolidados ===
+        var kpiRows = [
+            ['Indicador', 'Valor'],
+            ['Total Gestionadas', datos.totalGestionadas],
+            ['T. Gestión Promedio (min)', datos.tiempoPromedioMinutos],
+            ['T. General Promedio (horas)', datos.tiempoPromedioGeneralHoras || 0],
+            ['T. Cola Promedio (min)', datos.tiempoColaPromedio],
+            ['Tasa Aprobación (%)', datos.tasaAprobacion],
+            ['Fuera de SLA', datos.fueraDeSLA],
+            ['Backlog Actual', datos.backlog],
+            [''],
+            ['Rango', document.getElementById('metricaDesde').value + ' a ' + document.getElementById('metricaHasta').value],
+            ['Fecha de Descarga', new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })]
+        ];
+        var wsKPI = XLSX.utils.aoa_to_sheet(kpiRows);
+        _ajustarAnchosColumnas(wsKPI, kpiRows);
+        XLSX.utils.book_append_sheet(wb, wsKPI, 'KPIs');
+
+        // === HOJA 9: Segmentación Inmobiliarias ===
+        var segRows = [['Segmento', 'Inmobiliaria', 'Solicitudes', 'T. Cola Prom (min)', 'T. Gestión Prom (min)', 'T. General Prom (horas)']];
+        var segData = _segmentacionData || {};
+        Object.keys(segData).sort().forEach(function(seg) {
+            (segData[seg] || []).forEach(function(inmob) {
+                segRows.push([seg, inmob.inmobiliaria, inmob.count, inmob.tiempoColaPromedio, inmob.tiempoGestionPromedio, inmob.tiempoGeneralPromedio]);
+            });
+        });
+        if (segRows.length > 1) {
+            var wsSeg = XLSX.utils.aoa_to_sheet(segRows);
+            _ajustarAnchosColumnas(wsSeg, segRows);
+            XLSX.utils.book_append_sheet(wb, wsSeg, 'Segmentación');
+        }
+
+        // Generar y descargar
+        var desde = document.getElementById('metricaDesde').value || 'datos';
+        var hasta = document.getElementById('metricaHasta').value || '';
+        var nombreArchivo = 'Metricas_Analisis_' + desde + '_a_' + hasta + '.xlsx';
+        XLSX.writeFile(wb, nombreArchivo);
+
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Error al generar Excel', text: e.message || 'Error desconocido' });
+    }
+}
+
+function _ajustarAnchosColumnas(ws, data) {
+    if (!data || data.length === 0) return;
+    var colWidths = [];
+    data.forEach(function(row) {
+        for (var i = 0; i < row.length; i++) {
+            var len = String(row[i] || '').length;
+            if (!colWidths[i] || len > colWidths[i]) colWidths[i] = len;
+        }
+    });
+    ws['!cols'] = colWidths.map(function(w) { return { wch: Math.min(Math.max(w + 2, 10), 40) }; });
+}
+
+// ============================================================================
+// AGENTE COORDINADOR
+// ============================================================================
+
+var _agenteDatos = null;
+var gaugeHealthScore = null;
+var _alertasActuales = [];
+
+function _fmtMinLegible(min) {
+    if (!min || min === 0) return '0m';
+    var h = Math.floor(min / 60);
+    var m = Math.round(min % 60);
+    if (m === 60) { h++; m = 0; }
+    if (h > 0 && m > 0) return h + 'h ' + m + 'm';
+    if (h > 0) return h + 'h';
+    return m + 'm';
+}
+
+function _fmtHorasLegible(horas) {
+    if (!horas || horas === 0) return '0m';
+    var totalMin = Math.round(horas * 60);
+    var h = Math.floor(totalMin / 60);
+    var m = totalMin % 60;
+    if (h > 0 && m > 0) return h + 'h ' + m + 'm';
+    if (h > 0) return h + 'h';
+    return m + 'm';
+}
+
+function cargarDatosAgente() {
+    document.getElementById('agenteSpinner').style.display = 'block';
+    document.getElementById('agenteContenido').style.display = 'none';
+    google.script.run
+        .withSuccessHandler(onDatosAgenteCargados)
+        .withFailureHandler(function(e) {
+            document.getElementById('agenteSpinner').style.display = 'none';
+            Swal.fire({ icon: 'error', title: 'Error del Agente', text: e.message });
+        })
+        .agente_obtenerDatosDashboard();
+}
+
+function onDatosAgenteCargados(datos) {
+    _agenteDatos = datos;
+    _alertasActuales = datos.alerts || [];
+    document.getElementById('agenteSpinner').style.display = 'none';
+    document.getElementById('agenteContenido').style.display = 'block';
+
+    renderGaugeHealthScore(datos.healthScore);
+    renderComponentesScore(datos.healthScore);
+    renderKpisResumenAgente(datos.kpis);
+    renderAlertasAgente(datos.alerts);
+    renderSugerenciasAgente(datos.alerts);
+    renderSeguimientoPersonas(datos.seguimientoPersonas);
+    renderCalidadDatos(datos.dataQuality);
+    renderConfigAgente(datos.config);
+    renderHistorialAlertas(datos.alertHistory);
+    renderEstadoTriggers(datos.triggers);
+    actualizarBadgeSidebar(datos.alerts);
+}
+
+// === GAUGE ===
+function renderGaugeHealthScore(hs) {
+    if (gaugeHealthScore) gaugeHealthScore.destroy();
+    var score = hs.score || 0;
+    var grade = hs.grade || 'F';
+    var colors = { A: '#22c55e', B: '#253150', C: '#f59e0b', D: '#f97316', F: '#BD0F14' };
+    var color = colors[grade] || '#BD0F14';
+
+    var ctx = document.getElementById('gaugeHealthScore').getContext('2d');
+    gaugeHealthScore = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [score, 100 - score],
+                backgroundColor: [color, '#e5e7eb'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            rotation: -90, circumference: 180, cutout: '78%',
+            plugins: { datalabels: { display: false }, legend: { display: false }, tooltip: { enabled: false } }
+        }
+    });
+
+    document.getElementById('gaugeScoreValue').textContent = score;
+    document.getElementById('gaugeScoreValue').style.color = color;
+    var badge = document.getElementById('gaugeGradeBadge');
+    badge.textContent = grade;
+    badge.className = 'agent-gauge-grade agent-grade-' + grade;
+    var gradeTexts = {
+        A: 'Excelente — la operación funciona de manera óptima',
+        B: 'Bien — la operación está en buen estado con oportunidades menores',
+        C: 'Regular — hay aspectos que necesitan atención',
+        D: 'Deficiente — la operación tiene problemas que requieren acción',
+        F: 'Crítico — se requiere intervención inmediata'
+    };
+    document.getElementById('gaugeGradeExplain').textContent = gradeTexts[grade] || '';
+    document.getElementById('gaugeTimestamp').textContent = hs.timestamp ? 'Última evaluación: ' + hs.timestamp : '';
+}
+
+function renderComponentesScore(hs) {
+    var cont = document.getElementById('componentesScore');
+    if (!hs || !hs.components) { cont.innerHTML = '<p style="color:var(--text-light);font-size:0.8rem;">Sin datos</p>'; return; }
+    var names = { slaCumplimiento: 'SLA Cumplimiento', productividad: 'Productividad', tiempoGestion: 'Tiempo Gestión', backlogSalud: 'Backlog', inactividad: 'Actividad Equipo' };
+    var html = '';
+    Object.keys(hs.components).forEach(function(k) {
+        var c = hs.components[k];
+        var col = c.value >= 80 ? '#22c55e' : c.value >= 60 ? '#f59e0b' : '#BD0F14';
+        html += '<div style="margin-bottom:10px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">';
+        html += '<span style="font-size:0.72rem;font-weight:600;color:var(--text-muted);">' + (names[k] || k) + '</span>';
+        html += '<span style="font-size:0.72rem;font-weight:800;color:' + col + ';">' + c.value + ' <span style="font-size:0.6rem;font-weight:600;color:var(--text-light);">(' + c.weight + '%)</span></span>';
+        html += '</div>';
+        html += '<div class="agent-component-bar"><div class="agent-component-fill" style="width:' + c.value + '%;background:' + col + ';"></div></div>';
+        html += '</div>';
+    });
+    cont.innerHTML = html;
+}
+
+function renderKpisResumenAgente(kpis) {
+    var cont = document.getElementById('kpisResumenAgente');
+    if (!kpis) { cont.innerHTML = ''; return; }
+    var items = [
+        { label: 'Total', value: kpis.totalGestionadas, icon: 'bi-clipboard-check' },
+        { label: 'T.Gestión', value: _fmtMinLegible(kpis.tiempoGestionProm), icon: 'bi-stopwatch' },
+        { label: 'T.General', value: _fmtHorasLegible(kpis.tiempoGeneralProm), icon: 'bi-clock' },
+        { label: 'Backlog', value: kpis.backlog, icon: 'bi-inbox' }
+    ];
+    var html = '';
+    items.forEach(function(it) {
+        html += '<div style="background:var(--bg-page);border-radius:8px;padding:8px 6px;text-align:center;">';
+        html += '<div style="font-size:0.6rem;font-weight:700;color:var(--text-light);"><i class="bi ' + it.icon + '"></i> ' + it.label + '</div>';
+        html += '<div style="font-size:1rem;font-weight:800;color:var(--azul);">' + it.value + '</div>';
+        html += '</div>';
+    });
+    cont.innerHTML = html;
+}
+
+// === ALERTAS ===
+function renderAlertasAgente(alerts) {
+    var cont = document.getElementById('alertasAgenteContainer');
+    if (!alerts || alerts.length === 0) {
+        cont.innerHTML = '<div style="text-align:center;padding:30px;"><i class="bi bi-check-circle" style="font-size:2.5rem;color:#22c55e;"></i><p style="font-size:0.9rem;font-weight:700;color:#166534;margin-top:8px;">Operación saludable — sin alertas</p></div>';
+        document.getElementById('alertasResumen').textContent = 'Sin alertas activas';
+        return;
+    }
+
+    var criticas = alerts.filter(function(a) { return a.severity === 'critico'; });
+    var advertencias = alerts.filter(function(a) { return a.severity === 'advertencia'; });
+    var infos = alerts.filter(function(a) { return a.severity === 'info'; });
+    document.getElementById('alertasResumen').textContent = criticas.length + ' críticas, ' + advertencias.length + ' advertencias, ' + infos.length + ' informativas';
+
+    var sf = document.getElementById('filtroAlertaSeverity').value;
+    var cf = document.getElementById('filtroAlertaCategory').value;
+    var filtered = alerts.filter(function(a) {
+        if (sf !== 'todas' && a.severity !== sf) return false;
+        if (cf !== 'todas' && a.category !== cf) return false;
+        return true;
+    });
+
+    var html = '';
+    filtered.forEach(function(al, idx) {
+        var cls = 'agent-alert-' + al.severity;
+        var icon = al.severity === 'critico' ? 'bi-exclamation-triangle-fill' : al.severity === 'advertencia' ? 'bi-exclamation-circle-fill' : 'bi-info-circle-fill';
+        var catLabels = { sla: 'SLA', backlog: 'Backlog', inactividad: 'Inactividad', productividad: 'Productividad', tiempos: 'Tiempos', negacion: 'Negación', calidad: 'Calidad' };
+        html += '<div class="agent-alert-card ' + cls + '">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+        html += '<div style="flex:1;"><div class="agent-alert-title"><i class="bi ' + icon + ' me-1"></i>' + esc(al.title) + '</div>';
+        html += '<div class="agent-alert-desc">' + esc(al.description) + '</div>';
+        if (al.suggestion) html += '<div class="agent-alert-suggestion"><i class="bi bi-lightbulb me-1"></i>' + esc(al.suggestion) + '</div>';
+        if (al.affectedEntities && al.affectedEntities.length > 0) html += '<div style="font-size:0.7rem;color:var(--text-light);margin-top:4px;"><strong>Afecta:</strong> ' + esc(al.affectedEntities.join(', ')) + '</div>';
+        html += '</div>';
+        html += '<span class="badge-pill" style="background:var(--bg-page);font-size:0.6rem;">' + (catLabels[al.category] || al.category) + '</span>';
+        html += '</div></div>';
+    });
+
+    if (filtered.length === 0) html = '<p style="text-align:center;color:var(--text-light);padding:20px;">No hay alertas con estos filtros.</p>';
+    cont.innerHTML = html;
+}
+
+function filtrarAlertasAgente() { renderAlertasAgente(_alertasActuales); }
+
+// === SUGERENCIAS ===
+function renderSugerenciasAgente(alerts) {
+    var cont = document.getElementById('sugerenciasAgente');
+    if (!alerts || alerts.length === 0) {
+        cont.innerHTML = '<div class="agent-suggestion-card"><p style="font-size:0.85rem;color:#166534;margin:0;"><i class="bi bi-check-circle me-1"></i>Sin sugerencias — la operación está dentro de los parámetros esperados.</p></div>';
+        return;
+    }
+    var sugs = [];
+    var seen = {};
+    alerts.forEach(function(a) {
+        if (a.suggestion && !seen[a.suggestion]) {
+            seen[a.suggestion] = true;
+            sugs.push({ text: a.suggestion, severity: a.severity });
+        }
+    });
+    if (sugs.length === 0) { cont.innerHTML = ''; return; }
+
+    var html = '<div class="agent-suggestion-card">';
+    sugs.forEach(function(s, i) {
+        var col = s.severity === 'critico' ? 'var(--rojo)' : s.severity === 'advertencia' ? '#f59e0b' : 'var(--azul)';
+        html += '<div class="agent-suggestion-item">';
+        html += '<div class="agent-suggestion-number" style="background:' + col + ';">' + (i + 1) + '</div>';
+        html += '<div style="font-size:0.82rem;color:var(--text-main);">' + esc(s.text) + '</div>';
+        html += '</div>';
+    });
+    html += '</div>';
+    cont.innerHTML = html;
+}
+
+// === SEGUIMIENTO DE PERSONAS ===
+function renderSeguimientoPersonas(personas) {
+    var cont = document.getElementById('seguimientoPersonasContainer');
+    if (!personas || personas.length === 0) {
+        cont.innerHTML = '<div style="text-align:center;padding:30px;"><i class="bi bi-hand-thumbs-up" style="font-size:2.5rem;color:#22c55e;"></i><p style="font-size:0.9rem;font-weight:700;color:#166534;margin-top:8px;">Todo el equipo está dentro de los parámetros esperados</p></div>';
+        return;
+    }
+    var html = '';
+    personas.forEach(function(p) {
+        var borderCol = p.severidad === 'critico' ? 'var(--rojo)' : p.severidad === 'advertencia' ? '#f59e0b' : 'var(--azul)';
+        var bgCol = p.severidad === 'critico' ? 'var(--rojo-light)' : p.severidad === 'advertencia' ? '#fffbeb' : 'var(--azul-light)';
+        var iconSev = p.severidad === 'critico' ? 'bi-exclamation-triangle-fill' : p.severidad === 'advertencia' ? 'bi-exclamation-circle-fill' : 'bi-info-circle-fill';
+
+        html += '<div class="agent-persona-card" style="border-left-color:' + borderCol + ';">';
+
+        // Header con nombre y tipo
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+        html += '<div style="display:flex;align-items:center;gap:8px;">';
+        html += '<div style="width:36px;height:36px;border-radius:50%;background:' + borderCol + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.9rem;font-weight:800;">' + esc(p.nombre.charAt(0)) + '</div>';
+        html += '<div><div style="font-size:0.95rem;font-weight:800;color:var(--text-main);">' + esc(p.nombre) + '</div>';
+        html += '<div style="font-size:0.68rem;color:var(--text-light);"><i class="bi ' + iconSev + '" style="color:' + borderCol + ';"></i> ' + esc(p.tipo) + '</div></div>';
+        html += '</div></div>';
+
+        // Datos de sustento
+        html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:10px;">';
+        p.datos.forEach(function(d) {
+            html += '<div style="background:var(--bg-page);border-radius:8px;padding:8px 10px;">';
+            html += '<div style="font-size:0.62rem;font-weight:700;color:var(--text-light);text-transform:uppercase;">' + esc(d.label) + '</div>';
+            html += '<div style="font-size:0.92rem;font-weight:800;color:var(--azul);">' + esc(d.valor) + '</div>';
+            if (d.meta) html += '<div style="font-size:0.6rem;color:var(--text-light);">' + esc(d.meta) + '</div>';
+            html += '</div>';
+        });
+        html += '</div>';
+
+        // Punto de conversación
+        html += '<div style="background:' + bgCol + ';border-radius:8px;padding:10px 12px;">';
+        html += '<div style="font-size:0.65rem;font-weight:700;color:' + borderCol + ';text-transform:uppercase;margin-bottom:4px;"><i class="bi bi-chat-quote me-1"></i>Punto de conversación</div>';
+        var lineas = p.puntoConversacion.split('\n');
+        lineas.forEach(function(linea) {
+            html += '<div style="font-size:0.78rem;color:var(--text-main);line-height:1.4;margin-bottom:2px;">' + esc(linea) + '</div>';
+        });
+        html += '</div>';
+
+        html += '</div>';
+    });
+    cont.innerHTML = html;
+}
+
+// === CALIDAD DATOS ===
+function renderCalidadDatos(dq) {
+    var cont = document.getElementById('calidadDatosContainer');
+    if (!dq) { cont.innerHTML = '<p style="color:var(--text-light);">Sin datos</p>'; return; }
+    var pctOutliers = dq.totalRegistros > 0 ? Math.round(dq.outliers.total / dq.totalRegistros * 1000) / 10 : 0;
+    var items = [
+        { label: 'Registros Hoy', value: dq.totalRegistros, color: 'var(--azul)', icon: 'bi-database', hint: 'Solicitudes gestionadas hoy' },
+        { label: 'Outliers', value: dq.outliers.total, sub: pctOutliers + '%', color: dq.outliers.total > 0 ? '#f59e0b' : '#22c55e', icon: 'bi-graph-up-arrow', hint: 'Tiempos extremadamente altos vs el promedio' },
+        { label: 'Analistas Activos', value: dq.analistasConGestiones + '/' + dq.analistasActivos, color: 'var(--azul)', icon: 'bi-people', hint: 'Con gestiones hoy / total activos' },
+        { label: 'Backlog Actual', value: dq.backlogActual, color: dq.backlogActual > 15 ? 'var(--rojo)' : 'var(--azul)', icon: 'bi-inbox', hint: 'Solicitudes asignadas sin cerrar' }
+    ];
+    var html = '';
+    items.forEach(function(it) {
+        html += '<div class="agent-quality-metric" style="cursor:pointer;" onclick="detalleCalidad(\'' + it.label + '\')">';
+        html += '<i class="bi ' + it.icon + '" style="font-size:1.2rem;color:' + it.color + ';"></i>';
+        html += '<div class="agent-quality-value" style="color:' + it.color + ';">' + it.value + '</div>';
+        html += '<div class="agent-quality-label">' + it.label + '</div>';
+        if (it.sub) html += '<div style="font-size:0.6rem;color:var(--text-light);">' + it.sub + '</div>';
+        html += '<div style="font-size:0.6rem;color:var(--text-light);margin-top:2px;line-height:1.2;">' + it.hint + '</div>';
+        html += '</div>';
+    });
+    cont.innerHTML = html;
+}
+
+function detalleCalidad(label) {
+    if (!_agenteDatos || !_agenteDatos.dataQuality) return;
+    var dq = _agenteDatos.dataQuality;
+    var html = '';
+    if (label === 'Campos Vacíos') {
+        html = '<table class="table table-sm" style="font-size:0.82rem;"><tbody>';
+        html += '<tr><td>Sin ID de solicitud</td><td class="fw-bold">' + dq.camposVacios.sinId + '</td></tr>';
+        html += '<tr><td>Sin estado</td><td class="fw-bold">' + dq.camposVacios.sinEstado + '</td></tr>';
+        html += '<tr><td>Sin analista</td><td class="fw-bold">' + dq.camposVacios.sinAnalista + '</td></tr>';
+        html += '<tr><td>Sin fecha</td><td class="fw-bold">' + dq.camposVacios.sinFecha + '</td></tr>';
+        html += '</tbody></table>';
+    } else if (label === 'Outliers') {
+        html = '<table class="table table-sm" style="font-size:0.82rem;"><tbody>';
+        html += '<tr><td>Outliers T. Gestión</td><td class="fw-bold">' + dq.outliers.gestion + '</td><td style="font-size:0.7rem;color:var(--text-light);">Umbral: >' + dq.outliers.umbralGestion + ' min</td></tr>';
+        html += '<tr><td>Outliers T. General</td><td class="fw-bold">' + dq.outliers.general + '</td><td style="font-size:0.7rem;color:var(--text-light);">Umbral: >' + dq.outliers.umbralGeneral + ' min</td></tr>';
+        html += '</tbody></table>';
+    } else {
+        html = '<p style="font-size:0.85rem;">Total registros: ' + dq.totalRegistros + '<br>Analistas activos: ' + dq.analistasActivos + '<br>Con gestiones hoy: ' + dq.analistasConGestiones + '<br>Backlog actual: ' + dq.backlogActual + '</p>';
+    }
+    Swal.fire({ title: label, html: html, width: 450, confirmButtonColor: '#253150', confirmButtonText: 'Cerrar' });
+}
+
+// === CONFIGURACIÓN ===
+var _listaEmails = [];
+
+function renderConfigAgente(config) {
+    if (!config) return;
+    document.getElementById('cfgSlaPct').value = config.metas.slaPct || 90;
+    document.getElementById('cfgMaxGestion').value = config.metas.maxTiempoGestionMin || 20;
+    document.getElementById('cfgMaxGeneral').value = config.metas.maxTiempoGeneralHoras || 2;
+    document.getElementById('cfgMaxCola').value = config.metas.maxTiempoColaMin || 45;
+    document.getElementById('cfgMaxBacklog').value = config.metas.maxBacklog || 15;
+    document.getElementById('cfgDesviacion').value = config.umbrales.desviacionHistoricaPct || 20;
+    document.getElementById('cfgEnviarCriticas').checked = config.notificaciones.enviarAlertasCriticas !== false;
+    document.getElementById('cfgEnviarResumen').checked = config.notificaciones.enviarResumenDiario !== false;
+
+    // Cargar lista de emails
+    var emailRaw = config.coordinatorEmail || '';
+    _listaEmails = emailRaw.split(',').map(function(e) { return e.trim(); }).filter(function(e) { return e.length > 0; });
+    renderListaDestinatarios();
+}
+
+function renderListaDestinatarios() {
+    var cont = document.getElementById('listaDestinatarios');
+    if (_listaEmails.length === 0) {
+        cont.innerHTML = '<div style="font-size:0.75rem;color:var(--text-light);padding:6px 0;">Sin destinatarios agregados</div>';
+        return;
+    }
+    var html = '';
+    _listaEmails.forEach(function(email, idx) {
+        html += '<div class="agent-email-chip">';
+        html += '<i class="bi bi-envelope-fill" style="font-size:0.65rem;"></i> ';
+        html += '<span>' + esc(email) + '</span>';
+        html += '<button onclick="eliminarDestinatario(' + idx + ')" class="agent-email-chip-remove" title="Eliminar"><i class="bi bi-x"></i></button>';
+        html += '</div>';
+    });
+    cont.innerHTML = html;
+}
+
+function agregarDestinatario() {
+    var input = document.getElementById('cfgEmailInput');
+    var email = (input.value || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+        Swal.fire({ icon: 'warning', title: 'Correo inválido', text: 'Ingresa un correo electrónico válido.', timer: 2000, showConfirmButton: false });
+        return;
+    }
+    if (_listaEmails.indexOf(email) >= 0) {
+        Swal.fire({ icon: 'info', title: 'Ya agregado', text: 'Este correo ya está en la lista.', timer: 1500, showConfirmButton: false });
+        return;
+    }
+    _listaEmails.push(email);
+    input.value = '';
+    renderListaDestinatarios();
+}
+
+function eliminarDestinatario(idx) {
+    _listaEmails.splice(idx, 1);
+    renderListaDestinatarios();
+}
+
+function guardarConfigAgente() {
+    var config = {
+        coordinatorEmail: _listaEmails.join(','),
+        metas: {
+            slaPct: parseInt(document.getElementById('cfgSlaPct').value) || 90,
+            maxTiempoGestionMin: parseInt(document.getElementById('cfgMaxGestion').value) || 20,
+            maxTiempoGeneralHoras: parseFloat(document.getElementById('cfgMaxGeneral').value) || 2,
+            maxTiempoColaMin: parseInt(document.getElementById('cfgMaxCola').value) || 45,
+            maxBacklog: parseInt(document.getElementById('cfgMaxBacklog').value) || 15
+        },
+        umbrales: {
+            desviacionHistoricaPct: parseInt(document.getElementById('cfgDesviacion').value) || 20
+        },
+        notificaciones: {
+            enviarAlertasCriticas: document.getElementById('cfgEnviarCriticas').checked,
+            enviarResumenDiario: document.getElementById('cfgEnviarResumen').checked
+        }
+    };
+    google.script.run
+        .withSuccessHandler(function(res) {
+            Swal.fire({ icon: 'success', title: 'Configuración guardada', text: 'Las metas y umbrales se actualizaron correctamente.', timer: 2000, showConfirmButton: false });
+        })
+        .withFailureHandler(function(e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+        })
+        .agente_guardarConfig(config);
+}
+
+// === HISTORIAL ===
+function renderHistorialAlertas(history) {
+    if ($.fn.DataTable.isDataTable('#tablaHistorialAlertas')) $('#tablaHistorialAlertas').DataTable().destroy();
+    var tb = document.getElementById('cuerpoHistorialAlertas');
+    if (!history || history.length === 0) {
+        tb.innerHTML = '<tr><td colspan="4" class="text-center py-3" style="color:var(--gris);">Sin historial</td></tr>';
+        return;
+    }
+    var sevBadge = { critico: 'background:#fde8e8;color:#BD0F14;', advertencia: 'background:#fef9c3;color:#a16207;', info: 'background:#e8edf6;color:#253150;' };
+    var catLabels = { sla: 'SLA', backlog: 'Backlog', inactividad: 'Inactividad', productividad: 'Productividad', tiempos: 'Tiempos', negacion: 'Negación', calidad: 'Calidad' };
+    var html = '';
+    history.forEach(function(al) {
+        var style = sevBadge[al.severity] || sevBadge.info;
+        html += '<tr><td style="font-size:0.72rem;">' + esc(al.timestamp || '—') + '</td>';
+        html += '<td><span class="badge-pill" style="' + style + '">' + esc(al.severity) + '</span></td>';
+        html += '<td><span class="badge-pill badge-esp-digital">' + esc(catLabels[al.category] || al.category) + '</span></td>';
+        html += '<td>' + esc(al.title) + '</td></tr>';
+    });
+    tb.innerHTML = html;
+    $('#tablaHistorialAlertas').DataTable({ language: { url: '//cdn.datatables.net/plug-ins/1.13.5/i18n/es-ES.json' }, pageLength: 10, order: [[0, 'desc']] });
+}
+
+// === TRIGGERS ===
+function renderEstadoTriggers(triggers) {
+    var cont = document.getElementById('triggerStatusBadge');
+    if (triggers.installed) {
+        cont.innerHTML = '<span class="agent-trigger-badge agent-trigger-active"><i class="bi bi-check-circle-fill"></i> Activos (' + triggers.count + ')</span>';
+    } else {
+        cont.innerHTML = '<span class="agent-trigger-badge agent-trigger-inactive"><i class="bi bi-dash-circle"></i> No instalados</span>';
+    }
+    var detalle = document.getElementById('triggerDetalle');
+    if (!detalle) return;
+    if (!triggers.installed || !triggers.triggers || triggers.triggers.length === 0) {
+        detalle.innerHTML = '<div style="font-size:0.78rem;color:var(--text-light);padding:8px 0;">No hay triggers activos. Instálalos para recibir alertas y resúmenes automáticos.</div>';
+        return;
+    }
+    var descMap = {
+        'agente_triggerHorario': { nombre: 'Revisión Horaria', desc: 'Cada hora (8:00-17:00, lunes a viernes) revisa la operación y envía correo si detecta alertas críticas', icon: 'bi-clock-history', color: 'var(--azul)' },
+        'agente_triggerResumenDiario': { nombre: 'Resumen Diario', desc: 'A las 17:00 (lunes a viernes) envía un correo con el resumen operativo completo del día', icon: 'bi-envelope-paper', color: 'var(--rojo)' }
+    };
+    var html = '';
+    triggers.triggers.forEach(function(t) {
+        var info = descMap[t.functionName] || { nombre: t.functionName, desc: '', icon: 'bi-gear', color: 'var(--gris)' };
+        html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">';
+        html += '<div style="min-width:32px;height:32px;border-radius:8px;background:' + info.color + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.85rem;"><i class="bi ' + info.icon + '"></i></div>';
+        html += '<div><div style="font-size:0.82rem;font-weight:700;color:var(--text-main);">' + info.nombre + '</div>';
+        html += '<div style="font-size:0.72rem;color:var(--text-muted);line-height:1.3;">' + info.desc + '</div></div>';
+        html += '</div>';
+    });
+    detalle.innerHTML = html;
+}
+
+function instalarTriggersAgente() {
+    Swal.fire({ title: 'Instalar Triggers', text: 'Se creará una revisión automática cada hora (8-17h) y un resumen diario a las 17:00. ¿Continuar?', icon: 'question', showCancelButton: true, confirmButtonColor: '#253150', confirmButtonText: 'Instalar', cancelButtonText: 'Cancelar' }).then(function(result) {
+        if (!result.isConfirmed) return;
+        google.script.run
+            .withSuccessHandler(function(res) {
+                Swal.fire({ icon: 'success', title: 'Triggers instalados', text: res.message, timer: 2500, showConfirmButton: false });
+                renderEstadoTriggers({ installed: true, count: 2 });
+            })
+            .withFailureHandler(function(e) { Swal.fire({ icon: 'error', title: 'Error', text: e.message }); })
+            .agente_instalarTriggers();
+    });
+}
+
+function desinstalarTriggersAgente() {
+    Swal.fire({ title: 'Desinstalar Triggers', text: '¿Desactivar las revisiones automáticas?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#BD0F14', confirmButtonText: 'Desinstalar', cancelButtonText: 'Cancelar' }).then(function(result) {
+        if (!result.isConfirmed) return;
+        google.script.run
+            .withSuccessHandler(function() {
+                Swal.fire({ icon: 'success', title: 'Triggers eliminados', timer: 1500, showConfirmButton: false });
+                renderEstadoTriggers({ installed: false, count: 0 });
+            })
+            .withFailureHandler(function(e) { Swal.fire({ icon: 'error', title: 'Error', text: e.message }); })
+            .agente_desinstalarTriggers();
+    });
+}
+
+// === ACCIONES RÁPIDAS ===
+function recalcularAgente() {
+    Swal.fire({ title: 'Recalculando...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
+    google.script.run
+        .withSuccessHandler(function(diagnostico) {
+            Swal.close();
+            _agenteDatos = Object.assign(_agenteDatos || {}, diagnostico);
+            _alertasActuales = diagnostico.alerts || [];
+            renderGaugeHealthScore(diagnostico.healthScore);
+            renderComponentesScore(diagnostico.healthScore);
+            renderKpisResumenAgente(diagnostico.kpis);
+            renderAlertasAgente(diagnostico.alerts);
+            renderSugerenciasAgente(diagnostico.alerts);
+            renderSeguimientoPersonas(diagnostico.seguimientoPersonas);
+            renderCalidadDatos(diagnostico.dataQuality);
+            actualizarBadgeSidebar(diagnostico.alerts);
+            Swal.fire({ icon: 'success', title: 'Diagnóstico actualizado', timer: 1500, showConfirmButton: false });
+        })
+        .withFailureHandler(function(e) { Swal.fire({ icon: 'error', title: 'Error', text: e.message }); })
+        .agente_ejecutarManual();
+}
+
+function enviarResumenManualAgente() {
+    Swal.fire({ title: 'Enviar Resumen', text: 'Se enviará el resumen operativo por correo. ¿Continuar?', icon: 'question', showCancelButton: true, confirmButtonColor: '#253150', confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar' }).then(function(result) {
+        if (!result.isConfirmed) return;
+        Swal.fire({ title: 'Enviando...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
+        google.script.run
+            .withSuccessHandler(function(res) {
+                Swal.close();
+                if (res.sent) {
+                    Swal.fire({ icon: 'success', title: 'Correo enviado', text: 'Resumen enviado a ' + res.to, timer: 2500, showConfirmButton: false });
+                } else {
+                    Swal.fire({ icon: 'warning', title: 'No se envió', text: res.reason });
+                }
+            })
+            .withFailureHandler(function(e) { Swal.fire({ icon: 'error', title: 'Error', text: e.message }); })
+            .agente_enviarResumenManual();
+    });
+}
+
+// === BADGE SIDEBAR ===
+function actualizarBadgeSidebar(alerts) {
+    var badge = document.getElementById('badgeAlertasSidebar');
+    var criticas = (alerts || []).filter(function(a) { return a.severity === 'critico'; });
+    if (criticas.length > 0) {
+        badge.textContent = criticas.length;
+        badge.style.display = 'inline-flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+// === AYUDA CONFIGURACIÓN ===
+var _ayudaConfigTextos = {
+    solDia: { t: 'Solicitudes/día por analista', d: 'Cantidad esperada de solicitudes que cada analista debe gestionar en un día completo de trabajo (9 horas). Si un analista produce significativamente menos, el agente genera una alerta de productividad. Ejemplo: si colocas 25, se espera que cada analista gestione ~25 solicitudes diarias.' },
+    slaPct: { t: 'SLA % meta', d: 'Porcentaje mínimo de solicitudes que deben resolverse dentro del tiempo general permitido (2 horas). Si el cumplimiento cae por debajo de este valor, se genera una alerta. Ejemplo: 90 significa que al menos el 90% de las solicitudes deben cerrarse en menos de 2 horas.' },
+    maxGestion: { t: 'Máx. Tiempo de Gestión (minutos)', d: 'Tiempo máximo promedio aceptable (en minutos) desde que el analista recibe la solicitud hasta que la cierra. Si el promedio del día supera este valor, se genera una alerta de tiempos. Es el tiempo que el analista dedica activamente a trabajar la solicitud.' },
+    maxGeneral: { t: 'Máx. Tiempo General (horas)', d: 'Tiempo máximo promedio aceptable (en horas) desde la radicación de la solicitud hasta su cierre final. Incluye tiempo de cola + tiempo de gestión. Es el indicador principal de SLA. Si supera este valor, se genera una alerta crítica.' },
+    maxCola: { t: 'Máx. Tiempo de Cola (minutos)', d: 'Tiempo máximo promedio aceptable (en minutos) desde que la solicitud se radica hasta que se asigna a un analista. Un valor alto indica que las solicitudes están esperando demasiado antes de ser atendidas. Útil para detectar problemas de asignación.' },
+    maxBacklog: { t: 'Máx. Backlog', d: 'Cantidad máxima aceptable de solicitudes en espera (asignadas pero no cerradas). Si el backlog supera este número, el agente alerta. Un backlog alto puede indicar que faltan analistas o que hay solicitudes estancadas.' },
+    maxNegacion: { t: 'Máx. Tasa de Negación %', d: 'Porcentaje máximo aceptable de solicitudes negadas/rechazadas respecto al total gestionado. Si una sucursal o el global supera este umbral, se genera una alerta. Tasas altas pueden indicar problemas de documentación o criterios muy restrictivos.' },
+    minEquipo: { t: 'Mín. Solicitudes/día del equipo', d: 'Cantidad mínima total de solicitudes que todo el equipo debe gestionar en un día. Sirve como meta global. Se usa en el cálculo del Health Score de productividad. Si el equipo produce menos que este valor, se refleja en el score.' },
+    desviacion: { t: 'Desviación Histórica % umbral', d: 'Porcentaje de desviación permitido respecto al promedio histórico de 30 días. Si una métrica actual se desvía más de este porcentaje (hacia peor), el agente genera una alerta informativa. Ejemplo: 20 significa que si el tiempo de gestión sube más del 20% respecto al promedio, se alerta.' },
+    email: { t: 'Destinatarios de Reportes', d: 'Lista de correos electrónicos que recibirán las alertas críticas y el resumen operativo. Puedes agregar a todas las personas que necesiten estar informadas sobre el estado de la operación (coordinadores, líderes, supervisores, etc.). Escribe el correo y haz click en "Agregar". Para quitar a alguien, haz click en la X junto a su correo.' },
+    enviarCriticas: { t: 'Enviar Alertas Críticas', d: 'Si está activado, el agente enviará un correo automático al coordinador cada vez que detecte alertas de severidad "crítica" durante la revisión horaria (cada hora entre 8:00 y 17:00 de lunes a viernes). Desactívalo si no deseas recibir estos correos.' },
+    enviarResumen: { t: 'Enviar Resumen Diario', d: 'Si está activado, el agente enviará automáticamente un correo con el resumen operativo completo del día a las 17:00 (hora Colombia). Incluye: Health Score, KPIs, alertas, top analistas, backlog y sugerencias para el día siguiente.' },
+    saludOperativa: { t: 'Salud Operativa', d: 'Es un puntaje de <b>0 a 100</b> que resume en un solo número qué tan bien está funcionando la operación en este momento. Se calcula combinando 5 factores:<br><br>• <b>SLA (25%)</b> — ¿Estamos respondiendo dentro del tiempo permitido (2 horas)?<br>• <b>Productividad (20%)</b> — ¿Estamos gestionando la cantidad esperada de solicitudes?<br>• <b>Tiempo de Gestión (15%)</b> — ¿Qué tan rápido trabaja el equipo cada solicitud?<br>• <b>Backlog (15%)</b> — ¿Cuántas solicitudes están acumuladas sin cerrar?<br>• <b>Actividad del Equipo (25%)</b> — ¿Todos los analistas activos están gestionando hoy?<br><br>Las calificaciones son: <b>A</b> (90-100) Excelente · <b>B</b> (75-89) Bien · <b>C</b> (60-74) Regular · <b>D</b> (40-59) Deficiente · <b>F</b> (0-39) Crítico.' },
+    componentes: { t: 'Componentes del Score', d: 'Cada barra representa uno de los 6 factores que componen la Salud Operativa. El número a la derecha es el puntaje de ese factor (0-100) y entre paréntesis su peso en el cálculo total.<br><br>• <b>Verde (80+)</b> — Ese aspecto está bien<br>• <b>Amarillo (60-79)</b> — Necesita atención<br>• <b>Rojo (menos de 60)</b> — Problema que requiere acción<br><br>Esto te permite ver rápidamente <i>qué parte específica</i> de la operación está fallando, en lugar de solo ver un número general.' },
+    seguimiento: { t: 'Analistas que Requieren Seguimiento', d: 'Esta sección identifica automáticamente a los analistas con los que debes conversar hoy, basándose en su rendimiento del día. Cada tarjeta incluye:<br><br>• <b>Nombre del analista</b> y el motivo por el cual necesita seguimiento<br>• <b>Datos de sustento</b> — cifras concretas (gestiones, tiempos, tasas) comparadas con la meta y el promedio del equipo<br>• <b>Punto de conversación</b> — lo que puedes decirle al analista con datos específicos<br><br>Se detectan 3 situaciones: <b>inactividad</b> (sin gestiones hoy), <b>baja producción</b> (por debajo del ritmo esperado a esta hora), <b>tiempos altos</b> (gestión más lenta que la meta) y <b>fuera de SLA</b> (tiempo general mayor a la meta).' },
+    calidadDatos: { t: 'Reporte de Calidad de Datos', d: 'Esta sección revisa automáticamente los registros del día para detectar problemas en los datos de las hojas:<br><br>• <b>Registros Hoy</b> — Total de solicitudes gestionadas hoy<br>• <b>Campos Vacíos</b> — Registros con datos faltantes (ID, estado, analista o fecha). Si hay muchos, las métricas pueden ser imprecisas.<br>• <b>Outliers</b> — Valores atípicos (tiempos extremadamente altos). Pueden ser errores de registro o solicitudes genuinamente complejas.<br>• <b>Analistas Activos</b> — Cuántos analistas han gestionado hoy vs cuántos están marcados como activos.<br>• <b>Backlog Actual</b> — Solicitudes asignadas que aún no se han cerrado.<br><br>Haz click en cualquier tarjeta para ver el desglose detallado.' }
+};
+function ayudaConfig(id) {
+    var info = _ayudaConfigTextos[id];
+    if (!info) return;
+    Swal.fire({ title: info.t, html: '<p style="font-size:0.9rem;color:#253150;line-height:1.6;text-align:left;">' + info.d + '</p>', icon: 'info', confirmButtonColor: '#253150', confirmButtonText: 'Entendido', width: 480 });
+}
+
+// === INTEGRACIÓN CON NAVEGACIÓN ===
+var _originalCambiarTab = cambiarTab;
+cambiarTab = function(tabId, el) {
+    _originalCambiarTab(tabId, el);
+    if (tabId === 'agente' && !_agenteDatos) {
+        cargarDatosAgente();
+    }
+};
 </script>
 <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
 <script>
