@@ -1616,15 +1616,15 @@ function _alerta_slaCumplimiento(registros, config, historicos) {
   var meta = config.metas.slaPct;
 
   if (pctSLA < 70) {
-    alertas.push({ severity: "critico", category: "sla", title: "SLA crítico: " + pctSLA + "%", description: "El cumplimiento de SLA hoy es del " + pctSLA + "%, muy por debajo de la meta del " + meta + "%. Hay " + (totalSLA - dentroSLA) + " solicitudes fuera de SLA.", suggestion: "Revisar inmediatamente las solicitudes con mayor tiempo general. Priorizar backlog y reasignar carga.", affectedEntities: [] });
+    alertas.push({ severity: "critico", category: "sla", title: "SLA crítico: " + pctSLA + "%", description: "El cumplimiento de SLA hoy es del " + pctSLA + "%, muy por debajo de la meta del " + meta + "%. Hay " + (totalSLA - dentroSLA) + " solicitudes fuera de SLA.", suggestion: "Hablar con los analistas que tienen solicitudes con mayor tiempo general para identificar bloqueos. Verificar si hay solicitudes de alta complejidad que requieran apoyo.", affectedEntities: [] });
   } else if (pctSLA < meta) {
-    alertas.push({ severity: "advertencia", category: "sla", title: "SLA por debajo de la meta: " + pctSLA + "%", description: "El cumplimiento SLA (" + pctSLA + "%) está por debajo de la meta (" + meta + "%). " + (totalSLA - dentroSLA) + " solicitudes fuera de SLA.", suggestion: "Monitorear analistas con mayor tiempo general y priorizar solicitudes antiguas en backlog.", affectedEntities: [] });
+    alertas.push({ severity: "advertencia", category: "sla", title: "SLA por debajo de la meta: " + pctSLA + "%", description: "El cumplimiento SLA (" + pctSLA + "%) está por debajo de la meta (" + meta + "%). " + (totalSLA - dentroSLA) + " solicitudes fuera de SLA.", suggestion: "Hacer seguimiento a los analistas con solicitudes más antiguas. Consultar si tienen dudas o si requieren escalamiento por complejidad.", affectedEntities: [] });
   }
 
   if (historicos.slaPct > 0) {
     var desviacion = ((historicos.slaPct - pctSLA) / historicos.slaPct) * 100;
     if (desviacion > config.umbrales.desviacionHistoricaPct) {
-      alertas.push({ severity: "advertencia", category: "sla", title: "SLA desviado del histórico", description: "El SLA hoy (" + pctSLA + "%) se desvía un " + Math.round(desviacion) + "% por debajo del promedio histórico de 30 días (" + historicos.slaPct + "%).", suggestion: "Investigar causas de la caída: mayor complejidad, analistas nuevos, o problemas de cola.", affectedEntities: [] });
+      alertas.push({ severity: "advertencia", category: "sla", title: "SLA desviado del histórico", description: "El SLA hoy (" + pctSLA + "%) se desvía un " + Math.round(desviacion) + "% por debajo del promedio histórico de 30 días (" + historicos.slaPct + "%).", suggestion: "Investigar causas de la caída con el equipo: mayor complejidad en las solicitudes, analistas nuevos en curva de aprendizaje, o novedades del día.", affectedEntities: [] });
     }
   }
   return alertas;
@@ -1638,11 +1638,11 @@ function _alerta_backlogCritico(backlogDetalle, config) {
 
   if (rojos.length > 0) {
     var nombres = rojos.slice(0, 5).map(function(b) { return b.analista + " (" + b.minutosEspera + " min)"; });
-    alertas.push({ severity: "critico", category: "backlog", title: rojos.length + " solicitudes en backlog >90 min", description: "Hay " + rojos.length + " solicitudes esperando más de 90 minutos, fuera de SLA. Total backlog: " + total + ".", suggestion: "Atender inmediatamente estas solicitudes. Considerar redistribuir entre analistas disponibles.", affectedEntities: nombres });
+    alertas.push({ severity: "critico", category: "backlog", title: rojos.length + " solicitudes en backlog >90 min", description: "Hay " + rojos.length + " solicitudes esperando más de 90 minutos, fuera de SLA. Total backlog: " + total + ".", suggestion: "Verificar con los analistas asignados si tienen bloqueos con estas solicitudes. Si la complejidad es alta, evaluar si requieren acompañamiento o escalamiento.", affectedEntities: nombres });
   }
 
   if (total > config.metas.maxBacklog) {
-    alertas.push({ severity: total > config.metas.maxBacklog * 2 ? "critico" : "advertencia", category: "backlog", title: "Backlog alto: " + total + " solicitudes", description: "El backlog actual (" + total + ") supera la meta máxima de " + config.metas.maxBacklog + ". Rojos: " + rojos.length + ", Amarillos: " + amarillos.length + ".", suggestion: "Verificar que todos los analistas estén activos y gestionar prioridad de asignaciones.", affectedEntities: [] });
+    alertas.push({ severity: total > config.metas.maxBacklog * 2 ? "critico" : "advertencia", category: "backlog", title: "Backlog alto: " + total + " solicitudes", description: "El backlog actual (" + total + ") supera la meta máxima de " + config.metas.maxBacklog + ". Rojos: " + rojos.length + ", Amarillos: " + amarillos.length + ".", suggestion: "Confirmar que todos los analistas estén conectados y gestionando. El modelo de asignación ya distribuyó las solicitudes; el foco está en que el equipo las atienda.", affectedEntities: [] });
   }
 
   return alertas;
@@ -1681,7 +1681,7 @@ function _alerta_inactividadAnalistas(analistasActivos, registros, config, cupos
 
   if (inactivos.length > 0) {
     var severity = horasTranscurridas >= 2 ? "critico" : "advertencia";
-    alertas.push({ severity: severity, category: "inactividad", title: inactivos.length + " analista(s) sin gestiones hoy", description: "Los siguientes analistas no han registrado ningún resultado después de " + horasTranscurridas + " horas de operación: " + inactivos.join(", ") + ".", suggestion: "Verificar si están conectados, si tienen solicitudes asignadas, o si necesitan apoyo.", affectedEntities: inactivos });
+    alertas.push({ severity: severity, category: "inactividad", title: inactivos.length + " analista(s) sin gestiones hoy", description: "Los siguientes analistas no han registrado ningún resultado después de " + horasTranscurridas + " horas de operación: " + inactivos.join(", ") + ".", suggestion: "Contactar a estos analistas para confirmar disponibilidad. Verificar si están conectados, si tienen alguna novedad, o si necesitan acompañamiento. Ya tienen solicitudes asignadas por el modelo.", affectedEntities: inactivos });
   }
 
   return alertas;
@@ -1710,7 +1710,7 @@ function _alerta_productividad(registros, config, historicos, analistasActivos, 
   }
 
   if (esperadoEquipo > 0 && totalHoy < esperadoEquipo * 0.7) {
-    alertas.push({ severity: "advertencia", category: "productividad", title: "Producción por debajo del ritmo esperado", description: "Se han gestionado " + totalHoy + " solicitudes pero se esperaban ~" + esperadoEquipo + " a esta hora (basado en " + (totalCuposAsignados > 0 ? totalCuposAsignados + " cupos asignados" : "meta genérica") + ", " + Math.round(horasTranscurridas) + "h transcurridas).", suggestion: "Revisar si hay analistas inactivos, problemas de asignación, o solicitudes de alta complejidad.", affectedEntities: [] });
+    alertas.push({ severity: "advertencia", category: "productividad", title: "Producción por debajo del ritmo esperado", description: "Se han gestionado " + totalHoy + " solicitudes pero se esperaban ~" + esperadoEquipo + " a esta hora (basado en " + (totalCuposAsignados > 0 ? totalCuposAsignados + " cupos asignados" : "meta genérica") + ", " + Math.round(horasTranscurridas) + "h transcurridas).", suggestion: "Verificar si hay analistas inactivos o con novedades. Las solicitudes ya están asignadas; el foco es que el equipo mantenga el ritmo de gestión.", affectedEntities: [] });
   }
 
   if (historicos.porAnalista && Object.keys(historicos.porAnalista).length > 0) {
@@ -1728,7 +1728,7 @@ function _alerta_productividad(registros, config, historicos, analistasActivos, 
     });
 
     if (bajosRendimiento.length > 0) {
-      alertas.push({ severity: "info", category: "productividad", title: bajosRendimiento.length + " analista(s) por debajo de su ritmo habitual", description: "Los siguientes analistas están significativamente por debajo de su promedio histórico para esta hora del día.", suggestion: "Revisar si tienen solicitudes complejas o si hay factores que afectan su productividad.", affectedEntities: bajosRendimiento });
+      alertas.push({ severity: "info", category: "productividad", title: bajosRendimiento.length + " analista(s) por debajo de su ritmo habitual", description: "Los siguientes analistas están significativamente por debajo de su promedio histórico para esta hora del día.", suggestion: "Conversar con estos analistas para entender si tienen solicitudes complejas, dudas técnicas, o alguna novedad que esté afectando su ritmo.", affectedEntities: bajosRendimiento });
     }
   }
 
@@ -1749,30 +1749,30 @@ function _alerta_tiemposAnomalos(registros, config, historicos) {
   var avgCola = cCola > 0 ? Math.round(sumaCola / cCola * 10) / 10 : 0;
 
   if (avgG > config.metas.maxTiempoGestionMin) {
-    alertas.push({ severity: "advertencia", category: "tiempos", title: "Tiempo gestión elevado: " + avgG + " min", description: "El promedio de tiempo de gestión hoy (" + avgG + " min) supera la meta de " + config.metas.maxTiempoGestionMin + " min.", suggestion: "Identificar analistas con tiempos de gestión más altos y verificar si hay solicitudes atípicas.", affectedEntities: [] });
+    alertas.push({ severity: "advertencia", category: "tiempos", title: "Tiempo gestión elevado: " + avgG + " min", description: "El promedio de tiempo de gestión hoy (" + avgG + " min) supera la meta de " + config.metas.maxTiempoGestionMin + " min.", suggestion: "Identificar qué analistas tienen los tiempos más altos y hablar con ellos. Evaluar si hay solicitudes atípicas o si necesitan capacitación en algún tipo de análisis.", affectedEntities: [] });
   }
 
   if (avgR > config.metas.maxTiempoGeneralHoras) {
     var sev = avgR > 3 ? "critico" : "advertencia";
-    alertas.push({ severity: sev, category: "tiempos", title: "Tiempo general elevado: " + avgR + " h", description: "El promedio de tiempo general hoy (" + avgR + " h) supera la meta de " + config.metas.maxTiempoGeneralHoras + " h.", suggestion: "Revisar tiempos de cola y asignación. Puede haber retrasos en la distribución de solicitudes.", affectedEntities: [] });
+    alertas.push({ severity: sev, category: "tiempos", title: "Tiempo general elevado: " + avgR + " h", description: "El promedio de tiempo general hoy (" + avgR + " h) supera la meta de " + config.metas.maxTiempoGeneralHoras + " h.", suggestion: "Revisar si el tiempo de cola antes de asignación es el factor principal. Si los tiempos de gestión son normales, el cuello de botella puede estar en volumen de ingreso vs. capacidad del equipo.", affectedEntities: [] });
   }
 
   if (avgCola > config.metas.maxTiempoColaMin) {
-    alertas.push({ severity: "advertencia", category: "tiempos", title: "Tiempo de cola elevado: " + avgCola + " min", description: "El promedio de tiempo de cola (" + avgCola + " min) supera la meta de " + config.metas.maxTiempoColaMin + " min.", suggestion: "Revisar la velocidad de asignación. Considerar asignar más analistas o automatizar la distribución.", affectedEntities: [] });
+    alertas.push({ severity: "advertencia", category: "tiempos", title: "Tiempo de cola elevado: " + avgCola + " min", description: "El promedio de tiempo de cola (" + avgCola + " min) supera la meta de " + config.metas.maxTiempoColaMin + " min.", suggestion: "El modelo de asignación está distribuyendo, pero la cola es alta. Evaluar si la capacidad actual del equipo es suficiente para el volumen de ingreso o si se necesita refuerzo temporal.", affectedEntities: [] });
   }
 
   var umbral = config.umbrales.desviacionHistoricaPct;
   if (historicos.tiempoGestionMin > 0 && avgG > 0) {
     var desvG = ((avgG - historicos.tiempoGestionMin) / historicos.tiempoGestionMin) * 100;
     if (desvG > umbral) {
-      alertas.push({ severity: "info", category: "tiempos", title: "Tiempo gestión desviado del histórico", description: "El tiempo de gestión hoy (" + avgG + " min) es " + Math.round(desvG) + "% mayor que el promedio de 30 días (" + historicos.tiempoGestionMin + " min).", suggestion: "Analizar si hay cambios en la complejidad de solicitudes o en la composición del equipo.", affectedEntities: [] });
+      alertas.push({ severity: "info", category: "tiempos", title: "Tiempo gestión desviado del histórico", description: "El tiempo de gestión hoy (" + avgG + " min) es " + Math.round(desvG) + "% mayor que el promedio de 30 días (" + historicos.tiempoGestionMin + " min).", suggestion: "Consultar con el equipo si hoy las solicitudes son más complejas de lo habitual o si hay analistas nuevos que aún están en curva de aprendizaje.", affectedEntities: [] });
     }
   }
 
   if (historicos.tiempoColaMin > 0 && avgCola > 0) {
     var desvCola = ((avgCola - historicos.tiempoColaMin) / historicos.tiempoColaMin) * 100;
     if (desvCola > umbral) {
-      alertas.push({ severity: "info", category: "tiempos", title: "Tiempo de cola desviado del histórico", description: "El tiempo de cola hoy (" + avgCola + " min) es " + Math.round(desvCola) + "% mayor que el promedio de 30 días (" + historicos.tiempoColaMin + " min).", suggestion: "Puede indicar menor disponibilidad de analistas o mayor volumen de ingreso de solicitudes.", affectedEntities: [] });
+      alertas.push({ severity: "info", category: "tiempos", title: "Tiempo de cola desviado del histórico", description: "El tiempo de cola hoy (" + avgCola + " min) es " + Math.round(desvCola) + "% mayor que el promedio de 30 días (" + historicos.tiempoColaMin + " min).", suggestion: "Puede indicar mayor volumen de ingreso hoy. Verificar si hay analistas ausentes o con novedades que reduzcan la capacidad de atención del equipo.", affectedEntities: [] });
     }
   }
 
@@ -1801,7 +1801,7 @@ function _alerta_calidadDatos(registros) {
     var detallesOut = [];
     if (outliersG.count > 0) detallesOut.push(outliersG.count + " en T. Gestión (>" + Math.round(outliersG.umbral) + " min)");
     if (outliersR.count > 0) detallesOut.push(outliersR.count + " en T. General (>" + Number(outliersR.umbral * 60).toFixed(0) + " min)");
-    alertas.push({ severity: "info", category: "calidad", title: totalOutliers + " valores atípicos detectados", description: "Se encontraron valores atípicos (>3 desv. estándar): " + detallesOut.join(", ") + ".", suggestion: "Verificar si son errores de registro o solicitudes genuinamente complejas.", affectedEntities: [] });
+    alertas.push({ severity: "info", category: "calidad", title: totalOutliers + " valores atípicos detectados", description: "Se encontraron valores atípicos (>3 desv. estándar): " + detallesOut.join(", ") + ".", suggestion: "Revisar estos casos puntuales con los analistas: pueden ser errores de registro en el sistema o solicitudes con complejidad fuera de lo normal.", affectedEntities: [] });
   }
 
   return alertas;
@@ -2205,74 +2205,123 @@ function agente_obtenerHistorialAlertas() {
 function _construirEmailAlertas(diagnostico) {
   var d = diagnostico;
   var hs = d.healthScore;
-  var gradeColor = hs.grade === "A" ? "#166534" : hs.grade === "B" ? "#253150" : hs.grade === "C" ? "#a16207" : hs.grade === "D" ? "#c2410c" : "#BD0F14";
-  var gradeBg = hs.grade === "A" ? "#d1fae5" : hs.grade === "B" ? "#e8edf6" : hs.grade === "C" ? "#fef9c3" : hs.grade === "D" ? "#fed7aa" : "#fde8e8";
-
-  var html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#f4f5f8;padding:20px;">';
-  html += '<div style="background:#253150;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;text-align:center;">';
-  html += '<h1 style="margin:0;font-size:20px;font-weight:800;">Métricas Análisis</h1>';
-  html += '<p style="margin:6px 0 0;font-size:13px;opacity:0.8;">Alertas Críticas — ' + d.timestamp + '</p></div>';
-
-  html += '<div style="background:#fff;padding:20px 24px;border:1px solid #e5e7eb;">';
-  html += '<div style="text-align:center;margin-bottom:16px;">';
-  html += '<span style="font-size:36px;font-weight:800;color:' + gradeColor + ';">' + hs.score + '</span>';
-  html += '<span style="font-size:14px;font-weight:700;color:' + gradeColor + ';background:' + gradeBg + ';padding:2px 10px;border-radius:6px;margin-left:8px;">' + hs.grade + '</span>';
-  html += '<div style="font-size:12px;color:#706F6F;margin-top:4px;">Salud Operativa</div></div>';
+  var gradeColor = _gradeColor(hs.grade);
+  var gradeBg = _gradeBg(hs.grade);
 
   var criticas = d.alerts.filter(function(a) { return a.severity === "critico"; });
-  criticas.forEach(function(al) {
-    html += '<div style="background:#fde8e8;border-left:4px solid #BD0F14;border-radius:8px;padding:12px 14px;margin-bottom:10px;">';
-    html += '<div style="font-weight:700;font-size:14px;color:#BD0F14;">⚠️ ' + _escHtml(al.title) + '</div>';
-    html += '<div style="font-size:12px;color:#4a4a4a;margin-top:4px;">' + _escHtml(al.description) + '</div>';
-    if (al.suggestion) html += '<div style="font-size:12px;color:#253150;margin-top:6px;font-style:italic;">💡 ' + _escHtml(al.suggestion) + '</div>';
-    if (al.affectedEntities && al.affectedEntities.length > 0) html += '<div style="font-size:11px;color:#706F6F;margin-top:4px;">Afecta: ' + _escHtml(al.affectedEntities.join(", ")) + '</div>';
-    html += '</div>';
-  });
-
   var advertencias = d.alerts.filter(function(a) { return a.severity === "advertencia"; });
-  if (advertencias.length > 0) {
-    html += '<div style="margin-top:12px;"><div style="font-size:12px;font-weight:700;color:#a16207;margin-bottom:6px;">🟡 ' + advertencias.length + ' Advertencia(s)</div>';
-    advertencias.forEach(function(al) {
-      html += '<div style="background:#fffbeb;border-left:3px solid #f59e0b;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">';
-      html += '<strong>' + _escHtml(al.title) + '</strong>';
-      if (al.suggestion) html += '<br><em style="color:#706F6F;">' + _escHtml(al.suggestion) + '</em>';
-      html += '</div>';
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="margin:0;padding:0;background:#f0f2f5;">';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:24px 0;"><tr><td align="center">';
+  html += '<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;font-family:Arial,Helvetica,sans-serif;">';
+
+  // Header con banner rojo de urgencia
+  html += '<tr><td style="background:#BD0F14;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
+  html += '<div style="font-size:28px;margin-bottom:8px;">&#9888;&#65039;</div>';
+  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">ALERTA CRÍTICA</h1>';
+  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">' + criticas.length + ' situación(es) que requiere(n) atención inmediata</p>';
+  html += '</td></tr>';
+
+  // Barra de salud operativa
+  html += '<tr><td style="background:#fff;padding:20px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+  html += '<td style="text-align:center;padding:12px;background:' + gradeBg + ';border-radius:10px;">';
+  html += '<div style="font-size:12px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Salud Operativa</div>';
+  html += '<span style="font-size:40px;font-weight:800;color:' + gradeColor + ';">' + hs.score + '</span>';
+  html += '<span style="font-size:14px;color:#706F6F;">/100</span>';
+  html += '<span style="font-size:16px;font-weight:700;color:' + gradeColor + ';background:#fff;padding:4px 14px;border-radius:8px;margin-left:10px;">' + hs.grade + '</span>';
+  html += '</td></tr></table>';
+  html += '</td></tr>';
+
+  // Sección: Alertas Críticas — qué está pasando
+  html += '<tr><td style="background:#fff;padding:24px 32px;">';
+  html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#BD0F14;border-bottom:2px solid #fde8e8;padding-bottom:10px;">&#128308; Qué está pasando</h2>';
+  criticas.forEach(function(al, idx) {
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;"><tr>';
+    html += '<td style="background:#fde8e8;border-left:5px solid #BD0F14;border-radius:0 10px 10px 0;padding:16px 20px;">';
+    html += '<div style="font-weight:800;font-size:15px;color:#BD0F14;margin-bottom:6px;">' + (idx + 1) + '. ' + _escHtml(al.title) + '</div>';
+    html += '<div style="font-size:14px;color:#4a4a4a;line-height:1.5;">' + _escHtml(al.description) + '</div>';
+    if (al.affectedEntities && al.affectedEntities.length > 0) {
+      html += '<div style="font-size:13px;color:#706F6F;margin-top:8px;"><strong>Personas afectadas:</strong> ' + _escHtml(al.affectedEntities.join(", ")) + '</div>';
+    }
+    html += '</td></tr></table>';
+  });
+  html += '</td></tr>';
+
+  // Sección: Pasos a seguir
+  var sugerencias = criticas.filter(function(a) { return a.suggestion; });
+  if (sugerencias.length > 0) {
+    html += '<tr><td style="background:#fff;padding:0 32px 24px;">';
+    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#166534;border-bottom:2px solid #d1fae5;padding-bottom:10px;">&#9989; Pasos a seguir</h2>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">';
+    sugerencias.forEach(function(al, idx) {
+      html += '<tr><td style="padding:12px 16px;background:' + (idx % 2 === 0 ? "#f0fdf4" : "#fff") + ';border-radius:8px;">';
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+      html += '<td width="32" valign="top" style="padding-right:12px;"><div style="width:28px;height:28px;background:#166534;color:#fff;border-radius:50%;text-align:center;line-height:28px;font-size:13px;font-weight:800;">' + (idx + 1) + '</div></td>';
+      html += '<td style="font-size:14px;color:#253150;line-height:1.5;">' + _escHtml(al.suggestion) + '</td>';
+      html += '</tr></table>';
+      html += '</td></tr>';
     });
-    html += '</div>';
+    html += '</table>';
+    html += '</td></tr>';
   }
 
-  // Seguimiento de personas
+  // Sección: Advertencias (si las hay)
+  if (advertencias.length > 0) {
+    html += '<tr><td style="background:#fff;padding:0 32px 24px;">';
+    html += '<h2 style="margin:0 0 14px;font-size:16px;font-weight:800;color:#a16207;border-bottom:2px solid #fef9c3;padding-bottom:10px;">&#128992; Advertencias (' + advertencias.length + ')</h2>';
+    advertencias.forEach(function(al) {
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;"><tr>';
+      html += '<td style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0;padding:14px 18px;">';
+      html += '<div style="font-weight:700;font-size:14px;color:#92400e;margin-bottom:4px;">' + _escHtml(al.title) + '</div>';
+      if (al.description) html += '<div style="font-size:13px;color:#4a4a4a;line-height:1.4;">' + _escHtml(al.description) + '</div>';
+      if (al.suggestion) html += '<div style="font-size:13px;color:#a16207;margin-top:8px;font-style:italic;">&#128161; ' + _escHtml(al.suggestion) + '</div>';
+      html += '</td></tr></table>';
+    });
+    html += '</td></tr>';
+  }
+
+  // Sección: Hablar con estas personas
   var personas = d.seguimientoPersonas || [];
   if (personas.length > 0) {
-    html += '<div style="margin-top:16px;border-top:2px solid #e5e7eb;padding-top:14px;">';
-    html += '<div style="font-size:13px;font-weight:800;color:#253150;margin-bottom:10px;">👤 Hablar con (' + personas.length + ')</div>';
+    html += '<tr><td style="background:#fff;padding:0 32px 24px;">';
+    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#128101; Seguimiento Individual (' + personas.length + ')</h2>';
     personas.forEach(function(p) {
       var bCol = p.severidad === "critico" ? "#BD0F14" : p.severidad === "advertencia" ? "#f59e0b" : "#253150";
-      html += '<div style="border-left:4px solid ' + bCol + ';border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#f9fafb;">';
-      html += '<div style="font-weight:800;font-size:14px;color:#253150;">' + _escHtml(p.nombre) + '</div>';
-      // Datos compactos
-      html += '<table style="width:100%;border-collapse:collapse;margin:8px 0;"><tr>';
+      var bgCard = p.severidad === "critico" ? "#fef2f2" : p.severidad === "advertencia" ? "#fffbeb" : "#f8fafc";
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;"><tr>';
+      html += '<td style="border-left:5px solid ' + bCol + ';border-radius:0 10px 10px 0;padding:18px 20px;background:' + bgCard + ';">';
+      html += '<div style="font-weight:800;font-size:16px;color:#253150;margin-bottom:10px;">' + _escHtml(p.nombre) + '</div>';
+      // Métricas en tabla
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;"><tr>';
       p.datos.slice(0, 4).forEach(function(dat) {
-        html += '<td style="padding:4px 8px;font-size:10px;background:#e8edf6;border-radius:4px;text-align:center;border:2px solid #f9fafb;">';
-        html += '<div style="color:#706F6F;font-weight:700;">' + _escHtml(dat.label) + '</div>';
-        html += '<div style="font-size:13px;font-weight:800;color:#253150;">' + _escHtml(dat.valor) + '</div>';
-        if (dat.meta) html += '<div style="font-size:9px;color:#94a3b8;">' + _escHtml(dat.meta) + '</div>';
+        html += '<td width="25%" style="padding:8px 6px;text-align:center;background:#fff;border:2px solid ' + bgCard + ';border-radius:8px;">';
+        html += '<div style="font-size:11px;color:#706F6F;font-weight:700;text-transform:uppercase;margin-bottom:4px;">' + _escHtml(dat.label) + '</div>';
+        html += '<div style="font-size:16px;font-weight:800;color:#253150;">' + _escHtml(dat.valor) + '</div>';
+        if (dat.meta) html += '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">Meta: ' + _escHtml(dat.meta) + '</div>';
         html += '</td>';
       });
       html += '</tr></table>';
-      // Punto de conversación
+      // Puntos de conversación
+      html += '<div style="background:#fff;border-radius:8px;padding:12px 14px;">';
+      html += '<div style="font-size:11px;font-weight:700;color:#706F6F;text-transform:uppercase;margin-bottom:6px;">Punto de conversación</div>';
       var lineas = p.puntoConversacion.split("\n");
       lineas.forEach(function(l) {
-        html += '<div style="font-size:11px;color:#4a4a4a;line-height:1.4;margin-top:2px;">💬 ' + _escHtml(l) + '</div>';
+        if (l.trim()) html += '<div style="font-size:13px;color:#4a4a4a;line-height:1.6;margin-bottom:4px;">&#8226; ' + _escHtml(l) + '</div>';
       });
       html += '</div>';
+      html += '</td></tr></table>';
     });
-    html += '</div>';
+    html += '</td></tr>';
   }
 
-  html += '</div>';
-  html += '<div style="background:#253150;color:#fff;padding:14px 24px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;">';
-  html += 'Generado automáticamente por Agente Coordinador — Métricas Análisis</div></div>';
+  // Footer
+  html += '<tr><td style="background:#253150;color:#fff;padding:20px 32px;border-radius:0 0 12px 12px;text-align:center;">';
+  html += '<div style="font-size:12px;opacity:0.9;">Agente Coordinador — Métricas Análisis</div>';
+  html += '<div style="font-size:11px;opacity:0.6;margin-top:4px;">' + d.timestamp + '</div>';
+  html += '</td></tr>';
+
+  html += '</table></td></tr></table></body></html>';
   return html;
 }
 
@@ -2281,107 +2330,189 @@ function _construirEmailResumenDiario(diagnostico) {
   var hs = d.healthScore;
   var k = d.kpis;
   var config = agente_obtenerConfig();
-  var hist = d.historicos || {};
-  var gradeColor = hs.grade === "A" ? "#166534" : hs.grade === "B" ? "#253150" : hs.grade === "C" ? "#a16207" : hs.grade === "D" ? "#c2410c" : "#BD0F14";
-  var gradeBg = hs.grade === "A" ? "#d1fae5" : hs.grade === "B" ? "#e8edf6" : hs.grade === "C" ? "#fef9c3" : hs.grade === "D" ? "#fed7aa" : "#fde8e8";
+  var gradeColor = _gradeColor(hs.grade);
+  var gradeBg = _gradeBg(hs.grade);
 
-  var html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;background:#f4f5f8;padding:20px;">';
-  html += '<div style="background:#253150;color:#fff;padding:24px;border-radius:12px 12px 0 0;text-align:center;">';
-  html += '<h1 style="margin:0;font-size:22px;font-weight:800;">Resumen Operativo</h1>';
-  html += '<p style="margin:6px 0 0;font-size:13px;opacity:0.8;">' + d.timestamp + '</p></div>';
-
-  html += '<div style="background:#fff;padding:24px;border:1px solid #e5e7eb;">';
-
-  // Health Score
-  html += '<div style="text-align:center;margin-bottom:20px;padding:16px;background:#f4f5f8;border-radius:10px;">';
-  html += '<div style="font-size:11px;font-weight:700;color:#706F6F;text-transform:uppercase;">Salud Operativa</div>';
-  html += '<span style="font-size:42px;font-weight:800;color:' + gradeColor + ';">' + hs.score + '</span>';
-  html += '<span style="font-size:14px;font-weight:600;color:#706F6F;">/100</span>';
-  html += '<span style="font-size:16px;font-weight:700;color:' + gradeColor + ';background:' + gradeBg + ';padding:3px 12px;border-radius:8px;margin-left:8px;">' + hs.grade + '</span>';
-  if (hs.components) {
-    html += '<div style="font-size:9px;color:#94a3b8;margin-top:6px;">Puntaje por componente (0 a 100):</div>';
-    html += '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px;">';
-    var compNames = { slaCumplimiento: "SLA", productividad: "Productividad", tiempoGestion: "T.Gestión", backlogSalud: "Backlog", inactividad: "Actividad Equipo" };
-    Object.keys(hs.components).forEach(function(ck) {
-      var c = hs.components[ck];
-      var col = c.value >= 80 ? "#166534" : c.value >= 60 ? "#a16207" : "#BD0F14";
-      html += '<span style="font-size:10px;font-weight:700;color:' + col + ';background:#f4f5f8;border:1px solid #e5e7eb;padding:3px 8px;border-radius:6px;">' + (compNames[ck] || ck) + ': ' + c.value + '/100</span>';
-    });
-    html += '</div>';
-  }
-  html += '</div>';
-
-  // KPIs tabla
-  html += '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;"><tr>';
-  var kpiItems = [
-    { label: "Total", value: k.totalGestionadas, meta: config.metas.minSolicitudesDiaEquipo },
-    { label: "T.Gestión", value: _fmtMinEmail(k.tiempoGestionProm), meta: _fmtMinEmail(config.metas.maxTiempoGestionMin) },
-    { label: "T.General", value: _fmtHorasEmail(k.tiempoGeneralProm), meta: _fmtHorasEmail(config.metas.maxTiempoGeneralHoras) },
-    { label: "Aprob.", value: k.tasaAprobacion + "%", meta: null },
-    { label: "Backlog", value: k.backlog, meta: config.metas.maxBacklog }
-  ];
-  kpiItems.forEach(function(ki) {
-    html += '<td style="text-align:center;padding:10px 4px;border:1px solid #e5e7eb;">';
-    html += '<div style="font-size:10px;font-weight:700;color:#706F6F;">' + ki.label + '</div>';
-    html += '<div style="font-size:20px;font-weight:800;color:#253150;">' + ki.value + '</div>';
-    if (ki.meta !== null) html += '<div style="font-size:9px;color:#94a3b8;">Meta: ' + ki.meta + '</div>';
-    html += '</td>';
-  });
-  html += '</tr></table>';
-
-  // Alertas resumen
   var criticas = d.alerts.filter(function(a) { return a.severity === "critico"; });
   var advertencias = d.alerts.filter(function(a) { return a.severity === "advertencia"; });
   var infos = d.alerts.filter(function(a) { return a.severity === "info"; });
 
-  html += '<div style="margin-bottom:16px;">';
-  html += '<div style="font-size:13px;font-weight:800;color:#253150;margin-bottom:8px;">Alertas (' + d.alerts.length + ')</div>';
-  if (criticas.length > 0) {
-    html += '<div style="background:#fde8e8;border-radius:6px;padding:8px 10px;margin-bottom:4px;font-size:11px;font-weight:700;color:#BD0F14;">🔴 ' + criticas.length + ' Crítica(s): ';
-    html += criticas.map(function(a) { return _escHtml(a.title); }).join(" | ") + '</div>';
-  }
-  if (advertencias.length > 0) {
-    html += '<div style="background:#fffbeb;border-radius:6px;padding:8px 10px;margin-bottom:4px;font-size:11px;font-weight:700;color:#a16207;">🟡 ' + advertencias.length + ' Advertencia(s): ';
-    html += advertencias.map(function(a) { return _escHtml(a.title); }).join(" | ") + '</div>';
-  }
-  if (infos.length > 0) {
-    html += '<div style="background:#e8edf6;border-radius:6px;padding:8px 10px;font-size:11px;font-weight:700;color:#253150;">🔵 ' + infos.length + ' Informativa(s)</div>';
-  }
-  if (d.alerts.length === 0) {
-    html += '<div style="background:#d1fae5;border-radius:6px;padding:8px 10px;font-size:11px;font-weight:700;color:#166534;">✅ Sin alertas — operación saludable</div>';
-  }
-  html += '</div>';
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="margin:0;padding:0;background:#f0f2f5;">';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:24px 0;"><tr><td align="center">';
+  html += '<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;font-family:Arial,Helvetica,sans-serif;">';
 
-  // Top analistas
-  if (d.rankAnalistas && d.rankAnalistas.length > 0) {
-    html += '<div style="margin-bottom:16px;">';
-    html += '<div style="font-size:13px;font-weight:800;color:#253150;margin-bottom:8px;">Top Analistas</div>';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#f4f5f8;"><th style="padding:6px 8px;text-align:left;">Analista</th><th style="text-align:center;padding:6px;">Total</th><th style="text-align:center;padding:6px;">T.Gestión</th></tr>';
-    d.rankAnalistas.slice(0, 5).forEach(function(a) {
-      html += '<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:6px 8px;font-weight:600;">' + _escHtml(a.nombre) + '</td><td style="text-align:center;">' + a.total + '</td><td style="text-align:center;">' + a.tGestionProm + ' min</td></tr>';
+  // Header
+  html += '<tr><td style="background:#253150;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
+  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">Cierre del Día</h1>';
+  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">' + d.timestamp + '</p>';
+  html += '</td></tr>';
+
+  // ═══════════════════════════════════════════
+  // SECCIÓN 1: Salud Operativa (protagonista)
+  // ═══════════════════════════════════════════
+  html += '<tr><td style="background:#fff;padding:28px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+  html += '<td style="text-align:center;padding:20px;background:' + gradeBg + ';border-radius:12px;">';
+  html += '<div style="font-size:12px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Salud Operativa</div>';
+  html += '<span style="font-size:48px;font-weight:800;color:' + gradeColor + ';">' + hs.score + '</span>';
+  html += '<span style="font-size:16px;color:#706F6F;">/100</span>';
+  html += '<span style="font-size:18px;font-weight:700;color:' + gradeColor + ';background:#fff;padding:4px 16px;border-radius:8px;margin-left:12px;">' + hs.grade + '</span>';
+  html += '</td></tr></table>';
+
+  // Componentes del score (tabla en vez de flex)
+  if (hs.components) {
+    var compNames = { slaCumplimiento: "SLA", productividad: "Productividad", tiempoGestion: "T. Gestión", backlogSalud: "Backlog", inactividad: "Actividad Equipo" };
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px;"><tr>';
+    Object.keys(hs.components).forEach(function(ck) {
+      var c = hs.components[ck];
+      var col = c.value >= 80 ? "#166534" : c.value >= 60 ? "#a16207" : "#BD0F14";
+      var bg = c.value >= 80 ? "#d1fae5" : c.value >= 60 ? "#fef9c3" : "#fde8e8";
+      html += '<td style="text-align:center;padding:8px 4px;">';
+      html += '<div style="font-size:11px;color:#706F6F;font-weight:700;margin-bottom:4px;">' + (compNames[ck] || ck) + '</div>';
+      html += '<div style="font-size:16px;font-weight:800;color:' + col + ';background:' + bg + ';padding:6px 4px;border-radius:8px;">' + c.value + '</div>';
+      html += '</td>';
     });
-    html += '</table></div>';
+    html += '</tr></table>';
+  }
+  html += '</td></tr>';
+
+  // ═══════════════════════════════════════════
+  // SECCIÓN 2: Métricas Principales
+  // ═══════════════════════════════════════════
+  html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#128202; Métricas del Día</h2>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-bottom:4px;">';
+
+  var kpiItems = [
+    { label: "Solicitudes Gestionadas", value: k.totalGestionadas, meta: config.metas.minSolicitudesDiaEquipo, icon: "&#128196;" },
+    { label: "Tiempo de Gestión", value: _fmtMinEmail(k.tiempoGestionProm), meta: _fmtMinEmail(config.metas.maxTiempoGestionMin), icon: "&#9201;" },
+    { label: "Tiempo General", value: _fmtHorasEmail(k.tiempoGeneralProm), meta: _fmtHorasEmail(config.metas.maxTiempoGeneralHoras), icon: "&#128337;" },
+    { label: "Tasa de Aprobación", value: k.tasaAprobacion + "%", meta: null, icon: "&#9989;" },
+    { label: "Backlog Pendiente", value: k.backlog, meta: config.metas.maxBacklog, icon: "&#128203;" }
+  ];
+
+  // Primera fila: 3 KPIs
+  html += '<tr>';
+  kpiItems.slice(0, 3).forEach(function(ki) {
+    html += '<td width="33%" style="text-align:center;padding:14px 8px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:12px;font-weight:700;color:#706F6F;margin-bottom:6px;">' + ki.icon + ' ' + ki.label + '</div>';
+    html += '<div style="font-size:24px;font-weight:800;color:#253150;">' + ki.value + '</div>';
+    if (ki.meta !== null) html += '<div style="font-size:11px;color:#94a3b8;margin-top:4px;">Meta: ' + ki.meta + '</div>';
+    html += '</td>';
+  });
+  html += '</tr>';
+  // Segunda fila: 2 KPIs centrados
+  html += '<tr>';
+  html += '<td width="33%"></td>';
+  kpiItems.slice(3, 5).forEach(function(ki) {
+    html += '<td width="33%" style="text-align:center;padding:14px 8px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:12px;font-weight:700;color:#706F6F;margin-bottom:6px;">' + ki.icon + ' ' + ki.label + '</div>';
+    html += '<div style="font-size:24px;font-weight:800;color:#253150;">' + ki.value + '</div>';
+    if (ki.meta !== null) html += '<div style="font-size:11px;color:#94a3b8;margin-top:4px;">Meta: ' + ki.meta + '</div>';
+    html += '</td>';
+  });
+  html += '</tr>';
+  html += '</table>';
+  html += '</td></tr>';
+
+  // ═══════════════════════════════════════════
+  // SECCIÓN 3: Estado de Alertas
+  // ═══════════════════════════════════════════
+  html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#128276; Estado de Alertas</h2>';
+
+  if (d.alerts.length === 0) {
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+    html += '<td style="background:#d1fae5;border-radius:10px;padding:16px 20px;text-align:center;">';
+    html += '<div style="font-size:15px;font-weight:700;color:#166534;">&#9989; Sin alertas — Operación saludable</div>';
+    html += '</td></tr></table>';
+  } else {
+    if (criticas.length > 0) {
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;"><tr>';
+      html += '<td style="background:#fde8e8;border-left:5px solid #BD0F14;border-radius:0 10px 10px 0;padding:14px 18px;">';
+      html += '<div style="font-weight:800;font-size:14px;color:#BD0F14;margin-bottom:6px;">&#128308; ' + criticas.length + ' Alerta(s) Crítica(s)</div>';
+      criticas.forEach(function(a) {
+        html += '<div style="font-size:13px;color:#4a4a4a;line-height:1.5;margin-bottom:4px;">&#8226; <strong>' + _escHtml(a.title) + '</strong></div>';
+      });
+      html += '</td></tr></table>';
+    }
+    if (advertencias.length > 0) {
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;"><tr>';
+      html += '<td style="background:#fffbeb;border-left:5px solid #f59e0b;border-radius:0 10px 10px 0;padding:14px 18px;">';
+      html += '<div style="font-weight:800;font-size:14px;color:#a16207;margin-bottom:6px;">&#128992; ' + advertencias.length + ' Advertencia(s)</div>';
+      advertencias.forEach(function(a) {
+        html += '<div style="font-size:13px;color:#4a4a4a;line-height:1.5;margin-bottom:4px;">&#8226; ' + _escHtml(a.title) + '</div>';
+      });
+      html += '</td></tr></table>';
+    }
+    if (infos.length > 0) {
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+      html += '<td style="background:#e8edf6;border-left:5px solid #253150;border-radius:0 10px 10px 0;padding:14px 18px;">';
+      html += '<div style="font-weight:800;font-size:14px;color:#253150;">&#128309; ' + infos.length + ' Informativa(s)</div>';
+      html += '</td></tr></table>';
+    }
+  }
+  html += '</td></tr>';
+
+  // ═══════════════════════════════════════════
+  // SECCIÓN 4: Top Analistas
+  // ═══════════════════════════════════════════
+  if (d.rankAnalistas && d.rankAnalistas.length > 0) {
+    html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#127942; Desempeño del Equipo</h2>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">';
+    html += '<tr style="background:#253150;"><th style="padding:10px 14px;text-align:left;font-size:13px;color:#fff;font-weight:700;border-radius:8px 0 0 0;">Analista</th><th style="padding:10px 12px;text-align:center;font-size:13px;color:#fff;font-weight:700;">Solicitudes</th><th style="padding:10px 14px;text-align:center;font-size:13px;color:#fff;font-weight:700;border-radius:0 8px 0 0;">T. Gestión</th></tr>';
+    d.rankAnalistas.slice(0, 5).forEach(function(a, idx) {
+      var rowBg = idx % 2 === 0 ? "#f8fafc" : "#fff";
+      var medal = idx === 0 ? "&#129351; " : idx === 1 ? "&#129352; " : idx === 2 ? "&#129353; " : "";
+      html += '<tr><td style="padding:10px 14px;font-weight:600;font-size:13px;color:#253150;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + medal + _escHtml(a.nombre) + '</td>';
+      html += '<td style="text-align:center;padding:10px 12px;font-size:14px;font-weight:800;color:#253150;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + a.total + '</td>';
+      html += '<td style="text-align:center;padding:10px 14px;font-size:14px;font-weight:600;color:#706F6F;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + a.tGestionProm + ' min</td></tr>';
+    });
+    html += '</table>';
+    html += '</td></tr>';
   }
 
-  // Sugerencias
+  // ═══════════════════════════════════════════
+  // SECCIÓN 5: Pasos a Seguir / Sugerencias
+  // ═══════════════════════════════════════════
   var sugerencias = d.alerts.filter(function(a) { return a.suggestion; }).map(function(a) { return a.suggestion; });
   if (sugerencias.length > 0) {
-    html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:12px;">';
-    html += '<div style="font-size:12px;font-weight:800;color:#166534;margin-bottom:6px;">Sugerencias</div>';
+    html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#166534;border-bottom:2px solid #d1fae5;padding-bottom:10px;">&#127919; Pasos a Seguir</h2>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">';
     sugerencias.slice(0, 5).forEach(function(s, i) {
-      html += '<div style="font-size:11px;color:#253150;margin-bottom:4px;">' + (i + 1) + '. ' + _escHtml(s) + '</div>';
+      html += '<tr><td style="padding:12px 14px;background:' + (i % 2 === 0 ? "#f0fdf4" : "#fff") + ';border-radius:8px;">';
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+      html += '<td width="36" valign="top" style="padding-right:12px;"><div style="width:30px;height:30px;background:#166534;color:#fff;border-radius:50%;text-align:center;line-height:30px;font-size:14px;font-weight:800;">' + (i + 1) + '</div></td>';
+      html += '<td style="font-size:14px;color:#253150;line-height:1.5;">' + _escHtml(s) + '</td>';
+      html += '</tr></table>';
+      html += '</td></tr>';
     });
-    html += '</div>';
+    html += '</table>';
+    html += '</td></tr>';
   }
 
-  html += '</div>';
-  html += '<div style="background:#253150;color:#fff;padding:14px 24px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;">';
-  html += 'Generado automáticamente por Agente Coordinador — Métricas Análisis</div></div>';
+  // Footer
+  html += '<tr><td style="background:#253150;color:#fff;padding:20px 32px;border-radius:0 0 12px 12px;text-align:center;">';
+  html += '<div style="font-size:12px;opacity:0.9;">Agente Coordinador — Métricas Análisis</div>';
+  html += '<div style="font-size:11px;opacity:0.6;margin-top:4px;">' + d.timestamp + '</div>';
+  html += '</td></tr>';
+
+  html += '</table></td></tr></table></body></html>';
   return html;
 }
 
 function _escHtml(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function _gradeColor(grade) {
+  return grade === "A" ? "#166534" : grade === "B" ? "#253150" : grade === "C" ? "#a16207" : grade === "D" ? "#c2410c" : "#BD0F14";
+}
+
+function _gradeBg(grade) {
+  return grade === "A" ? "#d1fae5" : grade === "B" ? "#e8edf6" : grade === "C" ? "#fef9c3" : grade === "D" ? "#fed7aa" : "#fde8e8";
 }
 
 function _fmtMinEmail(min) {
@@ -2425,13 +2556,15 @@ function agente_enviarAlertasCriticas(diagnostico) {
   if (emails.length === 0) return { sent: false, reason: "sin destinatarios" };
   var email = emails.join(",");
 
-  var fecha = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
+  var ahora = new Date();
+  var fecha = Utilities.formatDate(ahora, TIMEZONE, "dd/MM/yyyy");
+  var hora = Utilities.formatDate(ahora, TIMEZONE, "HH:mm");
   var html = _construirEmailAlertas(diagnostico);
 
   try {
     MailApp.sendEmail({
       to: email,
-      subject: "Métricas Análisis - " + criticas.length + " alerta(s) crítica(s) - " + fecha,
+      subject: "ALERTA CRITICA | " + criticas.length + " situación(es) requiere(n) atención | " + fecha + " " + hora,
       htmlBody: html,
       noReply: true
     });
@@ -2450,13 +2583,15 @@ function agente_enviarResumenDiario() {
   if (emails.length === 0) return { sent: false, reason: "sin destinatarios" };
   var email = emails.join(",");
 
-  var fecha = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
+  var ahora = new Date();
+  var fecha = Utilities.formatDate(ahora, TIMEZONE, "dd/MM/yyyy");
+  var hs = diagnostico.healthScore || {};
   var html = _construirEmailResumenDiario(diagnostico);
 
   try {
     MailApp.sendEmail({
       to: email,
-      subject: "Métricas Análisis - Resumen Operativo " + fecha,
+      subject: "Cierre del Día | Salud " + (hs.score || "—") + "/100 (" + (hs.grade || "—") + ") | " + fecha,
       htmlBody: html,
       noReply: true
     });
