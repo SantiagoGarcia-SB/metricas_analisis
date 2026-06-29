@@ -289,4 +289,36 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
     transition:color 0.15s;
 }
 .agent-email-chip-remove:hover { color:var(--rojo); }
+
+/* Cola de Asignación */
+.cola-card {
+    background:#fff; border:2px solid var(--border); border-radius:14px;
+    padding:14px 12px; display:flex; flex-direction:column; align-items:center;
+    gap:4px; transition:border-color 0.2s;
+}
+.cola-card:hover { border-color:var(--azul-mid); }
+.cola-card-icon { font-size:1rem; color:var(--text-muted); }
+.cola-card-label { font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; text-align:center; }
+.cola-card-value { font-size:1.8rem; font-weight:800; color:var(--azul); line-height:1; }
+.cola-card-highlight { border-color:var(--azul-light); background:var(--azul-light); }
+.cola-card-highlight .cola-card-value { color:var(--azul); }
+.cola-card-highlight .cola-card-label { color:var(--azul); }
+.cola-card-muted .cola-card-value { font-size:1.5rem; color:var(--text-muted); }
+.cola-card-green { border-color:#d1fae5; background:#ecfdf5; }
+.cola-card-green .cola-card-value { color:#059669; font-size:2rem; }
+.cola-card-green .cola-card-label { color:#059669; }
+.cola-card-green .cola-card-icon { color:#059669; }
+
+/* Biometría KPIs */
+.bio-kpi-card {
+    background:#fff; border:1.5px solid var(--border); border-radius:14px;
+    padding:16px 14px; text-align:center;
+}
+.bio-kpi-label { font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+.bio-kpi-value { font-size:1.8rem; font-weight:800; color:var(--azul); line-height:1; margin-bottom:4px; }
+.bio-kpi-sub { font-size:0.65rem; color:var(--text-light); }
+.bio-kpi-success { border-color:#d1fae5; background:#ecfdf5; }
+.bio-kpi-success .bio-kpi-value { color:#059669; }
+.bio-kpi-warning { border-color:#fef3c7; background:#fffbeb; }
+.bio-kpi-warning .bio-kpi-value { color:#d97706; }
 </style>

@@ -18,6 +18,7 @@ var chartVolumenSucursal=null, chartTiemposSucursal=null;
 var _tiemposDetalleData=[], _porAnalistaCompleto=null, _modoRendimiento='dia';
 var _segmentacionData={}, _datosCompletos=null;
 var _debouncePolizaTimer=null;
+var _debounceSolicitudTimer=null;
 var _ultimosTiemposFiltrados=[];
 
 // === NAVEGACIÓN ===
@@ -30,19 +31,59 @@ function cambiarTab(tabId, el) {
 
 // === INICIALIZACIÓN ===
 window.onload = function() {
+    document.getElementById('metricasSpinner').style.display = 'none';
     google.script.run.withSuccessHandler(function(email) {
         if(email){var p=email.split('@')[0];document.getElementById('adminEmail').innerText=p.split('.').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(' ');}
     }).getEmailUsuario();
+    google.script.run.withSuccessHandler(aplicarPermisos).obtenerPermisoUsuario();
+};
+
+function _initFechasYCargar() {
     var h=new Date(), yyyy=h.getFullYear(), mm=String(h.getMonth()+1).padStart(2,'0'), dd=String(h.getDate()).padStart(2,'0');
     document.getElementById('filtroFechaSeguimiento').value=yyyy+'-'+mm+'-'+dd;
     document.getElementById('filtroFechaSeguimiento').max=yyyy+'-'+mm+'-'+dd;
     document.getElementById('filtroFechaRendimiento').value=yyyy+'-'+mm+'-'+dd;
     document.getElementById('filtroFechaRendimiento').max=yyyy+'-'+mm+'-'+dd;
     setRangoRapido('semana');
-};
+}
+
+function aplicarPermisos(permiso) {
+    if (permiso.rol === 'coordinador') {
+        document.getElementById('sidebarNav').style.display = '';
+        document.getElementById('barraFiltrosFecha').style.display = '';
+        document.getElementById('barraFiltrosGenerales').style.display = '';
+        _initFechasYCargar();
+    } else if (permiso.rol === 'biometria') {
+        document.getElementById('sidebarNav').style.display = '';
+        document.querySelectorAll('.nav-link-admin').forEach(function(a) {
+            var onclick = a.getAttribute('onclick') || '';
+            var esBio = onclick.indexOf("'biometria'") !== -1;
+            if (!esBio) a.style.setProperty('display', 'none', 'important');
+            else a.classList.add('active');
+        });
+        document.getElementById('metricasSpinner').style.display = 'none';
+        document.getElementById('metricasContenido').style.display = 'block';
+        document.getElementById('tab-biometria').style.display = 'block';
+        cargarDatosBiometria();
+    } else if (permiso.rol === 'sin_acceso') {
+        document.getElementById('metricasSpinner').style.display = 'none';
+        document.getElementById('metricasContenido').style.display = 'none';
+        document.getElementById('barraFiltrosFecha').style.setProperty('display', 'none', 'important');
+        document.getElementById('barraFiltrosGenerales').style.setProperty('display', 'none', 'important');
+        document.querySelectorAll('.nav-link-admin').forEach(function(a) {
+            a.style.setProperty('display', 'none', 'important');
+        });
+        var main = document.querySelector('.main-content');
+        var aviso = document.createElement('div');
+        aviso.className = 'text-center py-5';
+        aviso.innerHTML = '<div style="margin-top:80px;"><i class="bi bi-shield-lock" style="font-size:4rem;color:var(--text-light);"></i><h3 style="color:var(--text-muted);margin-top:16px;">Sin acceso</h3><p style="color:var(--text-light);font-size:0.85rem;">Tu cuenta <strong>' + esc(permiso.email) + '</strong> no tiene permisos para ver este tablero.<br>Contacta al coordinador del área para solicitar acceso.</p></div>';
+        main.appendChild(aviso);
+    }
+}
 
 // === UTILIDADES ===
-function setRangoRapido(tipo){var h=new Date(),d=new Date();if(tipo==='hoy')d=new Date(h);else if(tipo==='semana')d.setDate(h.getDate()-7);else if(tipo==='mes')d.setDate(h.getDate()-30);else if(tipo==='4meses')d.setMonth(h.getMonth()-4);document.getElementById('metricaDesde').value=fmtDI(d);document.getElementById('metricaHasta').value=fmtDI(h);cargarMetricas();}
+function _calcRango(tipo){var h=new Date(),d=new Date();if(tipo==='hoy'){d=new Date(h);}else if(tipo==='semana'){var dow=h.getDay()||7;d.setDate(h.getDate()-(dow-1));}else if(tipo==='mesActual'){d=new Date(h.getFullYear(),h.getMonth(),1);}else if(tipo==='bimestre'){d=new Date(h.getFullYear(),h.getMonth()-1,1);}else if(tipo==='trimestre'){d=new Date(h.getFullYear(),h.getMonth()-2,1);}return{desde:d,hasta:h};}
+function setRangoRapido(tipo){var r=_calcRango(tipo);document.getElementById('metricaDesde').value=fmtDI(r.desde);document.getElementById('metricaHasta').value=fmtDI(r.hasta);cargarMetricas();}
 function fmtDI(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function fmtDB(v){if(!v)return '';var p=v.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function aplicarFiltroFechas(){if(!document.getElementById('metricaDesde').value||!document.getElementById('metricaHasta').value){Swal.fire({icon:'warning',title:'Fechas incompletas'});return;}cargarMetricas();}
@@ -73,6 +114,7 @@ function onDatosCargados(datos){
     aplicarFiltroSegmentoGlobal();
     cargarRendimientoPorDia();
     cargarAsesoresActivosPrimerResultado();
+    cargarColaAsignacion();
 }
 function mostrarAvisoReestudios(disponible){
     var prev=document.getElementById('avisoReestudios');
@@ -105,6 +147,7 @@ function poblarFiltrosGenerales(td){
 
 function obtenerFiltrosGenerales(){
     return {
+        solicitud: (document.getElementById('filtroSolicitud').value||'').trim().toLowerCase(),
         poliza: (document.getElementById('filtroPoliza').value||'').trim().toLowerCase(),
         sucursal: document.getElementById('filtroSucursalGlobal').value,
         tipo: document.getElementById('filtroTipoGlobal').value,
@@ -116,6 +159,7 @@ function obtenerFiltrosGenerales(){
 function aplicarFiltrosGeneralesADatos(tiempos){
     var f=obtenerFiltrosGenerales();
     return tiempos.filter(function(r){
+        if(f.solicitud && !(r.solicitud||'').toLowerCase().includes(f.solicitud)) return false;
         if(f.poliza && !(r.poliza||'').toLowerCase().includes(f.poliza)) return false;
         if(f.sucursal!=='todas' && r.sucursal && r.sucursal!==f.sucursal) return false;
         if(f.tipo!=='todos' && r.tipo && r.tipo!==f.tipo) return false;
@@ -128,6 +172,7 @@ function aplicarFiltrosGeneralesADatos(tiempos){
 function aplicarFiltrosGenerales(){ aplicarFiltroSegmentoGlobal(); }
 
 function limpiarFiltrosGenerales(){
+    document.getElementById('filtroSolicitud').value='';
     document.getElementById('filtroPoliza').value='';
     document.getElementById('filtroSucursalGlobal').value='todas';
     document.getElementById('filtroTipoGlobal').value='todos';
@@ -139,6 +184,11 @@ function limpiarFiltrosGenerales(){
 function debounceFiltroPoliza(){
     if(_debouncePolizaTimer) clearTimeout(_debouncePolizaTimer);
     _debouncePolizaTimer=setTimeout(function(){ aplicarFiltrosGenerales(); },400);
+}
+
+function debounceFiltroSolicitud(){
+    if(_debounceSolicitudTimer) clearTimeout(_debounceSolicitudTimer);
+    _debounceSolicitudTimer=setTimeout(function(){ aplicarFiltrosGenerales(); },400);
 }
 
 // === DRILL-DOWN KPI ===
@@ -171,6 +221,12 @@ function drilldownKPI(tipo){
         titulo='Solicitudes Aprobadas ('+lista.length+')';
         tiempoLabel='T. Gestión';
         tiempoFn=function(r){return r.tGestion!=null?formatearDuracion(r.tGestion):'—';};
+    } else if(tipo==='negacionDirecta'){
+        var nd=_datosCompletos?(_datosCompletos.negacionDirecta||0):0;
+        var pct=_datosCompletos?(_datosCompletos.pctNegacionDirecta||0):0;
+        var tr=_datosCompletos?(_datosCompletos.totalRadicadas||0):0;
+        Swal.fire({title:'Negación Directa',html:'<div style="text-align:center;"><div style="font-size:3rem;font-weight:800;color:#BD0F14;">'+nd+'</div><div style="font-size:0.85rem;color:#706F6F;margin-top:4px;">solicitudes rechazadas directamente por SAI</div><div style="font-size:1.2rem;font-weight:700;margin-top:12px;">'+pct+'% de '+tr+' radicadas</div><div style="font-size:0.75rem;color:#706F6F;margin-top:8px;">Total radicadas = Histórico Gestiones + Reestudios + Negación Directa</div></div>',width:450,confirmButtonColor:'#BD0F14',confirmButtonText:'Cerrar'});
+        return;
     } else if(tipo==='backlog'){
         lista=window._backlogDetalle||[];
         titulo='Backlog Activo ('+lista.length+')';
@@ -218,7 +274,22 @@ var _ayudaTextos={
     tiemposPorTipo:{t:'Comparativa Tiempos por Tipo',d:'Promedio de tiempo de gestión para cada tipo de estudio. Identifica qué tipos de solicitudes requieren más tiempo de análisis.'},
     tiemposRespuesta:{t:'Tiempos de Respuesta',d:'Evolución diaria del promedio de T. Gestión (minutos) y T. General (horas). Se puede filtrar por sucursal y tipo. Ideal para detectar días con demoras atípicas.'},
     dispersion:{t:'Rapidez y Productividad',d:'Gráfico de dispersión: eje X = volumen de solicitudes, eje Y = tiempo promedio de gestión. Verde = alto volumen + rápido (ideal). Rojo = bajo volumen + lento (revisar). Permite evaluar eficiencia individual.'},
-    rendimientoIndividual:{t:'Rendimiento Individual',d:'Tabla de métricas por analista para el día o rango seleccionado. Cada columna aporta una dimensión de análisis:<br><br><b>Total / Aprob. / Neg. / Aplaz.</b> — volumen gestionado y distribución de resultados. Una tasa alta de negaciones puede reflejar criterio restrictivo o baja calidad en los expedientes recibidos.<br><br><b>T. Gestión</b> — tiempo promedio desde la asignación hasta el cierre. Mide la velocidad real de trabajo del analista una vez tiene la solicitud en mano.<br><br><b>T. General</b> — tiempo desde la radicación hasta el cierre. Si es muy superior al T. Gestión, la solicitud esperó mucho en cola antes de ser asignada.<br><br><b>Ritmo/h</b> — solicitudes por hora calculadas entre la primera y la última gestión del día. Refleja la velocidad cuando el analista está activo. Un valor alto indica trabajo ágil en el tramo productivo.<br><br><b>Prod/h</b> — solicitudes totales divididas entre las horas de turno transcurridas. Si es notablemente menor que el Ritmo/h, el analista tuvo períodos prolongados sin gestionar.<br><br><b>Fuera SLA</b> — solicitudes con T. General mayor a 2 horas. Un número alto en un analista puede indicar casos complejos o tiempos de espera elevados previos a la asignación.<br><br>El botón <i class="bi bi-bar-chart-steps"></i> muestra la distribución de gestiones hora a hora.'}
+    rendimientoIndividual:{t:'Rendimiento Individual',d:'Tabla de métricas por analista para el día o rango seleccionado. Cada columna aporta una dimensión de análisis:<br><br><b>Total / Aprob. / Neg. / Aplaz.</b> — volumen gestionado y distribución de resultados. Una tasa alta de negaciones puede reflejar criterio restrictivo o baja calidad en los expedientes recibidos.<br><br><b>T. Gestión</b> — tiempo promedio desde la asignación hasta el cierre. Mide la velocidad real de trabajo del analista una vez tiene la solicitud en mano.<br><br><b>T. General</b> — tiempo desde la radicación hasta el cierre. Si es muy superior al T. Gestión, la solicitud esperó mucho en cola antes de ser asignada.<br><br><b>Ritmo/h</b> — solicitudes por hora calculadas entre la primera y la última gestión del día. Refleja la velocidad cuando el analista está activo. Un valor alto indica trabajo ágil en el tramo productivo.<br><br><b>Prod/h</b> — solicitudes totales divididas entre las horas de turno transcurridas. Si es notablemente menor que el Ritmo/h, el analista tuvo períodos prolongados sin gestionar.<br><br><b>Fuera SLA</b> — solicitudes con T. General mayor a 2 horas. Un número alto en un analista puede indicar casos complejos o tiempos de espera elevados previos a la asignación.<br><br>El botón <i class="bi bi-bar-chart-steps"></i> muestra la distribución de gestiones hora a hora.'},
+    bioConsultadas:{t:'Consultadas SAI',d:'Total de solicitudes con estado Pendiente Biometría que el API de SAI reportó en el período. Estas son las solicitudes que entran al ciclo de broadcast antes de ser asignadas a un analista.'},
+    bioEnviados:{t:'Broadcasts Enviados',d:'Cantidad de mensajes de WhatsApp enviados exitosamente a los clientes para notificarles sobre la biometría pendiente. Se envían a las 8am y 12m.'},
+    bioTasaEnvio:{t:'Tasa de Envío',d:'Porcentaje de solicitudes consultadas a las que se logró enviar el mensaje de WhatsApp. Una tasa baja puede indicar problemas con números telefónicos incorrectos o fallas en el servicio de mensajería.'},
+    bioResueltas:{t:'Resueltas sin Asignar',d:'Solicitudes donde el cliente completó la biometría tras recibir el mensaje, sin necesidad de que un analista las gestionara. Cada solicitud resuelta aquí es una llamada menos para el equipo.'},
+    bioEnviadasCola:{t:'Enviadas a Cola',d:'Solicitudes donde el cliente NO completó la biometría tras el mensaje. Se envían a la cola de asignación para que un analista contacte al cliente por teléfono.'},
+    bioTasaConversion:{t:'Tasa de Conversión',d:'Porcentaje de solicitudes que se resolvieron sin asignar (biometría completada tras el WhatsApp) sobre el total consultado. Esta es la métrica clave para evaluar si el broadcast de WhatsApp es efectivo. Una tasa alta significa que el mensaje está funcionando y reduce la carga operativa del equipo.'},
+    bioEfectividad:{t:'Resultado del Broadcast',d:'Muestra qué pasó después de enviar el WhatsApp a los clientes con biometría pendiente:<br><br><b>Completó biometría:</b> el cliente realizó la biometría tras el mensaje, sin necesidad de llamada del analista.<br><b>Enviada a cola:</b> el cliente no completó la biometría y la solicitud tuvo que asignarse a un analista para contacto telefónico.<br><br>Cuanto mayor sea la barra verde, más efectivo es el broadcast para reducir la carga operativa.'},
+    bioTendencia:{t:'Tendencia Diaria',d:'Evolución día a día de tres métricas: solicitudes consultadas del API, resueltas sin asignar y enviadas a cola. Permite identificar patrones, días con mayor volumen y la evolución de la efectividad del broadcast.'},
+    bioFunnel:{t:'Funnel de Conversión',d:'Embudo que muestra la reducción desde las solicitudes consultadas → mensajes enviados → biometrías completadas. Cada barra es un paso del proceso. Cuanto más se conserve el volumen entre pasos, mejor funciona el ciclo automatizado.'},
+    bioDistribucion:{t:'Distribución de Resultados',d:'Proporción final de las solicitudes procesadas por el ciclo de biometría: completadas (el cliente hizo la biometría), enviadas a cola (necesitan llamada del analista), y sin resultado aún (esperando el siguiente ciclo de verificación).'},
+    bioTasaTendencia:{t:'Tasa de Conversión en el Tiempo',d:'Porcentaje diario de solicitudes que completaron biometría tras el broadcast. Los puntos verdes indican días con buena conversión (≥50%), los naranjas días bajos. Permite detectar si la estrategia de mensajería está mejorando o deteriorándose.'},
+    bioResLlamada:{t:'Resultado de Llamada',d:'Distribución del resultado de las llamadas realizadas por los analistas a solicitudes de biometría: OK Llamada (se logró contacto) vs No Contestó. Una tasa baja de contacto puede indicar horarios inadecuados de llamada o datos de contacto incorrectos.'},
+    bioResFinal:{t:'Resultado Final',d:'Distribución del resultado final de las solicitudes de biometría gestionadas por analistas: Aprobada, Negada o Aplazada. Permite evaluar la calidad de los casos que llegan a gestión manual.'},
+    bioMotivos:{t:'Motivos de Aplazamiento',d:'Desglose de las razones por las que se aplazaron solicitudes de biometría. Cada motivo indica un obstáculo diferente: agotó intentos, error en la página, cliente no desea realizarlo, etc. Útil para identificar problemas sistémicos.'},
+    bioGestion:{t:'Resultados de Gestión',d:'Resumen de las solicitudes de biometría que fueron asignadas a analistas y gestionadas. Incluye resultado de la llamada (¿se logró contacto?) y resultado final de la solicitud (aprobada/negada/aplazada). Estos son los casos que el broadcast no logró resolver automáticamente.'}
 };
 function ayudaGrafico(id){var info=_ayudaTextos[id];if(!info)return;Swal.fire({title:info.t,html:'<p style="font-size:0.9rem;color:#253150;line-height:1.6;text-align:left;">'+info.d+'</p>',icon:'info',confirmButtonColor:'#253150',confirmButtonText:'Entendido',width:500});}
 
@@ -244,7 +315,7 @@ function aplicarFiltroSegmentoGlobal(){
         var backlogBase = aplicarFiltrosGeneralesADatos(datos.backlogDetalle || []);
         // Si no hay filtros generales activos, usar datos originales optimizados
         var fg = obtenerFiltrosGenerales();
-        var hayFiltros = fg.poliza || fg.sucursal!=='todas' || fg.tipo!=='todos' || fg.estado!=='todos' || fg.analista!=='todos';
+        var hayFiltros = fg.solicitud || fg.poliza || fg.sucursal!=='todas' || fg.tipo!=='todos' || fg.estado!=='todos' || fg.analista!=='todos';
         if(!hayFiltros){
             renderizarConDatos(datos, datos.tiemposDetalle, datos.backlogDetalle || []);
         } else {
@@ -357,7 +428,9 @@ function recalcularYRenderizar(tiemposFiltrados, backlogFiltrado, datos){
         tiemposDetalle: tiemposFiltrados,
         tasaNegacionSucursal: tasaNegSuc,
         tendenciaSLA: tendenciaSLA,
-        heatmapHora: datos.heatmapHora
+        heatmapHora: datos.heatmapHora,
+        negacionDirecta: datos.negacionDirecta,
+        pctNegacionDirecta: datos.pctNegacionDirecta
     };
 
     renderizarConDatos(datosFiltrados, tiemposFiltrados, backlogFiltrado);
@@ -377,7 +450,12 @@ function renderizarConDatos(datos, tiemposFiltrados, backlogFiltrado){
     document.getElementById('kpiTiempo').innerHTML=formatearDuracionKPI(datos.tiempoPromedioMinutos);
     document.getElementById('kpiTiempoCola').innerHTML=formatearDuracionKPI(datos.tiempoColaPromedio);
     document.getElementById('kpiTiempoGeneral').innerHTML=formatearTiempoGeneralKPI(datos.tiempoPromedioGeneralHoras||0);
+    document.getElementById('kpiRadicadas').textContent=datos.totalRadicadas||0;
     document.getElementById('kpiAprobacion').innerHTML=datos.tasaAprobacion+'%';
+    document.getElementById('kpiNegacion').innerHTML=(datos.pctNegacion||0)+'<span style="font-size:1rem;font-weight:600;">%</span>';
+    document.getElementById('kpiAplazamiento').innerHTML=(datos.pctAplazamiento||0)+'<span style="font-size:1rem;font-weight:600;">%</span>';
+    document.getElementById('kpiNegacionDirecta').innerHTML=(datos.pctNegacionDirecta||0)+'<span style="font-size:1rem;font-weight:600;">%</span>';
+    document.getElementById('kpiNegacionDirectaCount').textContent=(datos.negacionDirecta||0);
 
     // Tipo cards
     var tT={Digital:0,UAR:0,Reestudio:0,Biometria:0,Induccion:0}, nD=datos.porTipo.length||1;
@@ -424,7 +502,7 @@ function renderizarConDatos(datos, tiemposFiltrados, backlogFiltrado){
 
     // Determinar si hay filtros generales activos
     var fg2=obtenerFiltrosGenerales();
-    var hayFiltrosActivos=fg2.poliza||fg2.sucursal!=='todas'||fg2.tipo!=='todos'||fg2.estado!=='todos'||fg2.analista!=='todos';
+    var hayFiltrosActivos=fg2.solicitud||fg2.poliza||fg2.sucursal!=='todas'||fg2.tipo!=='todos'||fg2.estado!=='todos'||fg2.analista!=='todos';
 
     if(hayFiltrosActivos){
         // Recalcular segmentación desde tiemposFiltrados
@@ -862,12 +940,17 @@ function descargarExcelConsolidado() {
         // === HOJA 8: KPIs Consolidados ===
         var kpiRows = [
             ['Indicador', 'Valor'],
+            ['Total Radicadas', datos.totalRadicadas || 0],
             ['Total Gestionadas', datos.totalGestionadas],
             ['T. Gestión Promedio (min)', datos.tiempoPromedioMinutos],
             ['T. General Promedio (horas)', datos.tiempoPromedioGeneralHoras || 0],
             ['T. Cola Promedio (min)', datos.tiempoColaPromedio],
             ['Tasa Aprobación (%)', datos.tasaAprobacion],
             ['Fuera de SLA', datos.fueraDeSLA],
+            ['Negación Directa (cant)', datos.negacionDirecta || 0],
+            ['% Negación', datos.pctNegacion || 0],
+            ['% Aplazamiento', datos.pctAplazamiento || 0],
+            ['% Negación Directa', datos.pctNegacionDirecta || 0],
             ['Backlog Actual', datos.backlog],
             [''],
             ['Rango', document.getElementById('metricaDesde').value + ' a ' + document.getElementById('metricaHasta').value],
@@ -942,6 +1025,368 @@ function _fmtHorasLegible(horas) {
     return m + 'm';
 }
 
+// === COLA DE ASIGNACIÓN ===
+function cargarColaAsignacion() {
+    google.script.run.withSuccessHandler(renderColaAsignacion).withFailureHandler(function(e) {
+        Logger.log && Logger.log('Error cola: ' + e.message);
+    }).obtenerColaAsignacion();
+}
+
+function renderColaAsignacion(d) {
+    document.getElementById('colaTotalSinAsignar').textContent = d.total;
+    var items = [
+        { id: 'colaDesplazamiento', val: d.desplazamiento },
+        { id: 'colaInduccion', val: d.induccion },
+        { id: 'colaDigital', val: d.digital },
+        { id: 'colaBiometriaFallida', val: d.biometriaFallida },
+        { id: 'colaNuevaUar', val: d.nuevaUar },
+        { id: 'colaDeudorUar', val: d.deudorUar },
+        { id: 'colaReestudios', val: d.reestudio }
+    ];
+    items.forEach(function(it) {
+        var el = document.getElementById(it.id);
+        if (el) el.querySelector('.cola-card-value').textContent = it.val;
+    });
+}
+
+// === BIOMETRÍA ===
+var _biometriaCargada = false;
+var chartBioEfectividad = null, chartBioTendencia = null, chartBioFunnel = null, chartBioDistribucion = null, chartBioTasaTendencia = null;
+var chartBioResLlamada = null, chartBioResFinal = null, chartBioMotivos = null;
+var chartBioLlamadasDia = null, chartBioResultadoDia = null;
+
+function cargarDatosBiometria() {
+    document.getElementById('biometriaSpinner').style.display = 'block';
+    document.getElementById('biometriaContenido').style.display = 'none';
+    limpiarBusquedaBiometria();
+    var desde = document.getElementById('bioFiltroDesde').value || '';
+    var hasta = document.getElementById('bioFiltroHasta').value || '';
+    google.script.run.withSuccessHandler(onDatosBiometriaCargados).withFailureHandler(function(e) {
+        document.getElementById('biometriaSpinner').style.display = 'none';
+        Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+    }).obtenerDatosBiometria(desde, hasta);
+}
+
+function setBioRangoRapido(tipo) {
+    var r = _calcRango(tipo);
+    document.getElementById('bioFiltroDesde').value = fmtDI(r.desde);
+    document.getElementById('bioFiltroHasta').value = fmtDI(r.hasta);
+    cargarDatosBiometria();
+}
+
+function onDatosBiometriaCargados(d) {
+    _biometriaCargada = true;
+    document.getElementById('biometriaSpinner').style.display = 'none';
+    document.getElementById('biometriaContenido').style.display = 'block';
+    document.getElementById('resultadosBioBusqueda').style.display = 'none';
+    document.getElementById('sinResultadosBio').style.display = 'none';
+
+    document.getElementById('bioConsultadas').textContent = d.totalConsultadas;
+    document.getElementById('bioEnviados').textContent = d.totalEnviados;
+    document.getElementById('bioTasaEnvio').textContent = d.tasaEnvio + '%';
+    document.getElementById('bioAprobadas').textContent = d.totalAprobado;
+    document.getElementById('bioPendientes').textContent = d.totalPendiente;
+    document.getElementById('bioTasaConversion').textContent = d.tasaConversion + '%';
+
+    renderBioEfectividad(d.tendencia);
+    renderBioTendencia(d.tendencia);
+    renderBioFunnel(d);
+    renderBioDistribucion(d);
+    renderBioTasaTendencia(d.tendencia);
+    if (d.gestion) renderBioGestion(d.gestion);
+}
+
+function renderBioEfectividad(tend) {
+    if (chartBioEfectividad) chartBioEfectividad.destroy();
+    if (!tend || tend.length === 0) return;
+    var ctx = document.getElementById('chartBioEfectividad').getContext('2d');
+    chartBioEfectividad = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: tend.map(function(t) { return t.fecha; }),
+            datasets: [
+                { label: 'Completó biometría', data: tend.map(function(t) { return t.aprobadas; }), backgroundColor: '#059669', borderRadius: 2 },
+                { label: 'Enviada a cola', data: tend.map(function(t) { return t.pendientes; }), backgroundColor: '#d97706', borderRadius: 2 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+            plugins: { datalabels: { display: false } }
+        }
+    });
+}
+
+function renderBioTendencia(tend) {
+    if (chartBioTendencia) chartBioTendencia.destroy();
+    if (!tend || tend.length === 0) return;
+    var ctx = document.getElementById('chartBioTendencia').getContext('2d');
+    chartBioTendencia = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: tend.map(function(t) { return t.fecha; }),
+            datasets: [
+                { label: 'Consultadas', data: tend.map(function(t) { return t.consultadas; }), borderColor: '#253150', backgroundColor: 'rgba(37,49,80,0.1)', fill: true, tension: 0.3, pointRadius: 3 },
+                { label: 'Resueltas', data: tend.map(function(t) { return t.aprobadas; }), borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.1)', fill: true, tension: 0.3, pointRadius: 3 },
+                { label: 'A cola', data: tend.map(function(t) { return t.pendientes; }), borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,0.1)', fill: true, tension: 0.3, pointRadius: 3 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } },
+            plugins: { datalabels: { display: false } }
+        }
+    });
+}
+
+function renderBioFunnel(d) {
+    if (chartBioFunnel) chartBioFunnel.destroy();
+    var ctx = document.getElementById('chartBioFunnel').getContext('2d');
+    chartBioFunnel = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Consultadas SAI', 'Broadcast Enviado', 'Biometría Completada'],
+            datasets: [{
+                data: [d.totalConsultadas, d.totalEnviados, d.totalAprobado],
+                backgroundColor: ['#253150', '#3a4d7a', '#059669'],
+                borderRadius: 6
+            }]
+        },
+        options: {
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            scales: { x: { beginAtZero: true } },
+            plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'start', color: '#fff', font: { weight: 'bold', size: 11 }, formatter: function(v) { return v; } } }
+        }
+    });
+}
+
+function renderBioDistribucion(d) {
+    if (chartBioDistribucion) chartBioDistribucion.destroy();
+    var ctx = document.getElementById('chartBioDistribucion').getContext('2d');
+    var sinProcesar = d.totalConsultadas - d.totalAprobado - d.totalPendiente;
+    if (sinProcesar < 0) sinProcesar = 0;
+    chartBioDistribucion = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Biometría completada', 'Enviadas a cola', 'Sin resultado aún'],
+            datasets: [{ data: [d.totalAprobado, d.totalPendiente, sinProcesar], backgroundColor: ['#059669', '#d97706', '#e5e7eb'], borderWidth: 0 }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, cutout: '60%',
+            plugins: { datalabels: { color: '#fff', font: { weight: 'bold', size: 11 }, formatter: function(v, ctx) { var t = ctx.chart.data.datasets[0].data.reduce(function(a, b) { return a + b; }, 0); return t > 0 ? Math.round(v / t * 100) + '%' : ''; } } }
+        }
+    });
+}
+
+function renderBioTasaTendencia(tend) {
+    if (chartBioTasaTendencia) chartBioTasaTendencia.destroy();
+    if (!tend || tend.length === 0) return;
+    var ctx = document.getElementById('chartBioTasaTendencia').getContext('2d');
+    chartBioTasaTendencia = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: tend.map(function(t) { return t.fecha; }),
+            datasets: [{
+                label: '% Conversión',
+                data: tend.map(function(t) { return t.consultadas > 0 ? Math.round(t.aprobadas / t.consultadas * 1000) / 10 : 0; }),
+                borderColor: '#25D366', backgroundColor: 'rgba(37,211,102,0.1)', fill: true, tension: 0.3, pointRadius: 3,
+                pointBackgroundColor: tend.map(function(t) { var pct = t.consultadas > 0 ? t.aprobadas / t.consultadas * 100 : 0; return pct >= 50 ? '#059669' : '#d97706'; })
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } } } },
+            plugins: { datalabels: { display: false } }
+        }
+    });
+}
+
+function renderBioGestion(g) {
+    document.getElementById('bioGesTotal').textContent = g.total;
+    document.getElementById('bioGesOk').textContent = g.okLlamada;
+    document.getElementById('bioGesNoContesto').textContent = g.noContesto;
+    document.getElementById('bioGesTasaContacto').textContent = g.tasaContacto + '%';
+
+    if (chartBioResLlamada) chartBioResLlamada.destroy();
+    var ctx1 = document.getElementById('chartBioResLlamada').getContext('2d');
+    chartBioResLlamada = new Chart(ctx1, {
+        type: 'doughnut',
+        data: {
+            labels: ['OK Llamada', 'No Contestó'],
+            datasets: [{ data: [g.okLlamada, g.noContesto], backgroundColor: ['#059669', '#d97706'], borderWidth: 0 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { datalabels: { color: '#fff', font: { weight: 'bold', size: 11 }, formatter: function(v) { return v > 0 ? v : ''; } } } }
+    });
+
+    if (chartBioResFinal) chartBioResFinal.destroy();
+    var ctx2 = document.getElementById('chartBioResFinal').getContext('2d');
+    chartBioResFinal = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+            labels: ['Aprobada', 'Negada', 'Aplazada'],
+            datasets: [{ data: [g.aprobadas, g.negadas, g.aplazadas], backgroundColor: ['#059669', '#BD0F14', '#d97706'], borderWidth: 0 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { datalabels: { color: '#fff', font: { weight: 'bold', size: 11 }, formatter: function(v) { return v > 0 ? v : ''; } } } }
+    });
+
+    // Gráficos diarios de gestión
+    if (chartBioLlamadasDia) chartBioLlamadasDia.destroy();
+    if (chartBioResultadoDia) chartBioResultadoDia.destroy();
+    var gt = g.tendencia || [];
+    if (gt.length > 0) {
+        var ctx4 = document.getElementById('chartBioLlamadasDia').getContext('2d');
+        chartBioLlamadasDia = new Chart(ctx4, {
+            type: 'bar',
+            data: {
+                labels: gt.map(function(t) { return t.fecha; }),
+                datasets: [
+                    { label: 'OK Llamada', data: gt.map(function(t) { return t.okLlamada; }), backgroundColor: '#059669', borderRadius: 2 },
+                    { label: 'No Contestó', data: gt.map(function(t) { return t.noContesto; }), backgroundColor: '#d97706', borderRadius: 2 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }, plugins: { datalabels: { display: false } } }
+        });
+        var ctx5 = document.getElementById('chartBioResultadoDia').getContext('2d');
+        chartBioResultadoDia = new Chart(ctx5, {
+            type: 'bar',
+            data: {
+                labels: gt.map(function(t) { return t.fecha; }),
+                datasets: [
+                    { label: 'Aprobada', data: gt.map(function(t) { return t.aprobadas; }), backgroundColor: '#059669', borderRadius: 2 },
+                    { label: 'Negada', data: gt.map(function(t) { return t.negadas; }), backgroundColor: '#BD0F14', borderRadius: 2 },
+                    { label: 'Aplazada', data: gt.map(function(t) { return t.aplazadas; }), backgroundColor: '#d97706', borderRadius: 2 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }, plugins: { datalabels: { display: false } } }
+        });
+    }
+
+    if (chartBioMotivos) chartBioMotivos.destroy();
+    var motivoLabels = Object.keys(g.motivos || {});
+    var motivoValues = motivoLabels.map(function(k) { return g.motivos[k]; });
+    var ctx3 = document.getElementById('chartBioMotivos').getContext('2d');
+    if (motivoLabels.length === 0) {
+        chartBioMotivos = new Chart(ctx3, { type: 'bar', data: { labels: ['Sin aplazamientos'], datasets: [{ data: [0], backgroundColor: '#e5e7eb' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false } } } });
+    } else {
+        chartBioMotivos = new Chart(ctx3, {
+            type: 'bar',
+            data: {
+                labels: motivoLabels.map(function(l) { return wrapLabel(l, 18); }),
+                datasets: [{ data: motivoValues, backgroundColor: '#d97706', borderRadius: 4 }]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                scales: { x: { beginAtZero: true } },
+                plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'start', color: '#fff', font: { weight: 'bold', size: 10 }, formatter: function(v) { return v; } } }
+            }
+        });
+    }
+}
+
+function ejecutarBusquedaBiometria() {
+    var q = (document.getElementById('buscarBioSolicitud').value || '').trim();
+    if (!q) { Swal.fire({ icon: 'warning', title: 'Búsqueda vacía', text: 'Escribe un número de solicitud o póliza' }); return; }
+    document.getElementById('resultadosBioBusqueda').style.display = 'none';
+    document.getElementById('sinResultadosBio').style.display = 'none';
+    document.getElementById('cuerpoBioBusqueda').innerHTML = '<tr><td colspan="7" class="text-center py-3"><div class="spinner-border spinner-border-sm" role="status" style="color:var(--rojo);"></div> Buscando...</td></tr>';
+    document.getElementById('resultadosBioBusqueda').style.display = 'block';
+    google.script.run.withSuccessHandler(renderBioResultados).withFailureHandler(function(e) {
+        document.getElementById('resultadosBioBusqueda').style.display = 'none';
+        Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+    }).buscarBiometriaSolicitud(q);
+}
+
+function renderBioResultados(detalle) {
+    if (!detalle || detalle.length === 0) {
+        document.getElementById('resultadosBioBusqueda').style.display = 'none';
+        document.getElementById('sinResultadosBio').style.display = 'block';
+        return;
+    }
+    document.getElementById('sinResultadosBio').style.display = 'none';
+    document.getElementById('resultadosBioBusqueda').style.display = 'block';
+    var tb = document.getElementById('cuerpoBioBusqueda');
+    var html = '';
+    detalle.forEach(function(r) {
+        var badgeBrod = '', badgeRes = '';
+        var eb = (r.estadoBrodcast || '').toUpperCase();
+        if (eb === 'ENVIADO' || eb === 'SI' || eb === 'OK' || eb === 'TRUE' || eb === '1') {
+            badgeBrod = '<span style="background:#d1fae5;color:#059669;padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;"><i class="bi bi-whatsapp me-1"></i>Enviado</span>';
+        } else if (eb) {
+            badgeBrod = '<span style="background:#fef3c7;color:#d97706;padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;"><i class="bi bi-x-circle me-1"></i>No enviado</span>';
+        } else {
+            badgeBrod = '<span style="color:var(--text-light);font-size:0.7rem;">—</span>';
+        }
+        var ne = (r.nuevoEstado || '').toUpperCase();
+        if (ne === 'APROBADO') {
+            badgeRes = '<span style="background:#d1fae5;color:#059669;padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;"><i class="bi bi-check-circle me-1"></i>Completada</span>';
+        } else if (ne.indexOf('PENDIENTE') !== -1) {
+            badgeRes = '<span style="background:#fef3c7;color:#d97706;padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;"><i class="bi bi-hourglass-split me-1"></i>A cola</span>';
+        } else if (ne) {
+            badgeRes = '<span style="color:var(--text-muted);font-size:0.7rem;">' + esc(ne) + '</span>';
+        } else {
+            badgeRes = '<span style="color:var(--text-light);font-size:0.7rem;">—</span>';
+        }
+        html += '<tr><td class="fw-bold">' + esc(r.solicitud) + '</td><td>' + esc(r.poliza) + '</td><td>' + esc(r.nombre) + '</td><td>' + esc(r.fechaConsulta) + '</td><td>' + badgeBrod + '</td><td>' + badgeRes + '</td><td class="text-center">' + (r.destinatarios || 0) + '</td></tr>';
+    });
+    tb.innerHTML = html;
+}
+
+function limpiarBusquedaBiometria() {
+    document.getElementById('buscarBioSolicitud').value = '';
+    document.getElementById('resultadosBioBusqueda').style.display = 'none';
+    document.getElementById('sinResultadosBio').style.display = 'none';
+}
+
+// === CONTROL DE ACCESO ===
+var _listaCoord = [], _listaBio = [];
+
+function cargarListasAcceso() {
+    google.script.run.withSuccessHandler(function(listas) {
+        _listaCoord = listas.coordinadores || [];
+        _listaBio = listas.biometria || [];
+        renderListaAcceso('coord', _listaCoord);
+        renderListaAcceso('bio', _listaBio);
+    }).obtenerListasAcceso();
+}
+
+var _COORD_FIJO = 'desarrollocrmlibertador@ellibertador.co';
+
+function renderListaAcceso(tipo, lista) {
+    var cont = document.getElementById(tipo === 'coord' ? 'listaAccesoCoord' : 'listaAccesoBio');
+    var fullList = tipo === 'coord' ? [_COORD_FIJO].concat(lista.filter(function(e) { return e !== _COORD_FIJO; })) : lista;
+    if (!fullList.length) { cont.innerHTML = '<p style="font-size:0.72rem;color:var(--text-light);margin:0;">Sin usuarios.</p>'; return; }
+    cont.innerHTML = fullList.map(function(email, idx) {
+        var esFijo = (tipo === 'coord' && email === _COORD_FIJO);
+        if (esFijo) return '<div class="agent-email-chip" style="opacity:0.7;"><i class="bi bi-lock-fill" style="font-size:0.65rem;margin-right:4px;"></i><span>' + esc(email) + '</span></div>';
+        var realIdx = lista.indexOf(email);
+        return '<div class="agent-email-chip"><span>' + esc(email) + '</span><button class="agent-email-chip-remove" onclick="eliminarAccesoLista(\'' + tipo + '\',' + realIdx + ')"><i class="bi bi-x"></i></button></div>';
+    }).join('');
+}
+
+function agregarAccesoLista(tipo) {
+    var inputId = tipo === 'coord' ? 'accessCoordEmailInput' : 'accessBioEmailInput';
+    var input = document.getElementById(inputId);
+    var email = (input.value || '').trim().toLowerCase();
+    if (!email || email.indexOf('@') === -1) { Swal.fire({ icon: 'warning', title: 'Correo inválido' }); return; }
+    var lista = tipo === 'coord' ? _listaCoord : _listaBio;
+    if (lista.indexOf(email) !== -1) { Swal.fire({ icon: 'info', title: 'Ya existe' }); return; }
+    lista.push(email);
+    input.value = '';
+    renderListaAcceso(tipo, lista);
+}
+
+function eliminarAccesoLista(tipo, idx) {
+    var lista = tipo === 'coord' ? _listaCoord : _listaBio;
+    lista.splice(idx, 1);
+    renderListaAcceso(tipo, lista);
+}
+
+function guardarListasAccesoUI() {
+    google.script.run.withSuccessHandler(function(r) {
+        if (r.success) Swal.fire({ icon: 'success', title: 'Acceso guardado', text: r.coordinadores.length + ' coordinador(es), ' + r.biometria.length + ' usuario(s) biometría', timer: 2500, showConfirmButton: false });
+    }).guardarListasAcceso(_listaCoord, _listaBio);
+}
+
 function cargarDatosAgente() {
     document.getElementById('agenteSpinner').style.display = 'block';
     document.getElementById('agenteContenido').style.display = 'none';
@@ -971,6 +1416,7 @@ function onDatosAgenteCargados(datos) {
     renderHistorialAlertas(datos.alertHistory);
     renderEstadoTriggers(datos.triggers);
     actualizarBadgeSidebar(datos.alerts);
+    cargarListasAcceso();
 }
 
 // === GAUGE ===
@@ -1137,36 +1583,98 @@ function renderSeguimientoPersonas(personas) {
         var borderCol = p.severidad === 'critico' ? 'var(--rojo)' : p.severidad === 'advertencia' ? '#f59e0b' : 'var(--azul)';
         var bgCol = p.severidad === 'critico' ? 'var(--rojo-light)' : p.severidad === 'advertencia' ? '#fffbeb' : 'var(--azul-light)';
         var iconSev = p.severidad === 'critico' ? 'bi-exclamation-triangle-fill' : p.severidad === 'advertencia' ? 'bi-exclamation-circle-fill' : 'bi-info-circle-fill';
+        var sevLabel = p.severidad === 'critico' ? 'Crítico' : p.severidad === 'advertencia' ? 'Atención' : 'Informativo';
 
-        html += '<div class="agent-persona-card" style="border-left-color:' + borderCol + ';">';
+        html += '<div class="agent-persona-card" style="border-left-color:' + borderCol + ';margin-bottom:16px;">';
 
-        // Header con nombre y tipo
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
-        html += '<div style="display:flex;align-items:center;gap:8px;">';
-        html += '<div style="width:36px;height:36px;border-radius:50%;background:' + borderCol + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.9rem;font-weight:800;">' + esc(p.nombre.charAt(0)) + '</div>';
-        html += '<div><div style="font-size:0.95rem;font-weight:800;color:var(--text-main);">' + esc(p.nombre) + '</div>';
-        html += '<div style="font-size:0.68rem;color:var(--text-light);"><i class="bi ' + iconSev + '" style="color:' + borderCol + ';"></i> ' + esc(p.tipo) + '</div></div>';
-        html += '</div></div>';
+        // ── Header ──
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">';
+        html += '<div style="display:flex;align-items:center;gap:10px;">';
+        html += '<div style="width:40px;height:40px;border-radius:50%;background:' + borderCol + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:800;">' + esc(p.nombre.charAt(0)) + '</div>';
+        html += '<div><div style="font-size:1rem;font-weight:800;color:var(--text-main);">' + esc(p.nombre) + '</div>';
+        html += '<div style="font-size:0.7rem;color:var(--text-light);">' + esc(p.equipo || '') + '</div></div>';
+        html += '</div>';
+        html += '<span style="background:' + bgCol + ';color:' + borderCol + ';padding:4px 12px;border-radius:20px;font-size:0.68rem;font-weight:700;"><i class="bi ' + iconSev + ' me-1"></i>' + sevLabel + '</span>';
+        html += '</div>';
 
-        // Datos de sustento
-        html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:10px;">';
-        p.datos.forEach(function(d) {
-            html += '<div style="background:var(--bg-page);border-radius:8px;padding:8px 10px;">';
-            html += '<div style="font-size:0.62rem;font-weight:700;color:var(--text-light);text-transform:uppercase;">' + esc(d.label) + '</div>';
-            html += '<div style="font-size:0.92rem;font-weight:800;color:var(--azul);">' + esc(d.valor) + '</div>';
-            if (d.meta) html += '<div style="font-size:0.6rem;color:var(--text-light);">' + esc(d.meta) + '</div>';
+        // ── Producción + Tiempos (si hay datos) ──
+        if (p.produccion) {
+            html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">';
+
+            // Producción
+            html += '<div style="background:var(--bg-page);border-radius:10px;padding:12px;">';
+            html += '<div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;"><i class="bi bi-bar-chart me-1"></i>Producción</div>';
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+            html += '<div style="text-align:center;flex:1;min-width:50px;"><div style="font-size:1.2rem;font-weight:800;color:var(--azul);">' + p.produccion.total + '</div><div style="font-size:0.6rem;color:var(--text-light);">Total</div></div>';
+            if (p.produccion.cupo > 0) html += '<div style="text-align:center;flex:1;min-width:50px;"><div style="font-size:1.2rem;font-weight:800;color:var(--text-muted);">' + p.produccion.cupo + '</div><div style="font-size:0.6rem;color:var(--text-light);">Cupo</div></div>';
+            html += '<div style="text-align:center;flex:1;min-width:50px;"><div style="font-size:1.2rem;font-weight:800;color:#059669;">' + p.produccion.aprobadas + '</div><div style="font-size:0.6rem;color:var(--text-light);">Aprob.</div></div>';
+            html += '<div style="text-align:center;flex:1;min-width:50px;"><div style="font-size:1.2rem;font-weight:800;color:#BD0F14;">' + p.produccion.negadas + '</div><div style="font-size:0.6rem;color:var(--text-light);">Neg.</div></div>';
+            html += '<div style="text-align:center;flex:1;min-width:50px;"><div style="font-size:1.2rem;font-weight:800;color:#d97706;">' + p.produccion.aplazadas + '</div><div style="font-size:0.6rem;color:var(--text-light);">Aplaz.</div></div>';
+            html += '</div></div>';
+
+            // Tiempos
+            html += '<div style="background:var(--bg-page);border-radius:10px;padding:12px;">';
+            html += '<div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;"><i class="bi bi-clock me-1"></i>Tiempos Promedio</div>';
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+            var tg = p.tiempos || {};
+            var tgCol = tg.gestion > 20 ? '#BD0F14' : tg.gestion > 15 ? '#d97706' : 'var(--azul)';
+            html += '<div style="text-align:center;flex:1;min-width:60px;"><div style="font-size:1.1rem;font-weight:800;color:' + tgCol + ';">' + fmtMin(tg.gestion) + '</div><div style="font-size:0.6rem;color:var(--text-light);">Gestión</div></div>';
+            html += '<div style="text-align:center;flex:1;min-width:60px;"><div style="font-size:1.1rem;font-weight:800;color:var(--azul);">' + fmtHrs(tg.general) + '</div><div style="font-size:0.6rem;color:var(--text-light);">General</div></div>';
+            html += '<div style="text-align:center;flex:1;min-width:60px;"><div style="font-size:1.1rem;font-weight:800;color:var(--azul);">' + fmtMin(tg.cola) + '</div><div style="font-size:0.6rem;color:var(--text-light);">Cola</div></div>';
+            if (tg.fueraSLA > 0) html += '<div style="text-align:center;flex:1;min-width:60px;"><div style="font-size:1.1rem;font-weight:800;color:#BD0F14;">' + tg.fueraSLA + '</div><div style="font-size:0.6rem;color:var(--text-light);">Fuera SLA</div></div>';
+            html += '</div></div>';
+
             html += '</div>';
-        });
-        html += '</div>';
+        }
 
-        // Punto de conversación
-        html += '<div style="background:' + bgCol + ';border-radius:8px;padding:10px 12px;">';
-        html += '<div style="font-size:0.65rem;font-weight:700;color:' + borderCol + ';text-transform:uppercase;margin-bottom:4px;"><i class="bi bi-chat-quote me-1"></i>Punto de conversación</div>';
-        var lineas = p.puntoConversacion.split('\n');
-        lineas.forEach(function(linea) {
-            html += '<div style="font-size:0.78rem;color:var(--text-main);line-height:1.4;margin-bottom:2px;">' + esc(linea) + '</div>';
-        });
-        html += '</div>';
+        // ── Tipos de estudio ──
+        if (p.tipos && Object.keys(p.tipos).length > 0) {
+            html += '<div style="margin-bottom:14px;">';
+            html += '<div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;"><i class="bi bi-tags me-1"></i>Tipos de Estudio</div>';
+            html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+            var tipoColores = { Digital: '#253150', UAR: '#BD0F14', Reestudio: '#706F6F', 'Biometría': '#3a4d7a', 'Inducción': '#8b0a0e' };
+            Object.keys(p.tipos).forEach(function(t) {
+                var col = tipoColores[t] || '#253150';
+                html += '<span style="background:' + col + ';color:#fff;padding:4px 10px;border-radius:20px;font-size:0.7rem;font-weight:700;">' + esc(t) + ': ' + p.tipos[t] + '</span>';
+            });
+            html += '</div></div>';
+        }
+
+        // ── Datos de sustento (solo inactividad) ──
+        if (!p.produccion && p.datos && p.datos.length > 0) {
+            html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:14px;">';
+            p.datos.forEach(function(d) {
+                html += '<div style="background:var(--bg-page);border-radius:8px;padding:8px 10px;">';
+                html += '<div style="font-size:0.62rem;font-weight:700;color:var(--text-light);text-transform:uppercase;">' + esc(d.label) + '</div>';
+                html += '<div style="font-size:0.92rem;font-weight:800;color:var(--azul);">' + esc(d.valor) + '</div>';
+                if (d.meta) html += '<div style="font-size:0.6rem;color:var(--text-light);">' + esc(d.meta) + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // ── Hallazgos y Sugerencias ──
+        if (p.hallazgos && p.hallazgos.length > 0) {
+            html += '<div style="background:' + bgCol + ';border-radius:10px;padding:12px 14px;">';
+            html += '<div style="font-size:0.68rem;font-weight:700;color:' + borderCol + ';text-transform:uppercase;margin-bottom:8px;"><i class="bi bi-clipboard-data me-1"></i>Hallazgos y Sugerencias</div>';
+            p.hallazgos.forEach(function(h, idx) {
+                var tipoIcon = h.tipo === 'productividad' ? 'bi-graph-down' : h.tipo === 'tiempos' ? 'bi-clock-history' : h.tipo === 'sla' ? 'bi-shield-exclamation' : h.tipo === 'negacion' ? 'bi-x-circle' : 'bi-info-circle';
+                html += '<div style="margin-bottom:' + (idx < p.hallazgos.length - 1 ? '10px' : '0') + ';">';
+                html += '<div style="font-size:0.78rem;color:var(--text-main);font-weight:600;line-height:1.4;"><i class="bi ' + tipoIcon + ' me-1" style="color:' + borderCol + ';"></i>' + esc(h.detalle) + '</div>';
+                if (h.sugerencia) html += '<div style="font-size:0.72rem;color:#059669;margin-top:3px;padding-left:20px;"><i class="bi bi-lightbulb me-1"></i>' + esc(h.sugerencia) + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        } else {
+            // Punto de conversación para inactividad
+            html += '<div style="background:' + bgCol + ';border-radius:10px;padding:12px 14px;">';
+            html += '<div style="font-size:0.68rem;font-weight:700;color:' + borderCol + ';text-transform:uppercase;margin-bottom:4px;"><i class="bi bi-chat-quote me-1"></i>Punto de conversación</div>';
+            var lineas = (p.puntoConversacion || '').split('\n');
+            lineas.forEach(function(linea) {
+                html += '<div style="font-size:0.78rem;color:var(--text-main);line-height:1.4;margin-bottom:2px;">' + esc(linea) + '</div>';
+            });
+            html += '</div>';
+        }
 
         html += '</div>';
     });
@@ -1464,8 +1972,19 @@ function ayudaConfig(id) {
 var _originalCambiarTab = cambiarTab;
 cambiarTab = function(tabId, el) {
     _originalCambiarTab(tabId, el);
+    var sinFiltros = (tabId === 'biometria' || tabId === 'agente');
+    if (sinFiltros) {
+        document.getElementById('barraFiltrosFecha').style.setProperty('display', 'none', 'important');
+        document.getElementById('barraFiltrosGenerales').style.setProperty('display', 'none', 'important');
+    } else {
+        document.getElementById('barraFiltrosFecha').style.removeProperty('display');
+        document.getElementById('barraFiltrosGenerales').style.removeProperty('display');
+    }
     if (tabId === 'agente' && !_agenteDatos) {
         cargarDatosAgente();
+    }
+    if (tabId === 'biometria' && !_biometriaCargada) {
+        cargarDatosBiometria();
     }
 };
 </script>

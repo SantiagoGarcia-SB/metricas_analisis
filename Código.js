@@ -5,6 +5,7 @@ const TARGET_SOLICITUDES_SS_ID = "1x9groW5-I7Xg5ULh7DXfa2XGmS_RMdfqfW1iDWB8bJ0";
 const SHEET_NAME_SOLICITUDES = "Historico_Gestiones";
 const ID_HOJA_REESTUDIOS = "1slgykTgjoAtCd6KmlG7Lqiuw-nM1hSguQbi0XqeLu7U";
 const NOMBRE_PESTANA_REESTUDIOS = "Historico_Gestiones";
+const ID_HOJA_BIOMETRIA = "1gHW1RFMVd0h4HZr2xTrFnx-A5Pk_npJs-bAk8GOx2h0";
 const TIMEZONE = "America/Bogota";
 const HORA_INICIO_OPERACION = "08:00";
 const HORA_FIN_TURNO = "17:00";
@@ -75,6 +76,28 @@ function obtenerSucursalPorPoliza(polizaStr) {
   if (num >= 15000 && num <= 15999) return "Cartagena";
   if (num >= 16000 && num <= 16999) return "Eje Cafetero";
   return "Sin clasificar";
+}
+
+function _parsearFechaFlexible(str) {
+  if (!str) return null;
+  str = String(str).trim().split(' ')[0];
+  var d, m, y;
+  if (str.indexOf('/') > -1) {
+    var p = str.split('/');
+    if (p.length !== 3) return null;
+    d = parseInt(p[0], 10); m = parseInt(p[1], 10) - 1; y = parseInt(p[2], 10);
+  } else if (str.indexOf('-') > -1) {
+    var p = str.split('-');
+    if (p.length !== 3) return null;
+    if (p[0].length === 4) { y = parseInt(p[0], 10); m = parseInt(p[1], 10) - 1; d = parseInt(p[2], 10); }
+    else { d = parseInt(p[0], 10); m = parseInt(p[1], 10) - 1; y = parseInt(p[2], 10); }
+  } else if (str.length === 8 && !isNaN(str)) {
+    y = parseInt(str.substring(0, 4), 10); m = parseInt(str.substring(4, 6), 10) - 1; d = parseInt(str.substring(6, 8), 10);
+  } else {
+    return null;
+  }
+  if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
+  return new Date(y, m, d);
 }
 
 /**
@@ -224,7 +247,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     const tiempoGestionRaw = String(fila[35] || "").trim();
     const tiempoResolucionRaw = String(fila[36] || "").trim();
 
-    if (estado.includes("APROB")) aprobadas++;
+    if (estado.includes("APROB") && !estado.includes("PENDIENTE")) aprobadas++;
     else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) negadas++;
     else if (estado.includes("APLAZ")) aplazadas++;
 
@@ -306,7 +329,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
       if (!isNaN(hSlot)) a.horasSlot[hSlot] = (a.horasSlot[hSlot] || 0) + 1;
     }
 
-    if (estado.includes("APROB")) a.aprobadas++;
+    if (estado.includes("APROB") && !estado.includes("PENDIENTE")) a.aprobadas++;
     else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) a.negadas++;
     else if (estado.includes("APLAZ")) a.aplazadas++;
 
@@ -323,7 +346,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     if (estado.includes("NEGAD") || estado.includes("RECHAZ")) negacionSucursal[sucursal].negadas++;
 
     const solicitudId = String(fila[0] || "").trim();
-    var estadoLabel = estado.includes("APROB") ? "APROBADA" : (estado.includes("NEGAD") || estado.includes("RECHAZ")) ? "NEGADA" : estado.includes("APLAZ") ? "APLAZADA" : "OTRO";
+    var estadoLabel = (estado.includes("APROB") && !estado.includes("PENDIENTE")) ? "APROBADA" : (estado.includes("NEGAD") || estado.includes("RECHAZ")) ? "NEGADA" : estado.includes("APLAZ") ? "APLAZADA" : "OTRO";
     tiemposDetalle.push({ solicitud: solicitudId, poliza: polizaVal, fecha: fechaGestionStr, sucursal: sucursal, tipo: tipoSol, analista: nombre, segmento: seg, inmobiliaria: inmob, estado: estadoLabel, tGestion: !isNaN(tiempoGestion) && tiempoGestion >= 0 ? tiempoGestion : null, tResolucion: !isNaN(tiempoResolucion) && tiempoResolucion > 0 ? tiempoResolucion : null, tCola: tiempoColaMin !== null ? tiempoColaMin : null });
   }
 
@@ -347,7 +370,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
           const tiempoResolucionReestRaw = String(dataReest[i][16] || "").trim();
           const tiempoGestionReestRaw = String(dataReest[i][15] || "").trim();
 
-          if (estadoR.includes("APROB")) aprobadas++;
+          if (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) aprobadas++;
           else if (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) negadas++;
           else if (estadoR.includes("APLAZ")) aplazadas++;
 
@@ -426,7 +449,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
             const hSlotR = parseInt(horaFinR.split(':')[0], 10);
             if (!isNaN(hSlotR)) aR.horasSlot[hSlotR] = (aR.horasSlot[hSlotR] || 0) + 1;
           }
-          if (estadoR.includes("APROB")) aR.aprobadas++;
+          if (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) aR.aprobadas++;
           else if (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) aR.negadas++;
           else if (estadoR.includes("APLAZ")) aR.aplazadas++;
           if (!isNaN(tiempoGestionReest) && tiempoGestionReest >= 0) { aR.sumaTiempo += tiempoGestionReest; aR.countTiempo++; }
@@ -442,7 +465,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
           if (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) negacionSucursal[sucursalR].negadas++;
 
           const solicitudIdR = String(dataReest[i][1] || "").trim();
-          var estadoLabelR = estadoR.includes("APROB") ? "APROBADA" : (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) ? "NEGADA" : estadoR.includes("APLAZ") ? "APLAZADA" : "OTRO";
+          var estadoLabelR = (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) ? "APROBADA" : (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) ? "NEGADA" : estadoR.includes("APLAZ") ? "APLAZADA" : "OTRO";
           tiemposDetalle.push({ solicitud: solicitudIdR, poliza: polizaReest, fecha: fechaParte, sucursal: sucursalR, tipo: tipoReest, analista: nombreR, segmento: segR, inmobiliaria: inmobR, estado: estadoLabelR, tGestion: !isNaN(tiempoGestionReest) && tiempoGestionReest >= 0 ? tiempoGestionReest : null, tResolucion: !isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 0 ? tiempoResolucionReestHoras : null, tCola: tiempoColaReest !== null ? tiempoColaReest : null });
         }
       }
@@ -455,6 +478,55 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   const tiempoPromedioResolucionHoras = countTiemposResolucion > 0 ? Number((sumaTiemposResolucion / countTiemposResolucion).toFixed(2)) : 0;
   const tasaAprobacion = totalGestionadas > 0 ? Math.round((aprobadas / totalGestionadas) * 1000) / 10 : 0;
   const tiempoColaPromedio = countTiempoCola > 0 ? Math.round((sumaTiempoCola / countTiempoCola) * 10) / 10 : 0;
+
+  // Negación Directa y Total Radicadas (cada fila cuenta como una radicada)
+  var negacionDirectaCount = 0;
+  var totalRadicadas = 0;
+
+  // Radicadas desde Historico_Gestiones (col 17 = fecha_radicacion)
+  for (var ri = 1; ri < data.length; ri++) {
+    var frMain = _parsearFechaFlexible(String(data[ri][17] || "").trim());
+    if (frMain && frMain >= desde && frMain <= hasta) {
+      totalRadicadas++;
+    }
+  }
+
+  // Radicadas desde Reestudios (col 0 = fecha_radicacion)
+  if (hojaReest) {
+    try {
+      var dataReestRad = hojaReest.getDataRange().getDisplayValues();
+      for (var rj = 1; rj < dataReestRad.length; rj++) {
+        var frReest = _parsearFechaFlexible(String(dataReestRad[rj][0] || "").trim());
+        if (frReest && frReest >= desde && frReest <= hasta) {
+          totalRadicadas++;
+        }
+      }
+    } catch (e) {
+      Logger.log("Aviso: Error contando radicadas de reestudios: " + e.message);
+    }
+  }
+
+  // Radicadas y negación directa desde rechazado_gestion_directa (col 17 = fecha_radicacion)
+  try {
+    var ssRech = SpreadsheetApp.openById(SAI_CONFIG.SHEET_ID);
+    var hojaRech = ssRech.getSheetByName('rechazado_gestion_directa');
+    if (hojaRech && hojaRech.getLastRow() > 1) {
+      var dataRech = hojaRech.getRange(2, 1, hojaRech.getLastRow() - 1, 18).getDisplayValues();
+      for (var rk = 0; rk < dataRech.length; rk++) {
+        var frRech = _parsearFechaFlexible(String(dataRech[rk][17] || "").trim());
+        if (frRech && frRech >= desde && frRech <= hasta) {
+          negacionDirectaCount++;
+          totalRadicadas++;
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log("Aviso: No se pudo leer rechazado_gestion_directa: " + e.message);
+  }
+
+  var pctNegacionDirecta = totalRadicadas > 0 ? Math.round((negacionDirectaCount / totalRadicadas) * 1000) / 10 : 0;
+  var pctNegacion = totalGestionadas > 0 ? Math.round((negadas / totalGestionadas) * 1000) / 10 : 0;
+  var pctAplazamiento = totalGestionadas > 0 ? Math.round((aplazadas / totalGestionadas) * 1000) / 10 : 0;
 
   // 3. Backlog con Semáforo de SLA
   let backlog = 0;
@@ -692,7 +764,12 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     tiemposDetalle: tiemposDetalle,
     tasaNegacionSucursal: tasaNegacionSucursal,
     tendenciaSLA: tendenciaSLA,
-    heatmapHora: heatmapHora
+    heatmapHora: heatmapHora,
+    negacionDirecta: negacionDirectaCount,
+    pctNegacionDirecta: pctNegacionDirecta,
+    pctNegacion: pctNegacion,
+    pctAplazamiento: pctAplazamiento,
+    totalRadicadas: totalRadicadas
   };
 }
 
@@ -735,7 +812,7 @@ function obtenerRendimientoPorDia(fechaFiltro) {
     a.total++;
     a.count++;
 
-    if (estado.includes("APROB")) a.aprobadas++;
+    if (estado.includes("APROB") && !estado.includes("PENDIENTE")) a.aprobadas++;
     else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) a.negadas++;
     else if (estado.includes("APLAZ")) a.aplazadas++;
 
@@ -784,7 +861,7 @@ function obtenerRendimientoPorDia(fechaFiltro) {
           aR.total++;
           aR.count++;
 
-          if (estadoR.includes("APROB")) aR.aprobadas++;
+          if (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) aR.aprobadas++;
           else if (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) aR.negadas++;
           else if (estadoR.includes("APLAZ")) aR.aplazadas++;
 
@@ -1211,6 +1288,332 @@ function admin_obtenerDetallePorAnalista(correoAnalista, fechaFiltro) {
 }
 
 // ============================================================================
+// CONTROL DE ACCESO POR SECCIONES
+// ============================================================================
+
+var ACCESS_COORD_KEY = "ACCESS_COORDINADORES";
+var ACCESS_BIO_KEY = "ACCESS_BIOMETRIA";
+var COORD_FIJO = "desarrollocrmlibertador@ellibertador.co";
+
+function obtenerPermisoUsuario() {
+  var email = (Session.getActiveUser().getEmail() || "").toLowerCase().trim();
+  var coords = _obtenerListaAcceso(ACCESS_COORD_KEY);
+  var bios = _obtenerListaAcceso(ACCESS_BIO_KEY);
+
+  if (email === COORD_FIJO) return { rol: "coordinador", email: email };
+  if (coords.length === 0 && bios.length === 0) return { rol: "coordinador", email: email };
+  if (coords.indexOf(email) !== -1) return { rol: "coordinador", email: email };
+  if (bios.indexOf(email) !== -1) return { rol: "biometria", email: email };
+  return { rol: "sin_acceso", email: email };
+}
+
+function _obtenerListaAcceso(key) {
+  var raw = PropertiesService.getScriptProperties().getProperty(key);
+  if (raw) { try { return JSON.parse(raw); } catch (e) {} }
+  return [];
+}
+
+function obtenerListasAcceso() {
+  return {
+    coordinadores: _obtenerListaAcceso(ACCESS_COORD_KEY),
+    biometria: _obtenerListaAcceso(ACCESS_BIO_KEY)
+  };
+}
+
+function guardarListasAcceso(coordinadores, biometria) {
+  var props = PropertiesService.getScriptProperties();
+  var lCoord = (coordinadores || []).map(function(e) { return String(e).toLowerCase().trim(); }).filter(function(e) { return e.indexOf("@") !== -1; });
+  var lBio = (biometria || []).map(function(e) { return String(e).toLowerCase().trim(); }).filter(function(e) { return e.indexOf("@") !== -1; });
+  props.setProperty(ACCESS_COORD_KEY, JSON.stringify(lCoord));
+  props.setProperty(ACCESS_BIO_KEY, JSON.stringify(lBio));
+  return { success: true, coordinadores: lCoord, biometria: lBio };
+}
+
+// ============================================================================
+// COLA DE ASIGNACIÓN Y BIOMETRÍA
+// ============================================================================
+
+function obtenerColaAsignacion() {
+  var desplazamiento = 0, induccion = 0, digital = 0;
+  var reestudio = 0, nuevaUar = 0, deudorUar = 0, biometriaFallida = 0;
+
+  try {
+    var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+    var hojaSol = ss.getSheetByName("solicitud");
+    if (hojaSol && hojaSol.getLastRow() > 1) {
+      var data = hojaSol.getDataRange().getDisplayValues();
+      for (var i = 1; i < data.length; i++) {
+        var asignado = String(data[i][27] || "").trim();
+        var fechaFin = String(data[i][28] || "").trim();
+        if (asignado !== "" || fechaFin !== "") continue;
+
+        var estadoGen = String(data[i][16] || "").toUpperCase().replace(/\s+/g, '_').trim();
+        var clase = String(data[i][20] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) {
+          return { "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U" }[c] || c;
+        }).trim();
+
+        if (estadoGen === "APROBADO" || estadoGen === "RECHAZADO" || estadoGen === "NEGADO") continue;
+
+        if (estadoGen.indexOf("APROBADO_PENDIENTE_BIOMETRIA") !== -1) {
+          desplazamiento++;
+        } else if (clase === "INDUCCION") {
+          induccion++;
+        } else {
+          digital++;
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log("Aviso: Error leyendo hoja solicitud: " + e.message);
+  }
+
+  try {
+    var ssR = SpreadsheetApp.openById(ID_HOJA_REESTUDIOS);
+    var hojaOrigen = ssR.getSheetByName("ORIGEN");
+    if (hojaOrigen && hojaOrigen.getLastRow() > 1) {
+      var dataO = hojaOrigen.getDataRange().getDisplayValues();
+      for (var j = 1; j < dataO.length; j++) {
+        var analistaAsig = String(dataO[j][6] || "").trim();
+        var fechaFinG = String(dataO[j][9] || "").trim();
+        if (analistaAsig !== "" || fechaFinG !== "") continue;
+
+        var origen = String(dataO[j][3] || "").toUpperCase().trim();
+        var tipoP = String(dataO[j][4] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) {
+          return { "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U" }[c] || c;
+        }).trim();
+
+        if (tipoP.indexOf("BIOMETRIA FALLIDA") !== -1) biometriaFallida++;
+        else if (origen === "CORREO" && tipoP === "NUEVA") nuevaUar++;
+        else if (origen === "CORREO" && tipoP === "ADICIONAL") deudorUar++;
+        else if (tipoP === "REESTUDIO") reestudio++;
+      }
+    }
+  } catch (e) {
+    Logger.log("Aviso: Error leyendo hoja ORIGEN: " + e.message);
+  }
+
+  return {
+    total: desplazamiento + induccion + digital + biometriaFallida + nuevaUar + deudorUar + reestudio,
+    desplazamiento: desplazamiento,
+    induccion: induccion,
+    digital: digital,
+    biometriaFallida: biometriaFallida,
+    nuevaUar: nuevaUar,
+    deudorUar: deudorUar,
+    reestudio: reestudio
+  };
+}
+
+function obtenerDatosBiometria(fechaDesde, fechaHasta) {
+  var vacio = { totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalAprobado: 0, totalPendiente: 0, tasaEnvio: 0, tasaConversion: 0, cruce: { enviadoAprobado: 0, enviadoPendiente: 0, noEnviadoAprobado: 0, noEnviadoPendiente: 0 }, tendencia: [] };
+  try {
+    var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
+    var hoja = ss.getSheetByName("pendiente_biometria");
+    if (!hoja || hoja.getLastRow() < 2) return vacio;
+
+    var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
+    var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+
+    var data = hoja.getDataRange().getDisplayValues();
+    var headers = data[0];
+
+    var colMap = {};
+    for (var h = 0; h < headers.length; h++) {
+      var hNorm = headers[h].toLowerCase().replace(/\s+/g, '_').trim();
+      colMap[hNorm] = h;
+    }
+
+    var cFC = colMap["fecha_consulta_sai"] != null ? colMap["fecha_consulta_sai"] : -1;
+    var cFE = colMap["fecha_envio_brodcast"] != null ? colMap["fecha_envio_brodcast"] : -1;
+    var cEB = colMap["estado_brodcast"] != null ? colMap["estado_brodcast"] : -1;
+    var cNE = colMap["nuevo_estado_sai"] != null ? colMap["nuevo_estado_sai"] : -1;
+
+    var totalConsultadas = 0, totalEnviados = 0, totalNoEnviados = 0;
+    var totalAprobado = 0, totalPendiente = 0;
+    var enviadoAprobado = 0, enviadoPendiente = 0, noEnviadoAprobado = 0, noEnviadoPendiente = 0;
+    var tendenciaMap = {};
+
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][0] || "").trim();
+      if (!solicitud) continue;
+
+      if (filtroDesde || filtroHasta) {
+        var fechaRaw = cFC >= 0 ? String(data[i][cFC] || "").trim().split(" ")[0] : "";
+        var fechaNorm = fechaRaw.replace(/-/g, '').replace(/\//g, '');
+        if (fechaNorm.length === 8 && fechaNorm.charAt(2) === '') {
+          // already yyyymmdd
+        }
+        if (filtroDesde && fechaNorm < filtroDesde) continue;
+        if (filtroHasta && fechaNorm > filtroHasta) continue;
+      }
+
+      var fechaConsulta = cFC >= 0 ? String(data[i][cFC] || "").trim() : "";
+      var fechaEnvio = cFE >= 0 ? String(data[i][cFE] || "").trim() : "";
+      var estadoBrod = cEB >= 0 ? String(data[i][cEB] || "").toUpperCase().trim() : "";
+      var nuevoEstado = cNE >= 0 ? String(data[i][cNE] || "").toUpperCase().replace(/\s+/g, '_').trim() : "";
+      var poliza = String(data[i][1] || "").trim();
+      var nombre = String(data[i][4] || "").trim();
+
+      totalConsultadas++;
+
+      var fueEnviado = estadoBrod === "ENVIADO" || estadoBrod === "SI" || estadoBrod === "OK" || estadoBrod === "TRUE" || estadoBrod === "1";
+      var cambioEstado = nuevoEstado === "APROBADO";
+      var quedoPendiente = nuevoEstado.indexOf("PENDIENTE") !== -1;
+
+      if (fueEnviado) {
+        totalEnviados++;
+        if (cambioEstado) enviadoAprobado++;
+        else if (quedoPendiente) enviadoPendiente++;
+      } else if (estadoBrod !== "") {
+        totalNoEnviados++;
+        if (cambioEstado) noEnviadoAprobado++;
+        else if (quedoPendiente) noEnviadoPendiente++;
+      }
+
+      if (cambioEstado) totalAprobado++;
+      if (quedoPendiente) totalPendiente++;
+
+      var fechaKey = fechaConsulta ? fechaConsulta.split(" ")[0] : "";
+      if (fechaKey) {
+        if (!tendenciaMap[fechaKey]) tendenciaMap[fechaKey] = { consultadas: 0, enviados: 0, aprobadas: 0, pendientes: 0 };
+        tendenciaMap[fechaKey].consultadas++;
+        if (fueEnviado) tendenciaMap[fechaKey].enviados++;
+        if (cambioEstado) tendenciaMap[fechaKey].aprobadas++;
+        if (quedoPendiente) tendenciaMap[fechaKey].pendientes++;
+      }
+
+    }
+
+    var tendenciaArr = Object.keys(tendenciaMap).sort().map(function(f) {
+      return { fecha: f, consultadas: tendenciaMap[f].consultadas, enviados: tendenciaMap[f].enviados, aprobadas: tendenciaMap[f].aprobadas, pendientes: tendenciaMap[f].pendientes };
+    });
+
+    // --- Resultados de gestión desde Historico_Gestiones (clase=BIOMETRIA) ---
+    var gestion = { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, motivos: {}, tendencia: [] };
+    try {
+      var ssHist = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+      var hojaHist = ssHist.getSheetByName(SHEET_NAME_SOLICITUDES);
+      if (hojaHist && hojaHist.getLastRow() > 1) {
+        var dataH = hojaHist.getDataRange().getDisplayValues();
+        var gesTendMap = {};
+        for (var g = 1; g < dataH.length; g++) {
+          var claseH = String(dataH[g][20] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) { return { "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U" }[c] || c; }).trim();
+          if (claseH !== "BIOMETRIA") continue;
+
+          var fechaFinH = String(dataH[g][26] || "").trim();
+          if (!fechaFinH) continue;
+
+          var fechaFinParte = fechaFinH.split(" ")[0];
+          var partes = fechaFinParte.split("/");
+          var fechaDia = partes.length === 3 ? partes[2] + "-" + partes[1] + "-" + partes[0] : fechaFinParte;
+          var fechaFinNorm = fechaDia.replace(/-/g, '');
+
+          if (filtroDesde || filtroHasta) {
+            if (filtroDesde && fechaFinNorm < filtroDesde) continue;
+            if (filtroHasta && fechaFinNorm > filtroHasta) continue;
+          }
+
+          gestion.total++;
+
+          if (!gesTendMap[fechaDia]) gesTendMap[fechaDia] = { okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0 };
+
+          var resLlamada = String(dataH[g][38] || "").toUpperCase().trim();
+          if (resLlamada === "OK LLAMADA") { gestion.okLlamada++; gesTendMap[fechaDia].okLlamada++; }
+          else if (resLlamada === "NO CONTESTO") { gestion.noContesto++; gesTendMap[fechaDia].noContesto++; }
+
+          var resFinal = String(dataH[g][16] || "").toUpperCase().trim();
+          if (resFinal === "APROBADA") { gestion.aprobadas++; gesTendMap[fechaDia].aprobadas++; }
+          else if (resFinal === "NEGADA") { gestion.negadas++; gesTendMap[fechaDia].negadas++; }
+          else if (resFinal === "APLAZADA") {
+            gestion.aplazadas++; gesTendMap[fechaDia].aplazadas++;
+            var motivo = String(dataH[g][28] || "").trim();
+            if (motivo) gestion.motivos[motivo] = (gestion.motivos[motivo] || 0) + 1;
+          }
+        }
+        gestion.tendencia = Object.keys(gesTendMap).sort().map(function(f) {
+          var d = gesTendMap[f];
+          return { fecha: f, okLlamada: d.okLlamada, noContesto: d.noContesto, aprobadas: d.aprobadas, negadas: d.negadas, aplazadas: d.aplazadas };
+        });
+      }
+    } catch (e) {
+      Logger.log("Aviso: Error leyendo gestión biometría: " + e.message);
+    }
+
+    gestion.tasaContacto = gestion.total > 0 ? Math.round((gestion.okLlamada / gestion.total) * 1000) / 10 : 0;
+
+    return {
+      totalConsultadas: totalConsultadas,
+      totalEnviados: totalEnviados,
+      totalNoEnviados: totalNoEnviados,
+      totalAprobado: totalAprobado,
+      totalPendiente: totalPendiente,
+      tasaEnvio: totalConsultadas > 0 ? Math.round((totalEnviados / totalConsultadas) * 1000) / 10 : 0,
+      tasaConversion: totalConsultadas > 0 ? Math.round((totalAprobado / totalConsultadas) * 1000) / 10 : 0,
+      cruce: { enviadoAprobado: enviadoAprobado, enviadoPendiente: enviadoPendiente, noEnviadoAprobado: noEnviadoAprobado, noEnviadoPendiente: noEnviadoPendiente },
+      tendencia: tendenciaArr,
+      gestion: gestion
+    };
+  } catch (e) {
+    Logger.log("Error en obtenerDatosBiometria: " + e.message);
+    return { totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalAprobado: 0, totalPendiente: 0, tasaEnvio: 0, tasaConversion: 0, cruce: { enviadoAprobado: 0, enviadoPendiente: 0, noEnviadoAprobado: 0, noEnviadoPendiente: 0 }, tendencia: [], gestion: { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, motivos: {}, tasaContacto: 0 } };
+  }
+}
+
+function buscarBiometriaSolicitud(query) {
+  try {
+    var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
+    var hoja = ss.getSheetByName("pendiente_biometria");
+    if (!hoja || hoja.getLastRow() < 2) return [];
+
+    var data = hoja.getDataRange().getDisplayValues();
+    var headers = data[0];
+    var colMap = {};
+    for (var h = 0; h < headers.length; h++) {
+      colMap[headers[h].toLowerCase().replace(/\s+/g, '_').trim()] = h;
+    }
+
+    var cFC = colMap["fecha_consulta_sai"] != null ? colMap["fecha_consulta_sai"] : -1;
+    var cFE = colMap["fecha_envio_brodcast"] != null ? colMap["fecha_envio_brodcast"] : -1;
+    var cEB = colMap["estado_brodcast"] != null ? colMap["estado_brodcast"] : -1;
+    var cNE = colMap["nuevo_estado_sai"] != null ? colMap["nuevo_estado_sai"] : -1;
+
+    var q = String(query || "").trim().toLowerCase();
+    if (!q) return [];
+
+    var resultados = [];
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][0] || "").trim();
+      var poliza = String(data[i][1] || "").trim();
+      var nombre = String(data[i][4] || "").trim();
+
+      if (!solicitud) continue;
+      if (solicitud.toLowerCase().indexOf(q) === -1 && poliza.toLowerCase().indexOf(q) === -1) continue;
+
+      var fechaConsulta = cFC >= 0 ? String(data[i][cFC] || "").trim() : "";
+      var fechaEnvio = cFE >= 0 ? String(data[i][cFE] || "").trim() : "";
+      var estadoBrod = cEB >= 0 ? String(data[i][cEB] || "").toUpperCase().trim() : "";
+      var nuevoEstado = cNE >= 0 ? String(data[i][cNE] || "").toUpperCase().replace(/\s+/g, '_').trim() : "";
+
+      var numDest = 0;
+      if (cNE >= 0) {
+        for (var d = 0; d < 4; d++) {
+          var telIdx = cNE + 1 + d * 3 + 2;
+          if (telIdx < data[i].length && String(data[i][telIdx] || "").trim()) numDest++;
+        }
+      }
+
+      resultados.push({ solicitud: solicitud, poliza: poliza, nombre: nombre, fechaConsulta: fechaConsulta, fechaEnvio: fechaEnvio, estadoBrodcast: estadoBrod, nuevoEstado: nuevoEstado, destinatarios: numDest });
+      if (resultados.length >= 50) break;
+    }
+
+    return resultados;
+  } catch (e) {
+    Logger.log("Error en buscarBiometriaSolicitud: " + e.message);
+    return [];
+  }
+}
+
+// ============================================================================
 // AGENTE COORDINADOR INTELIGENTE
 // ============================================================================
 
@@ -1330,7 +1733,7 @@ function _agente_leerDatosRango(fechaDesdeStr, fechaHastaStr) {
     var poliza = String(fila[1] || "").trim();
     var sucursal = obtenerSucursalPorPoliza(poliza);
 
-    var estadoLabel = estado.includes("APROB") ? "APROBADA" :
+    var estadoLabel = (estado.includes("APROB") && !estado.includes("PENDIENTE")) ? "APROBADA" :
                      (estado.includes("NEGAD") || estado.includes("RECHAZ")) ? "NEGADA" :
                      estado.includes("APLAZ") ? "APLAZADA" : "OTRO";
 
@@ -1389,7 +1792,7 @@ function _agente_leerDatosRango(fechaDesdeStr, fechaHastaStr) {
           var polizaR = String(dataReest[j][17] || dataReest[j][2] || "").trim();
           var sucursalR = obtenerSucursalPorPoliza(polizaR);
 
-          var estadoLabelR = estadoR.includes("APROB") ? "APROBADA" :
+          var estadoLabelR = (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) ? "APROBADA" :
                             (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) ? "NEGADA" :
                             estadoR.includes("APLAZ") ? "APLAZADA" : "OTRO";
 
@@ -1939,13 +2342,30 @@ function agente_ejecutarDiagnostico() {
     if (r.estado === "NEGADA") negadas++;
   });
 
+  var aplazadas = regs.filter(function(r) { return r.estado === "APLAZADA"; }).length;
+  var sumaCola = 0, cCola = 0;
+  regs.forEach(function(r) { if (r.tCola !== null && r.tCola >= 0) { sumaCola += r.tCola; cCola++; } });
+  var fueraSLA = regs.filter(function(r) { return r.tResolucion !== null && r.tResolucion > 2; }).length;
+  var dentroSLA = regs.filter(function(r) { return r.tResolucion !== null && r.tResolucion > 0 && r.tResolucion <= 2; }).length;
+  var slaPct = (dentroSLA + fueraSLA) > 0 ? Math.round(dentroSLA / (dentroSLA + fueraSLA) * 1000) / 10 : 0;
+
+  var prodPorTipo = {};
+  regs.forEach(function(r) { var t = r.tipo || "Otro"; prodPorTipo[t] = (prodPorTipo[t] || 0) + 1; });
+
   var kpis = {
     totalGestionadas: regs.length,
     tiempoGestionProm: cG > 0 ? Math.round(sumaG / cG * 10) / 10 : 0,
     tiempoGeneralProm: cR > 0 ? Number((sumaR / cR).toFixed(2)) : 0,
+    tiempoColaProm: cCola > 0 ? Math.round(sumaCola / cCola * 10) / 10 : 0,
     tasaAprobacion: regs.length > 0 ? Math.round(aprobadas / regs.length * 1000) / 10 : 0,
     tasaNegacion: regs.length > 0 ? Math.round(negadas / regs.length * 1000) / 10 : 0,
-    backlog: backlog.length
+    backlog: backlog.length,
+    aprobadas: aprobadas,
+    negadas: negadas,
+    aplazadas: aplazadas,
+    slaPct: slaPct,
+    fueraSLA: fueraSLA,
+    prodPorTipo: prodPorTipo
   };
 
   // Análisis detallado por analista
@@ -1973,7 +2393,7 @@ function agente_ejecutarDiagnostico() {
 
   var rankAnalistas = Object.keys(porAn).map(function(n) {
     var a = porAn[n];
-    return { nombre: n, total: a.total, tGestionProm: a.cG > 0 ? Math.round(a.sumaG / a.cG * 10) / 10 : 0 };
+    return { nombre: n, total: a.total, aprobadas: a.aprobadas, negadas: a.negadas, aplazadas: a.aplazadas, tGestionProm: a.cG > 0 ? Math.round(a.sumaG / a.cG * 10) / 10 : 0, fueraSLA: a.fueraSLA || 0 };
   }).sort(function(a, b) { return b.total - a.total; });
 
   function _desglosesCupo(cupo) {
@@ -2001,14 +2421,17 @@ function agente_ejecutarDiagnostico() {
   var prodPorCorreo = {};
   regs.forEach(function(r) {
     if (!r.correo) return;
-    if (!prodPorCorreo[r.correo]) prodPorCorreo[r.correo] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaG: 0, cG: 0, sumaR: 0, cR: 0, fueraSLA: 0, nombre: r.analista };
+    if (!prodPorCorreo[r.correo]) prodPorCorreo[r.correo] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaG: 0, cG: 0, sumaR: 0, cR: 0, sumaCola: 0, cCola: 0, fueraSLA: 0, nombre: r.analista, tipos: {} };
     var p = prodPorCorreo[r.correo];
     p.total++;
+    var tipoR = r.tipo || "Otro";
+    p.tipos[tipoR] = (p.tipos[tipoR] || 0) + 1;
     if (r.estado === "APROBADA") p.aprobadas++;
     if (r.estado === "NEGADA") p.negadas++;
     if (r.estado === "APLAZADA") p.aplazadas++;
     if (r.tGestion !== null) { p.sumaG += r.tGestion; p.cG++; }
     if (r.tResolucion !== null && r.tResolucion > 0) { p.sumaR += r.tResolucion; p.cR++; if (r.tResolucion > 2) p.fueraSLA++; }
+    if (r.tCola !== null && r.tCola >= 0) { p.sumaCola += r.tCola; p.cCola++; }
   });
 
   // Analistas sin gestiones (que tienen cupo asignado)
@@ -2116,29 +2539,58 @@ function agente_ejecutarDiagnostico() {
       });
     }
 
-    if (motivos.length > 0) {
-      var datosConsolidados = [];
-      datosConsolidados.push({ label: "Gestiones hoy", valor: String(totalHoy), meta: cupo ? "de " + cupo.total + " asignadas" : "" });
-      datosConsolidados.push({ label: "Aprobadas / Aplazadas", valor: prod.aprobadas + " / " + prod.aplazadas, meta: "" });
-      if (equipoAn2) datosConsolidados.push({ label: "Equipo", valor: equipoAn2, meta: "" });
-      if (prod && prod.cG > 0) datosConsolidados.push({ label: "T. Gestión prom", valor: _fmtMinEmail(Math.round(prod.sumaG / prod.cG * 10) / 10), meta: "Meta: " + _fmtMinEmail(config.metas.maxTiempoGestionMin) });
-      if (prod && prod.cR > 0) datosConsolidados.push({ label: "T. General prom", valor: _fmtHorasEmail(Number((prod.sumaR / prod.cR).toFixed(2))), meta: "Meta: " + _fmtHorasEmail(config.metas.maxTiempoGeneralHoras) });
-      motivos.forEach(function(m) {
-        m.datos.forEach(function(d) {
-          var existe = datosConsolidados.some(function(dc) { return dc.label === d.label; });
-          if (!existe) datosConsolidados.push(d);
+    // Tasa de negación alta
+    if (prod.negadas > 0 && prod.total >= 3) {
+      var pctNeg = Math.round(prod.negadas / prod.total * 100);
+      if (pctNeg > config.metas.maxTasaNegacionPct) {
+        motivos.push({
+          tipo: "negacion",
+          datos: [{ label: "Tasa negación", valor: pctNeg + "%", meta: "Meta: <" + config.metas.maxTasaNegacionPct + "%" }],
+          punto: "Tasa de negación del " + pctNeg + "% (" + prod.negadas + " de " + prod.total + "). Supera la meta de " + config.metas.maxTasaNegacionPct + "%.",
+          sugerencia: "Revisar criterios de análisis y calidad de los expedientes que recibe."
         });
-      });
+      }
+    }
+
+    // Generar sugerencias por motivo
+    motivos.forEach(function(m) {
+      if (!m.sugerencia) {
+        if (m.tipo === "productividad") m.sugerencia = "Verificar si tiene solicitudes pendientes en cola o si requiere apoyo con casos complejos.";
+        else if (m.tipo === "tiempos") m.sugerencia = "Analizar si está recibiendo casos más complejos o si necesita capacitación en algún tipo de estudio.";
+        else if (m.tipo === "sla") m.sugerencia = "Priorizar los casos con mayor tiempo de espera y verificar si hay cuellos de botella en la asignación.";
+        else if (m.tipo === "info") m.sugerencia = "Confirmar con el coordinador si debe tener asignación para hoy.";
+      }
+    });
+
+    if (motivos.length > 0) {
+      var tGProd = prod.cG > 0 ? Math.round(prod.sumaG / prod.cG * 10) / 10 : 0;
+      var tRProd = prod.cR > 0 ? Number((prod.sumaR / prod.cR).toFixed(2)) : 0;
+      var tColaProd = prod.cCola > 0 ? Math.round(prod.sumaCola / prod.cCola * 10) / 10 : 0;
 
       var sevMax = motivos.some(function(m) { return m.tipo === "inactividad"; }) ? "critico" :
-                   motivos.some(function(m) { return m.tipo === "sla" || m.tipo === "productividad"; }) ? "advertencia" : "info";
+                   motivos.some(function(m) { return m.tipo === "sla" || m.tipo === "productividad" || m.tipo === "negacion"; }) ? "advertencia" : "info";
 
       seguimientoPersonas.push({
         nombre: nombre,
         tipo: motivos.map(function(m) { return m.tipo; }).join(", "),
         severidad: sevMax,
-        resumen: motivos.map(function(m) { return m.punto; }).join(" "),
-        datos: datosConsolidados,
+        equipo: equipoAn2 || "—",
+        produccion: {
+          total: totalHoy,
+          cupo: cupo ? cupo.total : 0,
+          aprobadas: prod.aprobadas,
+          negadas: prod.negadas,
+          aplazadas: prod.aplazadas
+        },
+        tiempos: {
+          gestion: tGProd,
+          general: tRProd,
+          cola: tColaProd,
+          fueraSLA: prod.fueraSLA
+        },
+        tipos: prod.tipos,
+        hallazgos: motivos.map(function(m) { return { tipo: m.tipo, detalle: m.punto, sugerencia: m.sugerencia }; }),
+        datos: motivos.reduce(function(acc, m) { m.datos.forEach(function(d) { var e = acc.some(function(x) { return x.label === d.label; }); if (!e) acc.push(d); }); return acc; }, []),
         puntoConversacion: motivos.map(function(m, i) { return (i + 1) + ". " + m.punto; }).join("\n")
       });
     }
@@ -2325,7 +2777,7 @@ function _construirEmailAlertas(diagnostico) {
   return html;
 }
 
-function _construirEmailResumenDiario(diagnostico) {
+function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
   var d = diagnostico;
   var hs = d.healthScore;
   var k = d.kpis;
@@ -2416,6 +2868,98 @@ function _construirEmailResumenDiario(diagnostico) {
   html += '</td></tr>';
 
   // ═══════════════════════════════════════════
+  // SECCIÓN 2.5: Cola de Asignación + Producción + SLA
+  // ═══════════════════════════════════════════
+  html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+
+  // Cola de asignación
+  if (datosCola && datosCola.total > 0) {
+    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#BD0F14;border-bottom:2px solid #fde8e8;padding-bottom:10px;">&#128229; Cola de Asignación — ' + datosCola.total + ' sin asignar</h2>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="6"><tr>';
+    var colaItems = [
+      { l: "Desplazamiento", v: datosCola.desplazamiento },
+      { l: "Inducción", v: datosCola.induccion },
+      { l: "Digital", v: datosCola.digital }
+    ];
+    colaItems.forEach(function(ci) {
+      html += '<td width="33%" style="text-align:center;padding:10px 6px;background:#fde8e8;border-radius:10px;">';
+      html += '<div style="font-size:11px;font-weight:700;color:#706F6F;">' + ci.l + '</div>';
+      html += '<div style="font-size:22px;font-weight:800;color:#BD0F14;">' + ci.v + '</div>';
+      html += '</td>';
+    });
+    html += '</tr><tr>';
+    var colaItems2 = [
+      { l: "Bio. Fallida", v: datosCola.biometriaFallida },
+      { l: "Nueva UAR", v: datosCola.nuevaUar },
+      { l: "Deudor UAR", v: datosCola.deudorUar }
+    ];
+    colaItems2.forEach(function(ci) {
+      html += '<td width="33%" style="text-align:center;padding:8px 6px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+      html += '<div style="font-size:11px;font-weight:700;color:#706F6F;">' + ci.l + '</div>';
+      html += '<div style="font-size:18px;font-weight:800;color:#253150;">' + ci.v + '</div>';
+      html += '</td>';
+    });
+    html += '</tr></table>';
+    if (datosCola.reestudio > 0) {
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;"><tr>';
+      html += '<td style="text-align:center;padding:10px;background:#ecfdf5;border-radius:10px;">';
+      html += '<div style="font-size:11px;font-weight:700;color:#059669;">Reestudios</div>';
+      html += '<div style="font-size:22px;font-weight:800;color:#059669;">' + datosCola.reestudio + '</div>';
+      html += '</td></tr></table>';
+    }
+    html += '<div style="height:20px;"></div>';
+  }
+
+  // Producción por tipo
+  if (k.prodPorTipo && Object.keys(k.prodPorTipo).length > 0) {
+    html += '<h2 style="margin:0 0 14px;font-size:15px;font-weight:800;color:#253150;">&#128200; Producción por Tipo</h2>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="6"><tr>';
+    var tipoKeys = Object.keys(k.prodPorTipo).sort(function(a, b) { return k.prodPorTipo[b] - k.prodPorTipo[a]; });
+    var tipoColores = { Digital: "#253150", UAR: "#BD0F14", Reestudio: "#706F6F", "Biometría": "#3a4d7a", "Inducción": "#8b0a0e" };
+    tipoKeys.forEach(function(t) {
+      html += '<td style="text-align:center;padding:10px 4px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+      html += '<div style="font-size:11px;font-weight:700;color:#706F6F;">' + _escHtml(t) + '</div>';
+      html += '<div style="font-size:20px;font-weight:800;color:' + (tipoColores[t] || "#253150") + ';">' + k.prodPorTipo[t] + '</div>';
+      html += '</td>';
+    });
+    html += '</tr></table>';
+    html += '<div style="height:16px;"></div>';
+  }
+
+  // Distribución por Estado + SLA
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+  html += '<td width="25%" style="text-align:center;padding:12px 6px;background:#ecfdf5;border-radius:10px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#059669;">Aprobadas</div>';
+  html += '<div style="font-size:22px;font-weight:800;color:#059669;">' + (k.aprobadas || 0) + '</div></td>';
+  html += '<td width="25%" style="text-align:center;padding:12px 6px;background:#fde8e8;border-radius:10px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#BD0F14;">Negadas</div>';
+  html += '<div style="font-size:22px;font-weight:800;color:#BD0F14;">' + (k.negadas || 0) + '</div></td>';
+  html += '<td width="25%" style="text-align:center;padding:12px 6px;background:#fffbeb;border-radius:10px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#d97706;">Aplazadas</div>';
+  html += '<div style="font-size:22px;font-weight:800;color:#d97706;">' + (k.aplazadas || 0) + '</div></td>';
+  var slaColor = k.slaPct >= 90 ? "#059669" : k.slaPct >= 70 ? "#d97706" : "#BD0F14";
+  var slaBg = k.slaPct >= 90 ? "#ecfdf5" : k.slaPct >= 70 ? "#fffbeb" : "#fde8e8";
+  html += '<td width="25%" style="text-align:center;padding:12px 6px;background:' + slaBg + ';border-radius:10px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:' + slaColor + ';">SLA</div>';
+  html += '<div style="font-size:22px;font-weight:800;color:' + slaColor + ';">' + k.slaPct + '%</div></td>';
+  html += '</tr></table>';
+
+  // Tiempos resumen
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:8px;"><tr>';
+  html += '<td width="33%" style="text-align:center;padding:10px 6px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#706F6F;">T. Cola</div>';
+  html += '<div style="font-size:18px;font-weight:800;color:#253150;">' + _fmtMinEmail(k.tiempoColaProm || 0) + '</div></td>';
+  html += '<td width="33%" style="text-align:center;padding:10px 6px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#706F6F;">T. Gestión</div>';
+  html += '<div style="font-size:18px;font-weight:800;color:#253150;">' + _fmtMinEmail(k.tiempoGestionProm) + '</div></td>';
+  html += '<td width="33%" style="text-align:center;padding:10px 6px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#706F6F;">T. General</div>';
+  html += '<div style="font-size:18px;font-weight:800;color:#253150;">' + _fmtHorasEmail(k.tiempoGeneralProm) + '</div></td>';
+  html += '</tr></table>';
+
+  html += '</td></tr>';
+
+  // ═══════════════════════════════════════════
   // SECCIÓN 3: Estado de Alertas
   // ═══════════════════════════════════════════
   html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
@@ -2459,15 +3003,29 @@ function _construirEmailResumenDiario(diagnostico) {
   // ═══════════════════════════════════════════
   if (d.rankAnalistas && d.rankAnalistas.length > 0) {
     html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
-    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#127942; Desempeño del Equipo</h2>';
+    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#127942; Desempeño del Equipo (' + d.rankAnalistas.length + ' analistas)</h2>';
     html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">';
-    html += '<tr style="background:#253150;"><th style="padding:10px 14px;text-align:left;font-size:13px;color:#fff;font-weight:700;border-radius:8px 0 0 0;">Analista</th><th style="padding:10px 12px;text-align:center;font-size:13px;color:#fff;font-weight:700;">Solicitudes</th><th style="padding:10px 14px;text-align:center;font-size:13px;color:#fff;font-weight:700;border-radius:0 8px 0 0;">T. Gestión</th></tr>';
-    d.rankAnalistas.slice(0, 5).forEach(function(a, idx) {
+    html += '<tr style="background:#253150;">';
+    html += '<th style="padding:8px 10px;text-align:left;font-size:11px;color:#fff;font-weight:700;border-radius:8px 0 0 0;">Analista</th>';
+    html += '<th style="padding:8px 6px;text-align:center;font-size:11px;color:#fff;font-weight:700;">Total</th>';
+    html += '<th style="padding:8px 6px;text-align:center;font-size:11px;color:#fff;font-weight:700;">Aprob.</th>';
+    html += '<th style="padding:8px 6px;text-align:center;font-size:11px;color:#fff;font-weight:700;">Neg.</th>';
+    html += '<th style="padding:8px 6px;text-align:center;font-size:11px;color:#fff;font-weight:700;">Aplaz.</th>';
+    html += '<th style="padding:8px 6px;text-align:center;font-size:11px;color:#fff;font-weight:700;">T.Gestión</th>';
+    html += '<th style="padding:8px 6px;text-align:center;font-size:11px;color:#fff;font-weight:700;border-radius:0 8px 0 0;">F.SLA</th>';
+    html += '</tr>';
+    d.rankAnalistas.forEach(function(a, idx) {
       var rowBg = idx % 2 === 0 ? "#f8fafc" : "#fff";
       var medal = idx === 0 ? "&#129351; " : idx === 1 ? "&#129352; " : idx === 2 ? "&#129353; " : "";
-      html += '<tr><td style="padding:10px 14px;font-weight:600;font-size:13px;color:#253150;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + medal + _escHtml(a.nombre) + '</td>';
-      html += '<td style="text-align:center;padding:10px 12px;font-size:14px;font-weight:800;color:#253150;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + a.total + '</td>';
-      html += '<td style="text-align:center;padding:10px 14px;font-size:14px;font-weight:600;color:#706F6F;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + a.tGestionProm + ' min</td></tr>';
+      html += '<tr>';
+      html += '<td style="padding:7px 10px;font-weight:600;font-size:12px;color:#253150;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + medal + _escHtml(a.nombre) + '</td>';
+      html += '<td style="text-align:center;padding:7px 4px;font-size:13px;font-weight:800;color:#253150;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + a.total + '</td>';
+      html += '<td style="text-align:center;padding:7px 4px;font-size:12px;color:#059669;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + (a.aprobadas || 0) + '</td>';
+      html += '<td style="text-align:center;padding:7px 4px;font-size:12px;color:#BD0F14;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + (a.negadas || 0) + '</td>';
+      html += '<td style="text-align:center;padding:7px 4px;font-size:12px;color:#d97706;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + (a.aplazadas || 0) + '</td>';
+      html += '<td style="text-align:center;padding:7px 4px;font-size:12px;font-weight:600;color:#706F6F;background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + (a.tGestionProm || 0) + 'm</td>';
+      html += '<td style="text-align:center;padding:7px 4px;font-size:12px;font-weight:700;color:' + ((a.fueraSLA || 0) > 0 ? '#BD0F14' : '#059669') + ';background:' + rowBg + ';border-bottom:1px solid #e5e7eb;">' + (a.fueraSLA || 0) + '</td>';
+      html += '</tr>';
     });
     html += '</table>';
     html += '</td></tr>';
@@ -2490,6 +3048,72 @@ function _construirEmailResumenDiario(diagnostico) {
       html += '</td></tr>';
     });
     html += '</table>';
+    html += '</td></tr>';
+  }
+
+  // ═══════════════════════════════════════════
+  // SECCIÓN 6: Reporte de Biometría
+  // ═══════════════════════════════════════════
+  if (datosBio && datosBio.totalConsultadas > 0) {
+    var bio = datosBio;
+    var ges = bio.gestion || {};
+    html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #d1fae5;padding-bottom:10px;">&#129302; Reporte Biometría del Día</h2>';
+
+    html += '<div style="font-size:13px;font-weight:700;color:#059669;margin-bottom:10px;">Ciclo de Broadcast (WhatsApp)</div>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+    var bioKpis = [
+      { label: "Consultadas", value: bio.totalConsultadas, color: "#253150", bg: "#f8fafc" },
+      { label: "WA Enviados", value: bio.totalEnviados, color: "#25D366", bg: "#ecfdf5" },
+      { label: "Tasa Envío", value: bio.tasaEnvio + "%", color: "#253150", bg: "#f8fafc" },
+      { label: "Resueltas sin asignar", value: bio.totalAprobado, color: "#059669", bg: "#ecfdf5" },
+      { label: "Enviadas a cola", value: bio.totalPendiente, color: "#d97706", bg: "#fffbeb" },
+      { label: "Tasa Conversión", value: bio.tasaConversion + "%", color: "#059669", bg: "#ecfdf5" }
+    ];
+    bioKpis.slice(0, 3).forEach(function(ki) {
+      html += '<td width="33%" style="text-align:center;padding:12px 6px;background:' + ki.bg + ';border-radius:10px;border:1px solid #e5e7eb;">';
+      html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.label + '</div>';
+      html += '<div style="font-size:22px;font-weight:800;color:' + ki.color + ';">' + ki.value + '</div>';
+      html += '</td>';
+    });
+    html += '</tr><tr>';
+    bioKpis.slice(3, 6).forEach(function(ki) {
+      html += '<td width="33%" style="text-align:center;padding:12px 6px;background:' + ki.bg + ';border-radius:10px;border:1px solid #e5e7eb;">';
+      html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.label + '</div>';
+      html += '<div style="font-size:22px;font-weight:800;color:' + ki.color + ';">' + ki.value + '</div>';
+      html += '</td>';
+    });
+    html += '</tr></table>';
+
+    if (ges.total > 0) {
+      html += '<div style="font-size:13px;font-weight:700;color:#253150;margin:18px 0 10px;border-top:1px solid #e5e7eb;padding-top:14px;">Gestión de Analistas (llamadas)</div>';
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+      [{ l: "Gestionadas", v: ges.total, c: "#253150" }, { l: "OK Llamada", v: ges.okLlamada, c: "#059669" }, { l: "No Contestó", v: ges.noContesto, c: "#d97706" }, { l: "Tasa Contacto", v: ges.tasaContacto + "%", c: "#253150" }].forEach(function(ki) {
+        html += '<td width="25%" style="text-align:center;padding:10px 4px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+        html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
+        html += '<div style="font-size:20px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
+        html += '</td>';
+      });
+      html += '</tr></table>';
+
+      html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:6px;"><tr>';
+      [{ l: "Aprobadas", v: ges.aprobadas, c: "#059669", b: "#ecfdf5" }, { l: "Negadas", v: ges.negadas, c: "#BD0F14", b: "#fde8e8" }, { l: "Aplazadas", v: ges.aplazadas, c: "#d97706", b: "#fffbeb" }].forEach(function(ri) {
+        html += '<td width="33%" style="text-align:center;padding:10px 6px;background:' + ri.b + ';border-radius:10px;">';
+        html += '<div style="font-size:11px;font-weight:700;color:#706F6F;">' + ri.l + '</div>';
+        html += '<div style="font-size:20px;font-weight:800;color:' + ri.c + ';">' + ri.v + '</div>';
+        html += '</td>';
+      });
+      html += '</tr></table>';
+
+      var motivoKeys = Object.keys(ges.motivos || {});
+      if (motivoKeys.length > 0) {
+        html += '<div style="font-size:12px;font-weight:700;color:#d97706;margin:12px 0 6px;">Motivos de aplazamiento:</div>';
+        motivoKeys.forEach(function(m) {
+          html += '<div style="font-size:12px;color:#4a4a4a;line-height:1.6;">&#8226; ' + _escHtml(m) + ': <strong>' + ges.motivos[m] + '</strong></div>';
+        });
+      }
+    }
+
     html += '</td></tr>';
   }
 
@@ -2585,8 +3209,16 @@ function agente_enviarResumenDiario() {
 
   var ahora = new Date();
   var fecha = Utilities.formatDate(ahora, TIMEZONE, "dd/MM/yyyy");
+  var hoy = Utilities.formatDate(ahora, TIMEZONE, "yyyy-MM-dd");
   var hs = diagnostico.healthScore || {};
-  var html = _construirEmailResumenDiario(diagnostico);
+
+  var datosBio = null;
+  try { datosBio = obtenerDatosBiometria(hoy, hoy); } catch (e) { Logger.log("Aviso: No se pudo obtener datos biometría para email: " + e.message); }
+
+  var datosCola = null;
+  try { datosCola = obtenerColaAsignacion(); } catch (e) { Logger.log("Aviso: No se pudo obtener cola para email: " + e.message); }
+
+  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola);
 
   try {
     MailApp.sendEmail({

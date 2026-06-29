@@ -21,7 +21,7 @@
         <div class="brand-icon"><i class="bi bi-bar-chart-fill"></i></div>
         <span class="brand-name">Métricas Análisis</span>
     </div>
-    <div class="sidebar-section">
+    <div class="sidebar-section" id="sidebarNav" style="display:none;">
         <div class="sidebar-label">Navegación</div>
         <a href="javascript:void(0)" class="nav-link-admin active" onclick="cambiarTab('resumen', this)" title="Resumen General">
             <i class="bi bi-speedometer"></i> <span class="nav-text">Resumen General</span>
@@ -34,6 +34,9 @@
         </a>
         <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('analistas', this)" title="Analistas">
             <i class="bi bi-people"></i> <span class="nav-text">Analistas</span>
+        </a>
+        <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('biometria', this)" title="Biometría">
+            <i class="bi bi-fingerprint"></i> <span class="nav-text">Biometría</span>
         </a>
         <a href="javascript:void(0)" class="nav-link-admin" onclick="cambiarTab('agente', this)" title="Agente Coordinador" id="navAgente">
             <i class="bi bi-robot"></i> <span class="nav-text">Agente Coordinador</span>
@@ -64,7 +67,7 @@
     </div>
 
     <!-- Filtros de fecha + Segmento -->
-    <div class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);">
+    <div id="barraFiltrosFecha" class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);display:none;">
         <div class="d-flex align-items-center gap-2">
             <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Desde</label>
             <input type="date" id="metricaDesde" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
@@ -84,14 +87,19 @@
         </div>
         <div class="d-flex gap-2 ms-auto">
             <button class="btn-outline-brand" onclick="setRangoRapido('hoy')" style="padding:6px 14px;font-size:0.75rem;">Hoy</button>
-            <button class="btn-outline-brand" onclick="setRangoRapido('semana')" style="padding:6px 14px;font-size:0.75rem;">Últimos 7 días</button>
-            <button class="btn-outline-brand" onclick="setRangoRapido('mes')" style="padding:6px 14px;font-size:0.75rem;">Últimos 30 días</button>
-            <button class="btn-outline-brand" onclick="setRangoRapido('4meses')" style="padding:6px 14px;font-size:0.75rem;">Últimos 4 meses</button>
+            <button class="btn-outline-brand" onclick="setRangoRapido('semana')" style="padding:6px 14px;font-size:0.75rem;">Esta semana</button>
+            <button class="btn-outline-brand" onclick="setRangoRapido('mesActual')" style="padding:6px 14px;font-size:0.75rem;">Este mes</button>
+            <button class="btn-outline-brand" onclick="setRangoRapido('bimestre')" style="padding:6px 14px;font-size:0.75rem;">Mes anterior + actual</button>
+            <button class="btn-outline-brand" onclick="setRangoRapido('trimestre')" style="padding:6px 14px;font-size:0.75rem;">Último trimestre</button>
         </div>
     </div>
 
     <!-- Filtros adicionales generales -->
-    <div class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);">
+    <div id="barraFiltrosGenerales" class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);display:none;">
+        <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Solicitud</label>
+            <input type="text" id="filtroSolicitud" class="form-control" placeholder="Buscar solicitud..." oninput="debounceFiltroSolicitud()" style="width:140px;padding:6px 12px !important;font-size:0.8rem;border-radius:8px;">
+        </div>
         <div class="d-flex align-items-center gap-2">
             <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Póliza</label>
             <input type="text" id="filtroPoliza" class="form-control" placeholder="Buscar póliza..." oninput="debounceFiltroPoliza()" style="width:130px;padding:6px 12px !important;font-size:0.8rem;border-radius:8px;">
@@ -146,6 +154,11 @@
         <div id="tab-resumen" class="tab-panel">
         <!-- Tarjetas KPI -->
         <div class="metrics-row mb-4">
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('radicadas')">
+                <div class="card-top"><span class="metric-label">Total Radicadas</span><div class="card-arrow"><i class="bi bi-inbox-fill"></i></div></div>
+                <div class="metric-value" id="kpiRadicadas" style="color:var(--azul);">0</div>
+                <div class="metric-trend"><span class="trend-chip">Período</span> Ingresaron al sistema</div>
+            </div>
             <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('total')">
                 <div class="card-top"><span class="metric-label">Total Gestionadas</span><div class="card-arrow"><i class="bi bi-clipboard-check"></i></div></div>
                 <div class="metric-value" id="kpiTotal">0</div>
@@ -171,74 +184,54 @@
                 <div class="metric-value" id="kpiAprobacion">0<span style="font-size:1rem;font-weight:600;">%</span></div>
                 <div class="metric-trend"><span class="trend-chip">Aprobaciones</span> Del total</div>
             </div>
-        </div>
-
-        <!-- Cards Producción por Tipo -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:24px;">
-            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoGeneral')"><div class="tipo-icon" style="background:var(--azul);"><i class="bi bi-stack"></i></div><div class="tipo-info"><span class="tipo-label">General</span><span class="tipo-value" id="kpiTipoGeneral">0</span></div><span class="tipo-prom">~<span id="kpiTipoGeneralProm">0</span>/día</span></div>
-            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoDigital')"><div class="tipo-icon" style="background:#253150;"><i class="bi bi-laptop"></i></div><div class="tipo-info"><span class="tipo-label">Digital</span><span class="tipo-value" id="kpiTipoDigital">0</span></div><span class="tipo-prom">~<span id="kpiTipoDigitalProm">0</span>/día</span></div>
-            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoUAR')"><div class="tipo-icon" style="background:#BD0F14;"><i class="bi bi-envelope-paper"></i></div><div class="tipo-info"><span class="tipo-label">UAR</span><span class="tipo-value" id="kpiTipoUAR">0</span></div><span class="tipo-prom">~<span id="kpiTipoUARProm">0</span>/día</span></div>
-            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoReestudio')"><div class="tipo-icon" style="background:#706F6F;"><i class="bi bi-arrow-repeat"></i></div><div class="tipo-info"><span class="tipo-label">Reestudio</span><span class="tipo-value" id="kpiTipoReestudio">0</span></div><span class="tipo-prom">~<span id="kpiTipoReestudioProm">0</span>/día</span></div>
-            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoBiometria')"><div class="tipo-icon" style="background:#3a4d7a;"><i class="bi bi-fingerprint"></i></div><div class="tipo-info"><span class="tipo-label">Biometría</span><span class="tipo-value" id="kpiTipoBiometria">0</span></div><span class="tipo-prom">~<span id="kpiTipoBiometriaProm">0</span>/día</span></div>
-            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoInduccion')"><div class="tipo-icon" style="background:#8b0a0e;"><i class="bi bi-person-badge"></i></div><div class="tipo-info"><span class="tipo-label">Inducción</span><span class="tipo-value" id="kpiTipoInduccion">0</span></div><span class="tipo-prom">~<span id="kpiTipoInduccionProm">0</span>/día</span></div>
-        </div>
-
-        <!-- Gráficos Resumen -->
-        <div class="row g-4 mb-4">
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Producción Diaria<span class="btn-help-chart" onclick="ayudaGrafico('produccionDiaria')">?</span></div><div style="position:relative;height:240px;"><canvas id="chartProduccion"></canvas></div></div></div>
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-pie-chart me-2" style="color:var(--azul);"></i>Distribución por Estado<span class="btn-help-chart" onclick="ayudaGrafico('estados')">?</span></div><div style="position:relative;height:240px;"><canvas id="chartEstados"></canvas></div></div></div>
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-people me-2" style="color:var(--azul);"></i>Productividad por Analista<span class="btn-help-chart" onclick="ayudaGrafico('analistas')">?</span></div><canvas id="chartAnalistas" height="220"></canvas></div></div>
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-shield-check me-2" style="color:var(--azul);"></i>Cumplimiento SLA<span class="btn-help-chart" onclick="ayudaGrafico('sla')">?</span></div><canvas id="chartSLA" height="220"></canvas></div></div>
-        </div>
-
-        <!-- Segmentación Inmobiliarias -->
-        <div class="row g-4 mb-4">
-            <div class="col-lg-6">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-2"><i class="bi bi-building me-2" style="color:var(--azul);"></i>Volumen por Inmobiliaria<span class="btn-help-chart" onclick="ayudaGrafico('volumenInmob')">?</span></div>
-                    <div class="table-sub mb-3">Solicitudes recibidas por inmobiliaria del segmento seleccionado</div>
-                    <div id="wrapVolumenInmob" style="position:relative;width:100%;overflow-x:auto;">
-                        <canvas id="chartVolumenInmob"></canvas>
-                    </div>
-                </div>
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('negacion')">
+                <div class="card-top"><span class="metric-label">% Negación</span><div class="card-arrow"><i class="bi bi-x-circle"></i></div></div>
+                <div class="metric-value" id="kpiNegacion" style="color:var(--rojo);">0<span style="font-size:1rem;font-weight:600;">%</span></div>
+                <div class="metric-trend"><span class="trend-chip">Negaciones</span> Del total</div>
             </div>
-            <div class="col-lg-6">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-2"><i class="bi bi-clock me-2" style="color:var(--azul);"></i>Comparativa de Tiempos<span class="btn-help-chart" onclick="ayudaGrafico('comparativaTiempos')">?</span></div>
-                    <div class="table-sub mb-3">T. Cola vs T. Gestión vs T. General por inmobiliaria</div>
-                    <div id="wrapComparativaTiempos" style="position:relative;width:100%;overflow-x:auto;">
-                        <canvas id="chartComparativaTiempos"></canvas>
-                    </div>
-                </div>
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('aplazamiento')">
+                <div class="card-top"><span class="metric-label">% Aplazamiento</span><div class="card-arrow"><i class="bi bi-pause-circle"></i></div></div>
+                <div class="metric-value" id="kpiAplazamiento" style="color:#706F6F;">0<span style="font-size:1rem;font-weight:600;">%</span></div>
+                <div class="metric-trend"><span class="trend-chip">Aplazamientos</span> Del total</div>
             </div>
-        </div>
-        <div id="segmentacionContenido"></div>
-
-        <!-- Volumen por Sucursal -->
-        <div class="row g-4 mb-4">
-            <div class="col-lg-6">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-2"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Volumen por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('volumenSucursal')">?</span></div>
-                    <div class="table-sub mb-3">Total de solicitudes por sucursal</div>
-                    <div id="wrapVolumenSucursal" style="position:relative;width:100%;height:220px;">
-                        <canvas id="chartVolumenSucursal"></canvas>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-6">
-                <div class="table-container" style="margin-top:0;">
-                    <div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('tiemposSucursal')">?</span></div>
-                    <div class="table-sub mb-3">T. Gestión vs T. General promedio por sucursal</div>
-                    <div id="wrapTiemposSucursal" style="position:relative;width:100%;height:220px;">
-                        <canvas id="chartTiemposSucursal"></canvas>
-                    </div>
-                </div>
+            <div class="metric-card" style="cursor:pointer;" onclick="drilldownKPI('negacionDirecta')">
+                <div class="card-top"><span class="metric-label">% Negación Directa</span><div class="card-arrow"><i class="bi bi-x-octagon"></i></div></div>
+                <div class="metric-value" id="kpiNegacionDirecta" style="color:var(--rojo);">0<span style="font-size:1rem;font-weight:600;">%</span></div>
+                <div class="metric-trend"><span class="trend-chip" id="kpiNegacionDirectaCount">0</span> Rechazadas SAI</div>
             </div>
         </div>
 
-        <!-- Indicadores estratégicos -->
+        <!-- Cola de Asignación -->
+        <div class="table-container mb-4" id="seccionColaAsignacion" style="margin-top:0;padding:0;overflow:hidden;">
+            <div style="background:var(--rojo);padding:16px 24px;display:flex;align-items:center;gap:16px;">
+                <div style="background:rgba(255,255,255,0.2);border-radius:14px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;"><i class="bi bi-cloud-arrow-down" style="font-size:1.5rem;color:#fff;"></i></div>
+                <div>
+                    <div style="font-size:0.75rem;font-weight:700;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:1px;">Sin Asignar (Cola)</div>
+                    <div style="font-size:2.5rem;font-weight:800;color:#fff;line-height:1;" id="colaTotalSinAsignar">—</div>
+                </div>
+                <div style="margin-left:auto;">
+                    <button class="btn-outline-brand" onclick="cargarColaAsignacion()" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);padding:6px 14px;font-size:0.72rem;"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+                </div>
+            </div>
+            <div style="padding:16px 20px;">
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
+                    <div class="cola-card" id="colaDesplazamiento"><div class="cola-card-icon"><i class="bi bi-arrow-repeat"></i></div><div class="cola-card-label">DESPLAZAMIENTO</div><div class="cola-card-value">—</div></div>
+                    <div class="cola-card cola-card-highlight" id="colaInduccion"><div class="cola-card-icon"><i class="bi bi-mortarboard"></i></div><div class="cola-card-label">INDUCCIÓN</div><div class="cola-card-value">—</div></div>
+                    <div class="cola-card" id="colaDigital"><div class="cola-card-icon"><i class="bi bi-laptop"></i></div><div class="cola-card-label">DIGITAL</div><div class="cola-card-value">—</div></div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
+                    <div class="cola-card cola-card-muted" id="colaBiometriaFallida"><div class="cola-card-icon"><i class="bi bi-exclamation-triangle"></i></div><div class="cola-card-label">BIOMETRÍA FALLIDA</div><div class="cola-card-value">—</div></div>
+                    <div class="cola-card cola-card-muted" id="colaNuevaUar"><div class="cola-card-icon"><i class="bi bi-envelope-paper"></i></div><div class="cola-card-label">NUEVA UAR</div><div class="cola-card-value">—</div></div>
+                    <div class="cola-card cola-card-muted" id="colaDeudorUar"><div class="cola-card-icon"><i class="bi bi-person-badge"></i></div><div class="cola-card-label">DEUDOR UAR</div><div class="cola-card-value">—</div></div>
+                </div>
+                <div class="cola-card cola-card-green" id="colaReestudios" style="text-align:center;"><div class="cola-card-icon"><i class="bi bi-arrow-counterclockwise"></i></div><div class="cola-card-label">REESTUDIOS</div><div class="cola-card-value">—</div></div>
+            </div>
+        </div>
+
+        <!-- Estado y SLA -->
         <div class="row g-4 mb-4">
-            <div class="col-lg-4"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-graph-down me-2" style="color:var(--azul);"></i>Tendencia SLA Diaria<span class="btn-help-chart" onclick="ayudaGrafico('tendenciaSLA')">?</span></div><canvas id="chartTendenciaSLA" height="200"></canvas></div></div>
+            <div class="col-lg-4"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-pie-chart me-2" style="color:var(--azul);"></i>Distribución por Estado<span class="btn-help-chart" onclick="ayudaGrafico('estados')">?</span></div><div style="position:relative;height:220px;"><canvas id="chartEstados"></canvas></div></div></div>
+            <div class="col-lg-4"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-shield-check me-2" style="color:var(--azul);"></i>Cumplimiento SLA<span class="btn-help-chart" onclick="ayudaGrafico('sla')">?</span></div><div style="position:relative;height:220px;"><canvas id="chartSLA"></canvas></div></div></div>
             <div class="col-lg-4">
                 <div class="table-container" style="margin-top:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;" onclick="verBacklogDetalle()">
                     <div class="table-title mb-2"><i class="bi bi-inbox me-2" style="color:var(--rojo);"></i>Backlog Actual</div>
@@ -247,6 +240,12 @@
                     <div style="font-size:0.65rem;color:var(--text-light);margin-top:4px;"><i class="bi bi-hand-index"></i> Click para ir al semáforo</div>
                 </div>
             </div>
+        </div>
+
+        <!-- Tendencia SLA -->
+        <div class="table-container mb-4" style="margin-top:0;">
+            <div class="table-title mb-2"><i class="bi bi-graph-down me-2" style="color:var(--azul);"></i>Tendencia SLA Diaria<span class="btn-help-chart" onclick="ayudaGrafico('tendenciaSLA')">?</span></div>
+            <div style="position:relative;height:160px;"><canvas id="chartTendenciaSLA"></canvas></div>
         </div>
 
         <!-- Tabla Backlog con Semáforo -->
@@ -277,16 +276,51 @@
 
         <!-- TAB: Producción -->
         <div id="tab-produccion" class="tab-panel" style="display:none;">
+        <!-- Cards Producción por Tipo -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:24px;">
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoGeneral')"><div class="tipo-icon" style="background:var(--azul);"><i class="bi bi-stack"></i></div><div class="tipo-info"><span class="tipo-label">General</span><span class="tipo-value" id="kpiTipoGeneral">0</span></div><span class="tipo-prom">~<span id="kpiTipoGeneralProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoDigital')"><div class="tipo-icon" style="background:#253150;"><i class="bi bi-laptop"></i></div><div class="tipo-info"><span class="tipo-label">Digital</span><span class="tipo-value" id="kpiTipoDigital">0</span></div><span class="tipo-prom">~<span id="kpiTipoDigitalProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoUAR')"><div class="tipo-icon" style="background:#BD0F14;"><i class="bi bi-envelope-paper"></i></div><div class="tipo-info"><span class="tipo-label">UAR</span><span class="tipo-value" id="kpiTipoUAR">0</span></div><span class="tipo-prom">~<span id="kpiTipoUARProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoReestudio')"><div class="tipo-icon" style="background:#706F6F;"><i class="bi bi-arrow-repeat"></i></div><div class="tipo-info"><span class="tipo-label">Reestudio</span><span class="tipo-value" id="kpiTipoReestudio">0</span></div><span class="tipo-prom">~<span id="kpiTipoReestudioProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoBiometria')"><div class="tipo-icon" style="background:#3a4d7a;"><i class="bi bi-fingerprint"></i></div><div class="tipo-info"><span class="tipo-label">Biometría</span><span class="tipo-value" id="kpiTipoBiometria">0</span></div><span class="tipo-prom">~<span id="kpiTipoBiometriaProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoInduccion')"><div class="tipo-icon" style="background:#8b0a0e;"><i class="bi bi-person-badge"></i></div><div class="tipo-info"><span class="tipo-label">Inducción</span><span class="tipo-value" id="kpiTipoInduccion">0</span></div><span class="tipo-prom">~<span id="kpiTipoInduccionProm">0</span>/día</span></div>
+        </div>
+
+        <!-- Producción Diaria -->
+        <div class="table-container mb-4" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Producción Diaria<span class="btn-help-chart" onclick="ayudaGrafico('produccionDiaria')">?</span></div><div style="position:relative;height:240px;"><canvas id="chartProduccion"></canvas></div></div>
+
         <div class="row g-4 mb-4">
             <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('prodSucursal')">?</span></div><canvas id="chartSucursal" height="180"></canvas></div></div>
             <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-tags me-2" style="color:var(--azul);"></i>Producción por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('prodTipo')">?</span></div><canvas id="chartTipo" height="180"></canvas></div></div>
         </div>
         <div class="table-container mb-4"><div class="table-header"><div><div class="table-title"><i class="bi bi-calendar3 me-2" style="color:var(--azul);"></i>Producción Mensual por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('mensualTipo')">?</span></div><div class="table-sub">Total por mes discriminado por tipo</div></div></div><canvas id="chartMensual" height="90"></canvas></div>
         <div class="table-container mb-4"><div class="table-header"><div><div class="table-title"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción Mensual por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('mensualSucursal')">?</span></div><div class="table-sub">Total por mes discriminado por sucursal</div></div></div><canvas id="chartMensualSucursal" height="90"></canvas></div>
+
+        <!-- Producción por Hora del Día -->
+        <div class="table-container mb-4" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-grid-3x3 me-2" style="color:var(--azul);"></i>Producción por Hora del Día<span class="btn-help-chart" onclick="ayudaGrafico('heatmapHora')">?</span></div><div class="table-sub mb-3">Solicitudes cerradas por franja horaria</div><canvas id="chartHeatmapHora" height="140"></canvas></div>
+
+        <!-- Volumen por Inmobiliaria y Sucursal -->
         <div class="row g-4 mb-4">
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-grid-3x3 me-2" style="color:var(--azul);"></i>Producción por Hora del Día<span class="btn-help-chart" onclick="ayudaGrafico('heatmapHora')">?</span></div><div class="table-sub mb-3">Solicitudes cerradas por franja horaria</div><canvas id="chartHeatmapHora" height="140"></canvas></div></div>
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('tiemposPorTipo')">?</span></div><div class="table-sub mb-3">Promedio de tiempo de gestión por tipo</div><canvas id="chartTiemposPorTipo" height="140"></canvas></div></div>
+            <div class="col-lg-6">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-title mb-2"><i class="bi bi-building me-2" style="color:var(--azul);"></i>Volumen por Inmobiliaria<span class="btn-help-chart" onclick="ayudaGrafico('volumenInmob')">?</span></div>
+                    <div class="table-sub mb-3">Solicitudes recibidas por inmobiliaria del segmento seleccionado</div>
+                    <div id="wrapVolumenInmob" style="position:relative;width:100%;overflow-x:auto;">
+                        <canvas id="chartVolumenInmob"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-title mb-2"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Volumen por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('volumenSucursal')">?</span></div>
+                    <div class="table-sub mb-3">Total de solicitudes por sucursal</div>
+                    <div id="wrapVolumenSucursal" style="position:relative;width:100%;height:220px;">
+                        <canvas id="chartVolumenSucursal"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
+        <div id="segmentacionContenido"></div>
         </div><!-- /tab-produccion -->
 
         <!-- TAB: Tiempos -->
@@ -304,6 +338,32 @@
                 <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-stopwatch me-1"></i>T. Gestión Promedio</div><canvas id="chartTiempoGestion" height="180"></canvas></div></div>
             </div>
         </div>
+
+        <!-- Comparativas de Tiempos -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('tiemposPorTipo')">?</span></div><div class="table-sub mb-3">Promedio de tiempo de gestión por tipo</div><canvas id="chartTiemposPorTipo" height="140"></canvas></div></div>
+            <div class="col-lg-6">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-title mb-2"><i class="bi bi-clock me-2" style="color:var(--azul);"></i>Comparativa de Tiempos por Inmobiliaria<span class="btn-help-chart" onclick="ayudaGrafico('comparativaTiempos')">?</span></div>
+                    <div class="table-sub mb-3">T. Cola vs T. Gestión vs T. General por inmobiliaria</div>
+                    <div id="wrapComparativaTiempos" style="position:relative;width:100%;overflow-x:auto;">
+                        <canvas id="chartComparativaTiempos"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('tiemposSucursal')">?</span></div>
+                    <div class="table-sub mb-3">T. Gestión vs T. General promedio por sucursal</div>
+                    <div id="wrapTiemposSucursal" style="position:relative;width:100%;height:220px;">
+                        <canvas id="chartTiemposSucursal"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Búsqueda por Solicitud -->
         <div class="table-container mb-4">
             <div class="table-header"><div><div class="table-title"><i class="bi bi-search me-2" style="color:var(--azul);"></i>Tiempos por Solicitud</div><div class="table-sub">Busca solicitudes específicas para ver sus tiempos</div></div></div>
@@ -319,15 +379,17 @@
             </div>
             <div id="sinResultadosSolicitud" style="display:none;text-align:center;padding:20px;"><i class="bi bi-info-circle" style="font-size:2rem;color:var(--text-light);"></i><p style="font-size:0.85rem;color:var(--text-muted);margin-top:8px;">Sin resultados.</p></div>
         </div>
-        <!-- Dispersión -->
-        <div class="table-container mb-4">
-            <div class="table-header"><div><div class="table-title"><i class="bi bi-bullseye me-2" style="color:var(--rojo);"></i>Rapidez y Productividad<span class="btn-help-chart" onclick="ayudaGrafico('dispersion')">?</span></div><div class="table-sub">Volumen vs tiempo promedio por analista</div></div></div>
-            <canvas id="chartDispersion" height="120"></canvas>
-        </div>
         </div><!-- /tab-tiempos -->
 
         <!-- TAB: Analistas -->
         <div id="tab-analistas" class="tab-panel" style="display:none;">
+        <!-- Productividad y Rendimiento Global -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-people me-2" style="color:var(--azul);"></i>Productividad por Analista<span class="btn-help-chart" onclick="ayudaGrafico('analistas')">?</span></div><canvas id="chartAnalistas" height="220"></canvas></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-bullseye me-2" style="color:var(--rojo);"></i>Rapidez y Productividad<span class="btn-help-chart" onclick="ayudaGrafico('dispersion')">?</span></div><div class="table-sub mb-3">Volumen vs tiempo promedio por analista</div><canvas id="chartDispersion" height="220"></canvas></div></div>
+        </div>
+
+        <!-- Rendimiento Individual -->
         <div class="table-container">
             <div class="table-header" style="flex-wrap:wrap;gap:12px;">
                 <div><div class="table-title">Rendimiento Individual<span class="btn-help-chart" onclick="ayudaGrafico('rendimientoIndividual')">?</span></div><div class="table-sub" id="rendimientoSubtitulo">Mostrando datos del día seleccionado</div></div>
@@ -368,6 +430,165 @@
             </div>
         </div>
         </div><!-- /tab-analistas -->
+
+        <!-- TAB: Biometría -->
+        <div id="tab-biometria" class="tab-panel" style="display:none;">
+            <div id="biometriaSpinner" class="text-center py-5" style="display:none;">
+                <div class="spinner-border" role="status" style="color:var(--rojo);width:3rem;height:3rem;"></div>
+                <p class="mt-3 text-muted fw-bold">Cargando datos de biometría...</p>
+            </div>
+            <div id="biometriaContenido" style="display:none;">
+
+            <!-- Filtros Biometría -->
+            <div class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);">
+                <div class="d-flex align-items-center gap-2">
+                    <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Desde</label>
+                    <input type="date" id="bioFiltroDesde" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Hasta</label>
+                    <input type="date" id="bioFiltroHasta" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
+                </div>
+                <button class="btn-primary-brand" onclick="cargarDatosBiometria()" style="border-radius:10px;padding:8px 18px;">
+                    <i class="bi bi-funnel"></i> Aplicar
+                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Solicitud / Póliza</label>
+                    <input type="text" id="buscarBioSolicitud" class="form-control" placeholder="Ej: 12194143..." style="width:160px;padding:6px 12px !important;font-size:0.8rem;border-radius:8px;">
+                </div>
+                <button class="btn-primary-brand" onclick="ejecutarBusquedaBiometria()" style="border-radius:10px;padding:8px 18px;">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+                <div class="d-flex gap-2 ms-auto">
+                    <button class="btn-outline-brand" onclick="setBioRangoRapido('hoy')" style="padding:6px 14px;font-size:0.75rem;">Hoy</button>
+                    <button class="btn-outline-brand" onclick="setBioRangoRapido('semana')" style="padding:6px 14px;font-size:0.75rem;">Esta semana</button>
+                    <button class="btn-outline-brand" onclick="setBioRangoRapido('mesActual')" style="padding:6px 14px;font-size:0.75rem;">Este mes</button>
+                    <button class="btn-outline-brand" onclick="setBioRangoRapido('bimestre')" style="padding:6px 14px;font-size:0.75rem;">Mes anterior + actual</button>
+                    <button class="btn-outline-brand" onclick="setBioRangoRapido('trimestre')" style="padding:6px 14px;font-size:0.75rem;">Último trimestre</button>
+                </div>
+            </div>
+
+            <!-- Resultados búsqueda individual -->
+            <div id="resultadosBioBusqueda" style="display:none;">
+                <div class="table-container mb-4">
+                    <div class="table-header"><div><div class="table-title"><i class="bi bi-search me-2" style="color:var(--azul);"></i>Resultados de Búsqueda</div></div>
+                        <button class="btn-outline-brand" onclick="limpiarBusquedaBiometria()" style="padding:6px 14px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-x-circle me-1"></i>Cerrar búsqueda</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm w-100 align-middle" style="font-size:0.82rem;">
+                            <thead><tr><th>Solicitud</th><th>Póliza</th><th>Inquilino</th><th>Fecha Consulta</th><th>Broadcast</th><th>Resultado</th><th class="text-center">Dest.</th></tr></thead>
+                            <tbody id="cuerpoBioBusqueda"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div id="sinResultadosBio" style="display:none;text-align:center;padding:20px;"><i class="bi bi-info-circle" style="font-size:2rem;color:var(--text-light);"></i><p style="font-size:0.85rem;color:var(--text-muted);margin-top:8px;">Sin resultados para esa búsqueda.</p></div>
+
+            <!-- KPIs Biometría -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:24px;">
+                <div class="bio-kpi-card"><div class="bio-kpi-label"><i class="bi bi-search me-1"></i>Consultadas SAI <span class="btn-help-chart" onclick="ayudaGrafico('bioConsultadas')">?</span></div><div class="bio-kpi-value" id="bioConsultadas">0</div><div class="bio-kpi-sub">Total solicitudes del API</div></div>
+                <div class="bio-kpi-card"><div class="bio-kpi-label"><i class="bi bi-whatsapp me-1" style="color:#25D366;"></i>Broadcasts Enviados <span class="btn-help-chart" onclick="ayudaGrafico('bioEnviados')">?</span></div><div class="bio-kpi-value" id="bioEnviados">0</div><div class="bio-kpi-sub">Mensajes WA enviados</div></div>
+                <div class="bio-kpi-card"><div class="bio-kpi-label"><i class="bi bi-percent me-1"></i>Tasa de Envío <span class="btn-help-chart" onclick="ayudaGrafico('bioTasaEnvio')">?</span></div><div class="bio-kpi-value" id="bioTasaEnvio">0%</div><div class="bio-kpi-sub">Enviados / Consultadas</div></div>
+                <div class="bio-kpi-card bio-kpi-success"><div class="bio-kpi-label"><i class="bi bi-check-circle me-1"></i>Resueltas sin Asignar <span class="btn-help-chart" onclick="ayudaGrafico('bioResueltas')">?</span></div><div class="bio-kpi-value" id="bioAprobadas">0</div><div class="bio-kpi-sub">Biometría completada</div></div>
+                <div class="bio-kpi-card bio-kpi-warning"><div class="bio-kpi-label"><i class="bi bi-hourglass-split me-1"></i>Enviadas a Cola <span class="btn-help-chart" onclick="ayudaGrafico('bioEnviadasCola')">?</span></div><div class="bio-kpi-value" id="bioPendientes">0</div><div class="bio-kpi-sub">No respondieron, a asignar</div></div>
+                <div class="bio-kpi-card"><div class="bio-kpi-label"><i class="bi bi-graph-up-arrow me-1"></i>Tasa Conversión <span class="btn-help-chart" onclick="ayudaGrafico('bioTasaConversion')">?</span></div><div class="bio-kpi-value" id="bioTasaConversion">0%</div><div class="bio-kpi-sub">¿Sirve el WhatsApp?</div></div>
+            </div>
+
+            <!-- Resultado Broadcast por día -->
+            <div class="table-container mb-4" style="margin-top:0;">
+                <div class="table-title mb-2"><i class="bi bi-bar-chart-steps me-2" style="color:var(--azul);"></i>Resultado del Broadcast por Día<span class="btn-help-chart" onclick="ayudaGrafico('bioEfectividad')">?</span></div>
+                <div class="table-sub mb-3">Evolución diaria: completaron biometría (verde) vs enviadas a cola (naranja)</div>
+                <div style="position:relative;height:200px;"><canvas id="chartBioEfectividad"></canvas></div>
+            </div>
+
+            <!-- Tendencia -->
+            <div class="table-container mb-4" style="margin-top:0;">
+                <div class="table-title mb-2"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Tendencia Diaria<span class="btn-help-chart" onclick="ayudaGrafico('bioTendencia')">?</span></div>
+                <div class="table-sub mb-3">Consultadas vs Resueltas vs Enviadas a cola por día</div>
+                <div style="position:relative;height:180px;"><canvas id="chartBioTendencia"></canvas></div>
+            </div>
+
+            <!-- Funnel + Distribución -->
+            <div class="row g-4 mb-4">
+                <div class="col-lg-6">
+                    <div class="table-container" style="margin-top:0;">
+                        <div class="table-title mb-2"><i class="bi bi-funnel me-2" style="color:var(--azul);"></i>Funnel de Conversión<span class="btn-help-chart" onclick="ayudaGrafico('bioFunnel')">?</span></div>
+                        <div class="table-sub mb-3">De consultadas a resueltas sin asignar</div>
+                        <div style="position:relative;height:220px;"><canvas id="chartBioFunnel"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="table-container" style="margin-top:0;">
+                        <div class="table-title mb-2"><i class="bi bi-pie-chart me-2" style="color:var(--azul);"></i>Distribución de Resultados<span class="btn-help-chart" onclick="ayudaGrafico('bioDistribucion')">?</span></div>
+                        <div class="table-sub mb-3">Proporción de resultados finales</div>
+                        <div style="position:relative;height:220px;"><canvas id="chartBioDistribucion"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tasa de conversión en el tiempo -->
+            <div class="table-container mb-4">
+                <div class="table-title mb-2"><i class="bi bi-activity me-2" style="color:#25D366;"></i>Tasa de Conversión en el Tiempo<span class="btn-help-chart" onclick="ayudaGrafico('bioTasaTendencia')">?</span></div>
+                <div class="table-sub mb-3">% de solicitudes que completaron biometría tras el broadcast (por día)</div>
+                <div style="position:relative;height:140px;"><canvas id="chartBioTasaTendencia"></canvas></div>
+            </div>
+
+            <!-- Resultados de Gestión -->
+            <div class="table-container mb-4" style="border-left:4px solid var(--azul);">
+                <div class="table-title mb-1"><i class="bi bi-telephone me-2" style="color:var(--azul);"></i>Resultados de Gestión<span class="btn-help-chart" onclick="ayudaGrafico('bioGestion')">?</span></div>
+                <div class="table-sub mb-3">Resultado de las llamadas y gestión de solicitudes de biometría asignadas a analistas</div>
+
+                <!-- KPIs Gestión -->
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
+                    <div class="bio-kpi-card"><div class="bio-kpi-label"><i class="bi bi-telephone-fill me-1"></i>Gestionadas</div><div class="bio-kpi-value" id="bioGesTotal">0</div></div>
+                    <div class="bio-kpi-card bio-kpi-success"><div class="bio-kpi-label"><i class="bi bi-telephone-forward me-1"></i>Contactadas</div><div class="bio-kpi-value" id="bioGesOk">0</div><div class="bio-kpi-sub">OK Llamada</div></div>
+                    <div class="bio-kpi-card bio-kpi-warning"><div class="bio-kpi-label"><i class="bi bi-telephone-x me-1"></i>Sin Contacto</div><div class="bio-kpi-value" id="bioGesNoContesto">0</div><div class="bio-kpi-sub">No contestó</div></div>
+                    <div class="bio-kpi-card"><div class="bio-kpi-label"><i class="bi bi-percent me-1"></i>Tasa Contacto</div><div class="bio-kpi-value" id="bioGesTasaContacto">0%</div></div>
+                </div>
+
+                <!-- Gráficos Gestión -->
+                <div class="row g-4">
+                    <div class="col-lg-4">
+                        <div style="background:var(--bg-page);border-radius:12px;padding:14px;">
+                            <div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-telephone me-1"></i>Resultado Llamada <span class="btn-help-chart" onclick="ayudaGrafico('bioResLlamada')">?</span></div>
+                            <div style="position:relative;height:200px;"><canvas id="chartBioResLlamada"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div style="background:var(--bg-page);border-radius:12px;padding:14px;">
+                            <div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-clipboard-check me-1"></i>Resultado Final <span class="btn-help-chart" onclick="ayudaGrafico('bioResFinal')">?</span></div>
+                            <div style="position:relative;height:200px;"><canvas id="chartBioResFinal"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div style="background:var(--bg-page);border-radius:12px;padding:14px;">
+                            <div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-list-check me-1"></i>Motivos de Aplazamiento <span class="btn-help-chart" onclick="ayudaGrafico('bioMotivos')">?</span></div>
+                            <div style="position:relative;height:200px;"><canvas id="chartBioMotivos"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Evolución diaria de gestión -->
+            <div class="row g-4 mb-4">
+                <div class="col-lg-6">
+                    <div class="table-container" style="margin-top:0;">
+                        <div class="table-title mb-2"><i class="bi bi-telephone me-2" style="color:var(--azul);"></i>Llamadas por Día<span class="btn-help-chart" onclick="ayudaGrafico('bioResLlamada')">?</span></div>
+                        <div class="table-sub mb-3">OK Llamada vs No Contestó — evolución diaria</div>
+                        <div style="position:relative;height:200px;"><canvas id="chartBioLlamadasDia"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="table-container" style="margin-top:0;">
+                        <div class="table-title mb-2"><i class="bi bi-clipboard-check me-2" style="color:var(--azul);"></i>Resultado Final por Día<span class="btn-help-chart" onclick="ayudaGrafico('bioResFinal')">?</span></div>
+                        <div class="table-sub mb-3">Aprobada / Negada / Aplazada — evolución diaria</div>
+                        <div style="position:relative;height:200px;"><canvas id="chartBioResultadoDia"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            </div><!-- /biometriaContenido -->
+        </div><!-- /tab-biometria -->
 
         <!-- TAB: Agente Coordinador -->
         <div id="tab-agente" class="tab-panel" style="display:none;">
@@ -548,6 +769,37 @@
                 <div class="d-flex gap-2">
                     <button class="agent-quick-btn" onclick="instalarTriggersAgente()"><i class="bi bi-play-circle"></i> Instalar Triggers</button>
                     <button class="agent-quick-btn" onclick="desinstalarTriggersAgente()"><i class="bi bi-stop-circle"></i> Desinstalar Triggers</button>
+                </div>
+            </div>
+
+            <!-- Control de Acceso -->
+            <div class="table-container mb-4" id="seccionAcceso">
+                <div class="table-title mb-2"><i class="bi bi-shield-lock me-2" style="color:var(--azul);"></i>Control de Acceso al Tablero</div>
+                <div class="table-sub mb-3">Solo los correos registrados aquí pueden ver el tablero. Si ambas listas están vacías, todos ven todo (sin restricción).</div>
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div style="background:var(--bg-page);border-radius:12px;padding:16px;">
+                            <div style="font-size:0.78rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-star me-1"></i>Coordinadores <span style="font-weight:500;color:var(--text-muted);">— ven todo el tablero</span></div>
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="email" class="form-control" id="accessCoordEmailInput" placeholder="correo@dominio.com" style="flex:1;font-size:0.8rem;">
+                                <button class="agent-quick-btn" onclick="agregarAccesoLista('coord')" style="padding:6px 12px;"><i class="bi bi-plus-circle"></i></button>
+                            </div>
+                            <div id="listaAccesoCoord"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div style="background:var(--bg-page);border-radius:12px;padding:16px;">
+                            <div style="font-size:0.78rem;font-weight:800;color:#059669;margin-bottom:8px;"><i class="bi bi-fingerprint me-1"></i>Biometría <span style="font-weight:500;color:var(--text-muted);">— solo ven Biometría</span></div>
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="email" class="form-control" id="accessBioEmailInput" placeholder="correo@dominio.com" style="flex:1;font-size:0.8rem;">
+                                <button class="agent-quick-btn" onclick="agregarAccesoLista('bio')" style="padding:6px 12px;"><i class="bi bi-plus-circle"></i></button>
+                            </div>
+                            <div id="listaAccesoBio"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn-primary-brand" onclick="guardarListasAccesoUI()" style="border-radius:10px;padding:8px 22px;"><i class="bi bi-check-lg me-1"></i>Guardar Control de Acceso</button>
                 </div>
             </div>
 
