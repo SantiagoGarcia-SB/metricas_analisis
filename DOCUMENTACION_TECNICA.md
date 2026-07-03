@@ -62,6 +62,7 @@ La comunicación entre capas se realiza exclusivamente a través de `google.scri
 | `Estilos.html` | **CSS.** Sistema de diseño propio con variables CSS, componentes reutilizables (cards, badges, sidebar colapsable), responsive grid, animaciones y tema visual corporativo (rojo Bolívar + azul oscuro). |
 | `appsscript.json` | **Manifiesto.** Configuración del proyecto: timezone, runtime V8, despliegue como web app ejecutada por el usuario desplegador con acceso de dominio. |
 | `.clasp.json` | **Configuración CLASP.** Vinculación con el script ID de Google para push/pull desde CLI. |
+| `Biometria.js` | **Ciclo de biometrías (captura → WA → escalación → asignación → gestión → verificación final).** Ver [4.7](#47-flujo-de-biometrías-biometriajs). ⚠️ Vive en el proyecto Apps Script desplegado; aún no sincronizado a este repo local vía `clasp pull`. |
 
 ### 2.3 Gestión de Datos
 
@@ -77,7 +78,7 @@ El sistema utiliza **Google Sheets como base de datos operativa**. No hay base d
 - Se construyen mapas/diccionarios en memoria para procesamiento eficiente (O(n) lineal).
 - El diccionario `scoreMap` (póliza → inmobiliaria/segmento) se carga una sola vez por solicitud de métricas.
 
-**No hay escritura** desde este sistema: es un dashboard de solo lectura.
+**El dashboard de métricas en sí** (`Código.js`) es de solo lectura. La excepción es el ciclo de `Biometria.js` ([4.7](#47-flujo-de-biometrías-biometriajs)), que sí escribe activamente en `pendiente_biometria`, `solicitud` y `Historico_Gestiones` como parte de su operación normal (captura, escalación, asignación y gestión de biometrías).
 
 ---
 
@@ -222,18 +223,65 @@ Al hacer click en cualquier tarjeta KPI o card de tipo:
     └── SweetAlert2 modal con tabla de detalle
 ```
 
+### 4.7 Flujo de Biometrías (Biometria.js)
+
+El ciclo completo de gestión de biometrías vive en `Biometria.js` y corre en 6 etapas encadenadas por triggers (ver [5.1](#51-triggers-de-biometría)):
+
+**1. Captura — cada 10 min**
+`consultarBiometriasPeriodicaAPI()` → `_capturarNuevasBiometrias()` (Biometria.js:521)
+Consulta SAI (últimos 3 días), filtra candidatos con `studyStatus = APROBADO_PENDIENTE_BIOMETRIA`, `resultCode` 500/503, `mainResultCode = 2`, excluyendo UAR y tipo "AC". Guarda en la hoja `pendiente_biometria` evitando duplicados. Cada fila arranca con `fase_seguimiento_biometria` (columna 76) vacía.
+
+**2. Primer contacto (WhatsApp) — cada hora**
+`cicloPrimerContactoBiometria()` → `_enviarPrimerContactoBiometria()` (Biometria.js:537 / 704)
+Revisa solo los pendientes con fase `""`. Para cada uno:
+- Reconsulta SAI individualmente.
+- Si ya no está pendiente → fase `RESUELTA` (se cierra sin llamar).
+- Si sigue pendiente y ya pasaron ≥4h desde `fecha_resultado` (para no duplicar el WA que radicación ya envió al aplazar por biometría) → envía WhatsApp vía Infobip y marca fase `WA_ENVIADO`.
+- Si aún no cumple las 4h → no hace nada, espera la próxima corrida horaria.
+
+Esto desacopla el envío del WA de los cortes fijos de las 8am/12pm: el mensaje sale la misma noche en cuanto se cumple la ventana de 4h, sin depender de caer justo en un corte.
+
+**3. Escalación a la cola — 8am y 12pm**
+`cicloBiometriaPendiente()` → `_procesarCortePendientes()` (Biometria.js:546 / 793)
+Revisa solo los pendientes en fase `WA_ENVIADO` (segundo contacto). Para cada uno:
+- Reconsulta SAI.
+- Si ya no está pendiente → `RESUELTA`.
+- Si sigue pendiente → `procesarYGuardarLote()` lo escribe en la cola principal de solicitudes (hoja `solicitud`) y marca `ESCALADA`.
+
+Como el WA ya salió la noche/tarde anterior gracias al paso 2, la mayoría de los casos llegan a este corte ya en `WA_ENVIADO` y se escalan de inmediato a las 8am.
+
+**4. Asignación al analista**
+`autoAsignarBiometria()` (Biometria.js:225) — el analista con cupo disponible toma casos de la cola (`APROBADO_PENDIENTE_BIOMETRIA`, sin asignar); se mueven a `Historico_Gestiones` (tipo `desaplazamiento`) y se borran de la cola.
+
+**5. Gestión y cierre**
+`guardarGestionBiometria()` (Biometria.js:449) — el analista registra `APROBADO`/`APLAZADO`/`RECHAZADO`; se calculan tiempos SLA (cola = 0, porque desaplazamiento no tiene fase de cola).
+
+**6. Verificación diaria de resultado final — 16:00-17:00**
+`verificarAprobacionDesaplazamientos()` — revisa contra SAI los casos de los últimos 3 días sin estado final y los actualiza si SAI ya resolvió.
+
+> ⚠️ `Biometria.js` es la fuente de verdad operativa de este flujo. Las funciones de solo-lectura descritas en la sección [7.4](#74-clasificación-de-tipos-de-solicitud) (`obtenerDatosBiometria()`, `obtenerColaAsignacion()`, `buscarBiometriaSolicitud()` en `Código.js`) leen los resultados que este ciclo escribe, pero no lo reemplazan.
+
 ---
 
 ## 5. ⚙️ Automatizaciones y Procesos en Segundo Plano
 
-Este sistema **no cuenta con triggers ni cron jobs**. Es un dashboard bajo demanda que calcula métricas cada vez que el usuario:
+El **dashboard de métricas** (`Código.js` / `MetricasPanel.html`) no dispara triggers propios: calcula todo bajo demanda cada vez que el usuario:
 
-- Abre la aplicación (carga automática: últimos 7 días)
+- Abre la aplicación (carga automática: hoy)
 - Hace click en "Sincronizar Datos"
 - Cambia el rango de fechas
 - Navega a la pestaña de Rendimiento por día
 
-La actualización de las hojas de cálculo fuente (Historico_Gestiones, ORIGEN, solicitud) es responsabilidad de **otros sistemas** que alimentan estos datos.
+Pero las hojas de cálculo que ese dashboard lee sí se alimentan mediante triggers de tiempo, definidos en otros archivos del proyecto (`BigQuerySync.js`, `ConsultaSAIRechazados.js`, `Biometria.js`).
+
+### 5.1 Triggers de Biometría
+
+| Trigger | Función | Frecuencia | Rol en el flujo ([4.7](#47-flujo-de-biometrías-biometriajs)) |
+|---------|---------|------------|------|
+| Captura SAI | `consultarBiometriasPeriodicaAPI()` | Cada 10 min | Paso 1 — detecta nuevas biometrías pendientes |
+| Primer contacto WA | `cicloPrimerContactoBiometria()` | Cada hora *(⚠️ pendiente de crear en la UI de Triggers de Apps Script tras el próximo `clasp push`)* | Paso 2 — envía WhatsApp a las ≥4h del resultado |
+| Corte de escalación | `cicloBiometriaPendiente()` | 8:00am y 12:00m | Paso 3 — escala a la cola de analista si sigue sin resolver |
+| Verificación final | `verificarAprobacionDesaplazamientos()` | 16:00-17:00 | Paso 6 — cierra casos que SAI ya resolvió |
 
 ---
 
@@ -355,7 +403,7 @@ const HORA_FIN_TURNO = "17:00";
 
 6. **Validar:**
    - Abrir la URL generada.
-   - Verificar que carga datos de los últimos 7 días sin error.
+   - Verificar que carga datos de hoy sin error.
 
 ### 7.6 Dependencias Externas (CDN)
 

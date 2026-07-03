@@ -9,6 +9,8 @@ const ID_HOJA_BIOMETRIA = "1gHW1RFMVd0h4HZr2xTrFnx-A5Pk_npJs-bAk8GOx2h0";
 const TIMEZONE = "America/Bogota";
 const HORA_INICIO_OPERACION = "08:00";
 const HORA_FIN_TURNO = "17:00";
+const BCC_REPORTES_AGENTE = "santiago.garcia@segurosbolivar.com";
+const NOMBRE_REMITENTE_AGENTE = "Análisis · El Libertador";
 
 function doGet(e) {
   return HtmlService.createTemplateFromFile('MetricasPanel')
@@ -346,7 +348,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     if (estado.includes("NEGAD") || estado.includes("RECHAZ")) negacionSucursal[sucursal].negadas++;
 
     const solicitudId = String(fila[0] || "").trim();
-    var estadoLabel = (estado.includes("APROB") && !estado.includes("PENDIENTE")) ? "APROBADA" : (estado.includes("NEGAD") || estado.includes("RECHAZ")) ? "NEGADA" : estado.includes("APLAZ") ? "APLAZADA" : "OTRO";
+    var estadoLabel = (estado.includes("APROB") && !estado.includes("PENDIENTE")) ? "APROBADO" : (estado.includes("NEGAD") || estado.includes("RECHAZ")) ? "RECHAZADO" : estado.includes("APLAZ") ? "APLAZADO" : "OTRO";
     tiemposDetalle.push({ solicitud: solicitudId, poliza: polizaVal, fecha: fechaGestionStr, sucursal: sucursal, tipo: tipoSol, analista: nombre, segmento: seg, inmobiliaria: inmob, estado: estadoLabel, tGestion: !isNaN(tiempoGestion) && tiempoGestion >= 0 ? tiempoGestion : null, tResolucion: !isNaN(tiempoResolucion) && tiempoResolucion > 0 ? tiempoResolucion : null, tCola: tiempoColaMin !== null ? tiempoColaMin : null });
   }
 
@@ -465,7 +467,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
           if (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) negacionSucursal[sucursalR].negadas++;
 
           const solicitudIdR = String(dataReest[i][1] || "").trim();
-          var estadoLabelR = (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) ? "APROBADA" : (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) ? "NEGADA" : estadoR.includes("APLAZ") ? "APLAZADA" : "OTRO";
+          var estadoLabelR = (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) ? "APROBADO" : (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) ? "RECHAZADO" : estadoR.includes("APLAZ") ? "APLAZADO" : "OTRO";
           tiemposDetalle.push({ solicitud: solicitudIdR, poliza: polizaReest, fecha: fechaParte, sucursal: sucursalR, tipo: tipoReest, analista: nombreR, segmento: segR, inmobiliaria: inmobR, estado: estadoLabelR, tGestion: !isNaN(tiempoGestionReest) && tiempoGestionReest >= 0 ? tiempoGestionReest : null, tResolucion: !isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 0 ? tiempoResolucionReestHoras : null, tCola: tiempoColaReest !== null ? tiempoColaReest : null });
         }
       }
@@ -483,12 +485,32 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   var negacionDirectaCount = 0;
   var totalRadicadas = 0;
 
-  // Radicadas desde Historico_Gestiones (col 17 = fecha_radicacion)
+  // Radicadas desde Historico_Gestiones (col 17 = fecha_radicacion) — SOLO lo ya gestionado
   for (var ri = 1; ri < data.length; ri++) {
     var frMain = _parsearFechaFlexible(String(data[ri][17] || "").trim());
     if (frMain && frMain >= desde && frMain <= hasta) {
       totalRadicadas++;
     }
+  }
+
+  // Radicadas AÚN NO gestionadas: viven en la hoja "solicitud" (se sacan de ahí en cuanto se
+  // asignan), así que Historico_Gestiones nunca las ve. Se usa fechaResultado (col 18) en vez
+  // de fechaRadicacion (col 17) porque esta última llega con error de datos desde la API para
+  // estas filas — esto es exclusivamente para contar Total Radicadas, no afecta nada más.
+  try {
+    var ssSol = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+    var hojaSol = ssSol.getSheetByName("solicitud");
+    if (hojaSol && hojaSol.getLastRow() > 1) {
+      var dataSol = hojaSol.getDataRange().getDisplayValues();
+      for (var si = 1; si < dataSol.length; si++) {
+        var frSol = _parsearFechaFlexible(String(dataSol[si][18] || "").trim());
+        if (frSol && frSol >= desde && frSol <= hasta) {
+          totalRadicadas++;
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log("Aviso: Error contando radicadas pendientes de la hoja solicitud: " + e.message);
   }
 
   // Radicadas desde Reestudios (col 0 = fecha_radicacion)
@@ -769,7 +791,8 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     pctNegacionDirecta: pctNegacionDirecta,
     pctNegacion: pctNegacion,
     pctAplazamiento: pctAplazamiento,
-    totalRadicadas: totalRadicadas
+    totalRadicadas: totalRadicadas,
+    aGestionNormal: totalRadicadas - negacionDirectaCount
   };
 }
 
@@ -1343,10 +1366,9 @@ function obtenerColaAsignacion() {
     if (hojaSol && hojaSol.getLastRow() > 1) {
       var data = hojaSol.getDataRange().getDisplayValues();
       for (var i = 1; i < data.length; i++) {
-        var asignado = String(data[i][27] || "").trim();
-        var fechaFin = String(data[i][28] || "").trim();
-        if (asignado !== "" || fechaFin !== "") continue;
-
+        // No se filtra por "asignacion"/"fecha fin gestión": en cuanto una solicitud se asigna,
+        // el sistema la saca de la hoja "solicitud" y la mueve a Historico_Gestiones. Estar
+        // presente aquí ya implica que sigue sin asignar.
         var estadoGen = String(data[i][16] || "").toUpperCase().replace(/\s+/g, '_').trim();
         var clase = String(data[i][20] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) {
           return { "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U" }[c] || c;
@@ -1405,7 +1427,19 @@ function obtenerColaAsignacion() {
 }
 
 function obtenerDatosBiometria(fechaDesde, fechaHasta) {
-  var vacio = { totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalAprobado: 0, totalPendiente: 0, tasaEnvio: 0, tasaConversion: 0, cruce: { enviadoAprobado: 0, enviadoPendiente: 0, noEnviadoAprobado: 0, noEnviadoPendiente: 0 }, tendencia: [] };
+  var vacio = { totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalProcesadas: 0, totalSinIniciar: 0, faltanRevisar: 0, esperandoCorte: 0, totalEnEspera: 0, totalEscaladas: 0, colaActual: 0, totalResueltas: 0, resueltasConWA: 0, resueltasSinWA: 0, enviadasYResueltas: 0, enviadasYEscaladas: 0, cohorteResueltasSinWA: 0, cohorteEnviadas: 0, tasaEnvio: 0, tasaConversion: 0, tendencia: [], gestion: { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, motivos: {}, tasaContacto: 0 } };
+
+  // Cola de asignación en vivo: viene de la hoja "solicitud" (sin filtro de fecha), no de
+  // pendiente_biometria. Es la fuente autoritativa del backlog real, independiente del
+  // rango de fechas seleccionado en el dashboard (a diferencia de las métricas por período de abajo).
+  var colaActual = 0;
+  try {
+    colaActual = obtenerColaAsignacion().desplazamiento || 0;
+  } catch (e) {
+    Logger.log("Aviso: No se pudo obtener cola de asignación para biometría: " + e.message);
+  }
+  vacio.colaActual = colaActual;
+
   try {
     var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
     var hoja = ss.getSheetByName("pendiente_biometria");
@@ -1425,71 +1459,133 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
 
     var cFC = colMap["fecha_consulta_sai"] != null ? colMap["fecha_consulta_sai"] : -1;
     var cFE = colMap["fecha_envio_brodcast"] != null ? colMap["fecha_envio_brodcast"] : -1;
+    var cFA = colMap["fecha_actualizacion_fase"] != null ? colMap["fecha_actualizacion_fase"] : -1;
     var cEB = colMap["estado_brodcast"] != null ? colMap["estado_brodcast"] : -1;
-    var cNE = colMap["nuevo_estado_sai"] != null ? colMap["nuevo_estado_sai"] : -1;
+    var cFS = colMap["fase_seguimiento_biometria"] != null ? colMap["fase_seguimiento_biometria"] : -1;
 
+    // fase_seguimiento_biometria es la fuente de verdad del ciclo (Biometria.js):
+    //   ""          -> recién capturada (cada 10 min); espera cumplir 4h desde fecha_resultado
+    //                  para su primer contacto (cicloPrimerContactoBiometria, corre cada hora)
+    //   WA_ENVIADO  -> ya tuvo su oportunidad de WhatsApp, espera el corte de escalación (8am/12m)
+    //   ESCALADA    -> no completó biometría tras el mensaje, pasa a cola de analista
+    //   RESUELTA    -> completó biometría (con o sin haber recibido el mensaje; también la puede
+    //                  cerrar la verificación diaria de las 16:00-17:00)
+    //
+    // Cada métrica se filtra/agrupa por SU propia fecha real, no todas por fecha_consulta_sai:
+    //   Consultadas / Sin Iniciar -> fecha_consulta_sai (única fecha que existe para estos casos)
+    //   Enviados                  -> fecha_envio_brodcast
+    //   En Espera / Escaladas / Resueltas (con y sin WA) -> fecha_actualizacion_fase
+    // Así, un caso consultado tarde en el día que se resuelve o escala al día siguiente queda
+    // bien ubicado en el día real de su desenlace, no perdido en el día de la consulta.
     var totalConsultadas = 0, totalEnviados = 0, totalNoEnviados = 0;
-    var totalAprobado = 0, totalPendiente = 0;
-    var enviadoAprobado = 0, enviadoPendiente = 0, noEnviadoAprobado = 0, noEnviadoPendiente = 0;
+    var totalSinIniciar = 0, totalEnEspera = 0, totalEscaladas = 0;
+    var resueltasConWA = 0, resueltasSinWA = 0;
+    // Cohorte-consistentes: de las ENVIADAS por fecha de envío (mismo grupo que "WA Enviados"),
+    // cuántas están AHORA MISMO en cada estado — sin importar cuándo cambiaron de fase. Esto
+    // alimenta tanto las tarjetas "Resueltas por WhatsApp"/"Escaladas a Análisis" del Ciclo de
+    // Hoy como la Tasa de Conversión, para que ambas cuenten exactamente la misma historia.
+    var enviadasYResueltas = 0;
+    var enviadasYEscaladas = 0;
+
+    // Cascada ESTRICTA de "Consultadas hoy": de las mismas solicitudes consultadas en el rango,
+    // cuántas ya tienen WA enviado y cuántas ya se resolvieron sin necesitar el mensaje — ambas
+    // ancladas a fecha_consulta_sai (no a su propia fecha de evento), para que
+    // Consultadas = Sin Iniciar + Resueltas sin WA (cohorte) + Enviadas (cohorte) cierre exacto.
+    var cohorteResueltasSinWA = 0;
+    var cohorteEnviadas = 0;
+
+    // En vivo, SIN filtro de fecha (igual que Cola de Asignación): cuántas filas siguen con
+    // fase_seguimiento_biometria vacía ahora mismo, esperando su primer corte de revisión.
+    var liveFaltanRevisar = 0;
+    // En vivo también: cuántas ya tienen WA_ENVIADO ahora mismo, esperando el próximo corte de
+    // escalación (8am/12pm) que decide si se resuelven solas o pasan a la cola de analista.
+    var liveEsperandoCorte = 0;
+
     var tendenciaMap = {};
+
+    function _fechaParte(raw) { return raw ? raw.split(" ")[0] : ""; }
+    // La hoja guarda las fechas como DD/MM/YYYY; hay que reordenarlas a YYYY-MM-DD antes de
+    // usarlas como llave de tendencia o de compararlas contra filtroDesde/filtroHasta (que
+    // vienen de un <input type="date"> en YYYY-MM-DD) — si no, tanto el filtro de rango como
+    // el orden cronológico del gráfico quedan rotos (ver mismo tratamiento en gestión, abajo).
+    function _fechaISO(parte) {
+      if (!parte) return "";
+      var p = parte.split("/");
+      if (p.length !== 3) return parte;
+      return p[2] + "-" + ("0" + p[1]).slice(-2) + "-" + ("0" + p[0]).slice(-2);
+    }
+    function _fechaNorm(iso) { return iso.replace(/-/g, ''); }
+    function _enRango(norm) {
+      if (!filtroDesde && !filtroHasta) return true;
+      if (!norm) return false;
+      if (filtroDesde && norm < filtroDesde) return false;
+      if (filtroHasta && norm > filtroHasta) return false;
+      return true;
+    }
+    function _bucket(dayKey, campo) {
+      if (!dayKey) return;
+      if (!tendenciaMap[dayKey]) tendenciaMap[dayKey] = { consultadas: 0, enviados: 0, resueltasConWA: 0, resueltasSinWA: 0, escaladas: 0, enEspera: 0, sinIniciar: 0, enviadasYResueltas: 0 };
+      tendenciaMap[dayKey][campo]++;
+    }
 
     for (var i = 1; i < data.length; i++) {
       var solicitud = String(data[i][0] || "").trim();
       if (!solicitud) continue;
 
-      if (filtroDesde || filtroHasta) {
-        var fechaRaw = cFC >= 0 ? String(data[i][cFC] || "").trim().split(" ")[0] : "";
-        var fechaNorm = fechaRaw.replace(/-/g, '').replace(/\//g, '');
-        if (fechaNorm.length === 8 && fechaNorm.charAt(2) === '') {
-          // already yyyymmdd
-        }
-        if (filtroDesde && fechaNorm < filtroDesde) continue;
-        if (filtroHasta && fechaNorm > filtroHasta) continue;
-      }
-
-      var fechaConsulta = cFC >= 0 ? String(data[i][cFC] || "").trim() : "";
-      var fechaEnvio = cFE >= 0 ? String(data[i][cFE] || "").trim() : "";
+      var consultaParte = cFC >= 0 ? _fechaISO(_fechaParte(String(data[i][cFC] || "").trim())) : "";
+      var envioParte = cFE >= 0 ? _fechaISO(_fechaParte(String(data[i][cFE] || "").trim())) : "";
+      var faseParte = cFA >= 0 ? _fechaISO(_fechaParte(String(data[i][cFA] || "").trim())) : "";
       var estadoBrod = cEB >= 0 ? String(data[i][cEB] || "").toUpperCase().trim() : "";
-      var nuevoEstado = cNE >= 0 ? String(data[i][cNE] || "").toUpperCase().replace(/\s+/g, '_').trim() : "";
-      var poliza = String(data[i][1] || "").trim();
-      var nombre = String(data[i][4] || "").trim();
-
-      totalConsultadas++;
-
+      var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
       var fueEnviado = estadoBrod === "ENVIADO" || estadoBrod === "SI" || estadoBrod === "OK" || estadoBrod === "TRUE" || estadoBrod === "1";
-      var cambioEstado = nuevoEstado === "APROBADO";
-      var quedoPendiente = nuevoEstado.indexOf("PENDIENTE") !== -1;
 
-      if (fueEnviado) {
-        totalEnviados++;
-        if (cambioEstado) enviadoAprobado++;
-        else if (quedoPendiente) enviadoPendiente++;
-      } else if (estadoBrod !== "") {
-        totalNoEnviados++;
-        if (cambioEstado) noEnviadoAprobado++;
-        else if (quedoPendiente) noEnviadoPendiente++;
+      if (fase === "") liveFaltanRevisar++;
+      else if (fase === "WA_ENVIADO") liveEsperandoCorte++;
+
+      if (_enRango(_fechaNorm(consultaParte))) {
+        totalConsultadas++;
+        _bucket(consultaParte, 'consultadas');
+        if (fase === "") { totalSinIniciar++; _bucket(consultaParte, 'sinIniciar'); }
+        else if (fase === "RESUELTA" && !fueEnviado) { cohorteResueltasSinWA++; }
+        else { cohorteEnviadas++; } // WA_ENVIADO, ESCALADA, o RESUELTA-con-envío — cualquier fase
+        // que no sea "" ni "RESUELTA sin envío" implica que ya se intentó el contacto, sin
+        // importar si estado_brodcast quedó en "ENVIADO" o en otro valor (p.ej. "ERROR").
       }
 
-      if (cambioEstado) totalAprobado++;
-      if (quedoPendiente) totalPendiente++;
-
-      var fechaKey = fechaConsulta ? fechaConsulta.split(" ")[0] : "";
-      if (fechaKey) {
-        if (!tendenciaMap[fechaKey]) tendenciaMap[fechaKey] = { consultadas: 0, enviados: 0, aprobadas: 0, pendientes: 0 };
-        tendenciaMap[fechaKey].consultadas++;
-        if (fueEnviado) tendenciaMap[fechaKey].enviados++;
-        if (cambioEstado) tendenciaMap[fechaKey].aprobadas++;
-        if (quedoPendiente) tendenciaMap[fechaKey].pendientes++;
+      if (_enRango(_fechaNorm(envioParte))) {
+        if (fueEnviado) {
+          totalEnviados++; _bucket(envioParte, 'enviados');
+          if (fase === "RESUELTA") { enviadasYResueltas++; _bucket(envioParte, 'enviadasYResueltas'); }
+          else if (fase === "ESCALADA") { enviadasYEscaladas++; }
+        }
+        else totalNoEnviados++;
       }
 
+      if (_enRango(_fechaNorm(faseParte))) {
+        if (fase === "WA_ENVIADO") { totalEnEspera++; _bucket(faseParte, 'enEspera'); }
+        else if (fase === "ESCALADA") { totalEscaladas++; _bucket(faseParte, 'escaladas'); }
+        else if (fase === "RESUELTA") {
+          if (fueEnviado) { resueltasConWA++; _bucket(faseParte, 'resueltasConWA'); }
+          else { resueltasSinWA++; _bucket(faseParte, 'resueltasSinWA'); }
+        }
+      }
     }
 
     var tendenciaArr = Object.keys(tendenciaMap).sort().map(function(f) {
-      return { fecha: f, consultadas: tendenciaMap[f].consultadas, enviados: tendenciaMap[f].enviados, aprobadas: tendenciaMap[f].aprobadas, pendientes: tendenciaMap[f].pendientes };
+      var td = tendenciaMap[f];
+      return { fecha: f, consultadas: td.consultadas, enviados: td.enviados, resueltasConWA: td.resueltasConWA, resueltasSinWA: td.resueltasSinWA, escaladas: td.escaladas, enEspera: td.enEspera, sinIniciar: td.sinIniciar, enviadasYResueltas: td.enviadasYResueltas };
     });
 
-    // --- Resultados de gestión desde Historico_Gestiones (clase=BIOMETRIA) ---
-    var gestion = { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, motivos: {}, tendencia: [] };
+    // Informativo: de las consultadas en el rango, cuántas ya pasaron por su primer contacto
+    // (excluye las recién capturadas que aún no cumplen las 4h desde fecha_resultado).
+    var totalProcesadas = totalConsultadas - totalSinIniciar;
+    var totalResueltas = resueltasConWA + resueltasSinWA;
+
+    // --- Resultados de gestión desde Historico_Gestiones (tipoAsignado=DESAPLAZAMIENTO) ---
+    // resFinal se lee de estadoGeneral: ese campo se actualiza al final del día para reflejar
+    // si la solicitud quedó aprobada, así que consultar "hoy" en pleno día puede mostrar
+    // Gestionadas > (Aprobadas+Negadas+Aplazadas) para los casos de hoy que aún no tienen ese cierre.
+    var gestion = { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, aprobadasConLlamada: 0, motivos: {}, tendencia: [] };
     try {
       var ssHist = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
       var hojaHist = ssHist.getSheetByName(SHEET_NAME_SOLICITUDES);
@@ -1497,8 +1593,8 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
         var dataH = hojaHist.getDataRange().getDisplayValues();
         var gesTendMap = {};
         for (var g = 1; g < dataH.length; g++) {
-          var claseH = String(dataH[g][20] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) { return { "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U" }[c] || c; }).trim();
-          if (claseH !== "BIOMETRIA") continue;
+          var tipoAsignadoH = String(dataH[g][60] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) { return { "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U" }[c] || c; }).trim();
+          if (tipoAsignadoH !== "DESAPLAZAMIENTO") continue;
 
           var fechaFinH = String(dataH[g][26] || "").trim();
           if (!fechaFinH) continue;
@@ -1522,9 +1618,13 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
           else if (resLlamada === "NO CONTESTO") { gestion.noContesto++; gesTendMap[fechaDia].noContesto++; }
 
           var resFinal = String(dataH[g][16] || "").toUpperCase().trim();
-          if (resFinal === "APROBADA") { gestion.aprobadas++; gesTendMap[fechaDia].aprobadas++; }
-          else if (resFinal === "NEGADA") { gestion.negadas++; gesTendMap[fechaDia].negadas++; }
-          else if (resFinal === "APLAZADA") {
+          // aprobadasConLlamada exige AMBAS condiciones en la MISMA fila (mismo cohorte: llamadas
+          // que sí conectaron) — no mezclar con gestion.aprobadas, que cuenta todo aprobado sin
+          // importar si hubo o no contacto telefónico. Ver lección de cohorte-consistencia.
+          if (resLlamada === "OK LLAMADA" && resFinal === "APROBADO") gestion.aprobadasConLlamada++;
+          if (resFinal === "APROBADO") { gestion.aprobadas++; gesTendMap[fechaDia].aprobadas++; }
+          else if (resFinal === "RECHAZADO") { gestion.negadas++; gesTendMap[fechaDia].negadas++; }
+          else if (resFinal === "APLAZADO") {
             gestion.aplazadas++; gesTendMap[fechaDia].aplazadas++;
             var motivo = String(dataH[g][28] || "").trim();
             if (motivo) gestion.motivos[motivo] = (gestion.motivos[motivo] || 0) + 1;
@@ -1540,22 +1640,36 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
     }
 
     gestion.tasaContacto = gestion.total > 0 ? Math.round((gestion.okLlamada / gestion.total) * 1000) / 10 : 0;
+    // "¿Sirve la llamada?": de las llamadas que SÍ conectaron (OK Llamada), qué % terminó aprobado.
+    // Cohorte-consistente: numerador y denominador salen de la misma fila (mismo grupo de casos).
+    gestion.tasaConversionLlamada = gestion.okLlamada > 0 ? Math.round((gestion.aprobadasConLlamada / gestion.okLlamada) * 1000) / 10 : 0;
 
     return {
       totalConsultadas: totalConsultadas,
       totalEnviados: totalEnviados,
       totalNoEnviados: totalNoEnviados,
-      totalAprobado: totalAprobado,
-      totalPendiente: totalPendiente,
-      tasaEnvio: totalConsultadas > 0 ? Math.round((totalEnviados / totalConsultadas) * 1000) / 10 : 0,
-      tasaConversion: totalConsultadas > 0 ? Math.round((totalAprobado / totalConsultadas) * 1000) / 10 : 0,
-      cruce: { enviadoAprobado: enviadoAprobado, enviadoPendiente: enviadoPendiente, noEnviadoAprobado: noEnviadoAprobado, noEnviadoPendiente: noEnviadoPendiente },
+      totalProcesadas: totalProcesadas,
+      totalSinIniciar: totalSinIniciar,
+      faltanRevisar: liveFaltanRevisar,
+      esperandoCorte: liveEsperandoCorte,
+      totalEnEspera: totalEnEspera,
+      totalEscaladas: totalEscaladas,
+      colaActual: colaActual,
+      totalResueltas: totalResueltas,
+      resueltasConWA: resueltasConWA,
+      resueltasSinWA: resueltasSinWA,
+      enviadasYResueltas: enviadasYResueltas,
+      enviadasYEscaladas: enviadasYEscaladas,
+      cohorteResueltasSinWA: cohorteResueltasSinWA,
+      cohorteEnviadas: cohorteEnviadas,
+      tasaEnvio: (totalEnviados + resueltasSinWA) > 0 ? Math.round((totalEnviados / (totalEnviados + resueltasSinWA)) * 1000) / 10 : 0,
+      tasaConversion: totalEnviados > 0 ? Math.round((enviadasYResueltas / totalEnviados) * 1000) / 10 : 0,
       tendencia: tendenciaArr,
       gestion: gestion
     };
   } catch (e) {
     Logger.log("Error en obtenerDatosBiometria: " + e.message);
-    return { totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalAprobado: 0, totalPendiente: 0, tasaEnvio: 0, tasaConversion: 0, cruce: { enviadoAprobado: 0, enviadoPendiente: 0, noEnviadoAprobado: 0, noEnviadoPendiente: 0 }, tendencia: [], gestion: { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, motivos: {}, tasaContacto: 0 } };
+    return vacio;
   }
 }
 
@@ -1574,8 +1688,10 @@ function buscarBiometriaSolicitud(query) {
 
     var cFC = colMap["fecha_consulta_sai"] != null ? colMap["fecha_consulta_sai"] : -1;
     var cFE = colMap["fecha_envio_brodcast"] != null ? colMap["fecha_envio_brodcast"] : -1;
+    var cFA = colMap["fecha_actualizacion_fase"] != null ? colMap["fecha_actualizacion_fase"] : -1;
     var cEB = colMap["estado_brodcast"] != null ? colMap["estado_brodcast"] : -1;
     var cNE = colMap["nuevo_estado_sai"] != null ? colMap["nuevo_estado_sai"] : -1;
+    var cFS = colMap["fase_seguimiento_biometria"] != null ? colMap["fase_seguimiento_biometria"] : -1;
 
     var q = String(query || "").trim().toLowerCase();
     if (!q) return [];
@@ -1591,8 +1707,10 @@ function buscarBiometriaSolicitud(query) {
 
       var fechaConsulta = cFC >= 0 ? String(data[i][cFC] || "").trim() : "";
       var fechaEnvio = cFE >= 0 ? String(data[i][cFE] || "").trim() : "";
+      var fechaActualizacionFase = cFA >= 0 ? String(data[i][cFA] || "").trim() : "";
       var estadoBrod = cEB >= 0 ? String(data[i][cEB] || "").toUpperCase().trim() : "";
       var nuevoEstado = cNE >= 0 ? String(data[i][cNE] || "").toUpperCase().replace(/\s+/g, '_').trim() : "";
+      var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
 
       var numDest = 0;
       if (cNE >= 0) {
@@ -1602,13 +1720,143 @@ function buscarBiometriaSolicitud(query) {
         }
       }
 
-      resultados.push({ solicitud: solicitud, poliza: poliza, nombre: nombre, fechaConsulta: fechaConsulta, fechaEnvio: fechaEnvio, estadoBrodcast: estadoBrod, nuevoEstado: nuevoEstado, destinatarios: numDest });
+      resultados.push({ solicitud: solicitud, poliza: poliza, nombre: nombre, fechaConsulta: fechaConsulta, fechaEnvio: fechaEnvio, fechaActualizacionFase: fechaActualizacionFase, estadoBrodcast: estadoBrod, nuevoEstado: nuevoEstado, fase: fase, destinatarios: numDest });
       if (resultados.length >= 50) break;
     }
 
     return resultados;
   } catch (e) {
     Logger.log("Error en buscarBiometriaSolicitud: " + e.message);
+    return [];
+  }
+}
+
+// Drilldown de las tarjetas del tablero de biometría: dado el "tipo" de tarjeta que el usuario
+// clickeó, reproduce EXACTAMENTE el mismo criterio de conteo que obtenerDatosBiometria() para ese
+// tipo, pero en vez de sumar devuelve las filas que lo componen (mismo shape que
+// buscarBiometriaSolicitud, para reutilizar el mismo render de tabla en el cliente).
+function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta) {
+  try {
+    if (tipo === "colaAsignacion") {
+      var ssC = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+      var hojaC = ssC.getSheetByName("solicitud");
+      var outC = [];
+      if (hojaC && hojaC.getLastRow() > 1) {
+        var dataC = hojaC.getDataRange().getDisplayValues();
+        for (var c = 1; c < dataC.length; c++) {
+          var estadoGenC = String(dataC[c][16] || "").toUpperCase().replace(/\s+/g, '_').trim();
+          if (estadoGenC.indexOf("APROBADO_PENDIENTE_BIOMETRIA") === -1) continue;
+          outC.push({
+            solicitud: String(dataC[c][0] || "").trim(),
+            poliza: String(dataC[c][1] || "").trim(),
+            nombre: String(dataC[c][4] || "").trim(),
+            fechaConsulta: String(dataC[c][17] || "").trim(),
+            fechaEnvio: "",
+            fechaActualizacionFase: String(dataC[c][18] || "").trim(),
+            estadoBrodcast: "",
+            fase: "ESCALADA",
+            destinatarios: 0
+          });
+          if (outC.length >= 200) break;
+        }
+      }
+      return outC;
+    }
+
+    var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
+    var hoja = ss.getSheetByName("pendiente_biometria");
+    if (!hoja || hoja.getLastRow() < 2) return [];
+
+    var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
+    var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+
+    var data = hoja.getDataRange().getDisplayValues();
+    var headers = data[0];
+    var colMap = {};
+    for (var h = 0; h < headers.length; h++) {
+      colMap[headers[h].toLowerCase().replace(/\s+/g, '_').trim()] = h;
+    }
+    var cFC = colMap["fecha_consulta_sai"] != null ? colMap["fecha_consulta_sai"] : -1;
+    var cFE = colMap["fecha_envio_brodcast"] != null ? colMap["fecha_envio_brodcast"] : -1;
+    var cFA = colMap["fecha_actualizacion_fase"] != null ? colMap["fecha_actualizacion_fase"] : -1;
+    var cEB = colMap["estado_brodcast"] != null ? colMap["estado_brodcast"] : -1;
+    var cNE = colMap["nuevo_estado_sai"] != null ? colMap["nuevo_estado_sai"] : -1;
+    var cFS = colMap["fase_seguimiento_biometria"] != null ? colMap["fase_seguimiento_biometria"] : -1;
+
+    function _fechaParteD(raw) { return raw ? raw.split(" ")[0] : ""; }
+    function _fechaISOD(parte) {
+      if (!parte) return "";
+      var p = parte.split("/");
+      if (p.length !== 3) return parte;
+      return p[2] + "-" + ("0" + p[1]).slice(-2) + "-" + ("0" + p[0]).slice(-2);
+    }
+    function _fechaNormD(iso) { return iso.replace(/-/g, ''); }
+    function _enRangoD(norm) {
+      if (!filtroDesde && !filtroHasta) return true;
+      if (!norm) return false;
+      if (filtroDesde && norm < filtroDesde) return false;
+      if (filtroHasta && norm > filtroHasta) return false;
+      return true;
+    }
+
+    var resultados = [];
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][0] || "").trim();
+      if (!solicitud) continue;
+
+      var consultaParte = cFC >= 0 ? _fechaISOD(_fechaParteD(String(data[i][cFC] || "").trim())) : "";
+      var envioParte = cFE >= 0 ? _fechaISOD(_fechaParteD(String(data[i][cFE] || "").trim())) : "";
+      var faseParte = cFA >= 0 ? _fechaISOD(_fechaParteD(String(data[i][cFA] || "").trim())) : "";
+      var estadoBrod = cEB >= 0 ? String(data[i][cEB] || "").toUpperCase().trim() : "";
+      var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
+      var fueEnviado = estadoBrod === "ENVIADO" || estadoBrod === "SI" || estadoBrod === "OK" || estadoBrod === "TRUE" || estadoBrod === "1";
+
+      var incluir = false;
+      if (tipo === "esperandoCorte") {
+        incluir = (fase === "WA_ENVIADO");
+      } else if (tipo === "cascadaSinIniciar") {
+        incluir = _enRangoD(_fechaNormD(consultaParte)) && fase === "";
+      } else if (tipo === "cascadaResueltasSinWA") {
+        incluir = _enRangoD(_fechaNormD(consultaParte)) && fase === "RESUELTA" && !fueEnviado;
+      } else if (tipo === "cascadaEnviadas") {
+        incluir = _enRangoD(_fechaNormD(consultaParte)) && !(fase === "") && !(fase === "RESUELTA" && !fueEnviado);
+      } else if (tipo === "cicloConsultadas") {
+        incluir = _enRangoD(_fechaNormD(consultaParte));
+      } else if (tipo === "cicloResueltasSinWA") {
+        incluir = _enRangoD(_fechaNormD(faseParte)) && fase === "RESUELTA" && !fueEnviado;
+      } else if (tipo === "cicloEnviados") {
+        incluir = _enRangoD(_fechaNormD(envioParte)) && fueEnviado;
+      } else if (tipo === "cicloResueltasConWA") {
+        incluir = _enRangoD(_fechaNormD(envioParte)) && fueEnviado && fase === "RESUELTA";
+      } else if (tipo === "cicloEscaladas") {
+        incluir = _enRangoD(_fechaNormD(envioParte)) && fueEnviado && fase === "ESCALADA";
+      }
+      if (!incluir) continue;
+
+      var numDest = 0;
+      if (cNE >= 0) {
+        for (var d = 0; d < 4; d++) {
+          var telIdx = cNE + 1 + d * 3 + 2;
+          if (telIdx < data[i].length && String(data[i][telIdx] || "").trim()) numDest++;
+        }
+      }
+
+      resultados.push({
+        solicitud: solicitud,
+        poliza: String(data[i][1] || "").trim(),
+        nombre: String(data[i][4] || "").trim(),
+        fechaConsulta: cFC >= 0 ? String(data[i][cFC] || "").trim() : "",
+        fechaEnvio: cFE >= 0 ? String(data[i][cFE] || "").trim() : "",
+        fechaActualizacionFase: cFA >= 0 ? String(data[i][cFA] || "").trim() : "",
+        estadoBrodcast: estadoBrod,
+        fase: fase,
+        destinatarios: numDest
+      });
+      if (resultados.length >= 200) break;
+    }
+    return resultados;
+  } catch (e) {
+    Logger.log("Error en obtenerDetalleBiometriaPorTarjeta: " + e.message);
     return [];
   }
 }
@@ -1624,7 +1872,6 @@ var AGENT_DIAG_CACHE_KEY = "AGENT_LAST_DIAGNOSTICO";
 var MAX_ALERT_HISTORY = 50;
 
 var DEFAULT_AGENT_CONFIG = {
-  coordinatorEmail: "",
   enabled: true,
   metas: {
     solicitudesPorDiaPorAnalista: 25,
@@ -1643,7 +1890,23 @@ var DEFAULT_AGENT_CONFIG = {
   },
   notificaciones: {
     enviarAlertasCriticas: true,
-    enviarResumenDiario: true
+    enviarResumenDiario: true,
+    enviarResumenBiometria: true
+  },
+  horarioReporte: {
+    activo: true,
+    frecuenciaHoras: 2,
+    // Cada día de la semana (1=lunes...7=domingo) tiene su propio horario, porque entre semana
+    // y fin de semana la operación trabaja jornadas distintas.
+    dias: {
+      "1": { activo: true, horaInicio: 8, horaFin: 17 },
+      "2": { activo: true, horaInicio: 8, horaFin: 17 },
+      "3": { activo: true, horaInicio: 8, horaFin: 17 },
+      "4": { activo: true, horaInicio: 8, horaFin: 17 },
+      "5": { activo: true, horaInicio: 8, horaFin: 17 },
+      "6": { activo: false, horaInicio: 8, horaFin: 13 },
+      "7": { activo: false, horaInicio: 8, horaFin: 13 }
+    }
   }
 };
 
@@ -1653,10 +1916,33 @@ function agente_obtenerConfig() {
   var props = PropertiesService.getScriptProperties();
   var raw = props.getProperty(AGENT_CONFIG_KEY);
   if (raw) {
-    try { return JSON.parse(raw); } catch (e) {}
+    try {
+      var parsed = JSON.parse(raw);
+      // Backfill de configs guardadas antes de agregar horarioReporte, para que no rompa.
+      if (!parsed.horarioReporte) {
+        parsed.horarioReporte = JSON.parse(JSON.stringify(DEFAULT_AGENT_CONFIG.horarioReporte));
+      } else if (Array.isArray(parsed.horarioReporte.dias)) {
+        // Migración: versión anterior guardaba un solo horario global + lista plana de días.
+        // Se traduce a horario por día, reutilizando ese mismo rango para los días que estaban activos.
+        var diasViejos = parsed.horarioReporte.dias;
+        var hInicioViejo = parsed.horarioReporte.horaInicio != null ? parsed.horarioReporte.horaInicio : 8;
+        var hFinViejo = parsed.horarioReporte.horaFin != null ? parsed.horarioReporte.horaFin : 17;
+        var diasNuevo = {};
+        for (var dm = 1; dm <= 7; dm++) {
+          diasNuevo[String(dm)] = {
+            activo: diasViejos.indexOf(dm) !== -1,
+            horaInicio: hInicioViejo,
+            horaFin: hFinViejo
+          };
+        }
+        parsed.horarioReporte.dias = diasNuevo;
+        delete parsed.horarioReporte.horaInicio;
+        delete parsed.horarioReporte.horaFin;
+      }
+      return parsed;
+    } catch (e) {}
   }
   var cfg = JSON.parse(JSON.stringify(DEFAULT_AGENT_CONFIG));
-  cfg.coordinatorEmail = Session.getActiveUser().getEmail() || "";
   props.setProperty(AGENT_CONFIG_KEY, JSON.stringify(cfg));
   return cfg;
 }
@@ -1672,7 +1958,10 @@ function agente_guardarConfig(configObj) {
   if (configObj.notificaciones) {
     Object.keys(configObj.notificaciones).forEach(function(k) { current.notificaciones[k] = configObj.notificaciones[k]; });
   }
-  if (configObj.coordinatorEmail !== undefined) current.coordinatorEmail = configObj.coordinatorEmail;
+  if (configObj.horarioReporte) {
+    if (!current.horarioReporte) current.horarioReporte = JSON.parse(JSON.stringify(DEFAULT_AGENT_CONFIG.horarioReporte));
+    Object.keys(configObj.horarioReporte).forEach(function(k) { current.horarioReporte[k] = configObj.horarioReporte[k]; });
+  }
   if (configObj.enabled !== undefined) current.enabled = configObj.enabled;
   PropertiesService.getScriptProperties().setProperty(AGENT_CONFIG_KEY, JSON.stringify(current));
   return { success: true, config: current };
@@ -1733,9 +2022,9 @@ function _agente_leerDatosRango(fechaDesdeStr, fechaHastaStr) {
     var poliza = String(fila[1] || "").trim();
     var sucursal = obtenerSucursalPorPoliza(poliza);
 
-    var estadoLabel = (estado.includes("APROB") && !estado.includes("PENDIENTE")) ? "APROBADA" :
-                     (estado.includes("NEGAD") || estado.includes("RECHAZ")) ? "NEGADA" :
-                     estado.includes("APLAZ") ? "APLAZADA" : "OTRO";
+    var estadoLabel = (estado.includes("APROB") && !estado.includes("PENDIENTE")) ? "APROBADO" :
+                     (estado.includes("NEGAD") || estado.includes("RECHAZ")) ? "RECHAZADO" :
+                     estado.includes("APLAZ") ? "APLAZADO" : "OTRO";
 
     registros.push({
       solicitud: String(fila[0] || "").trim(),
@@ -1792,9 +2081,9 @@ function _agente_leerDatosRango(fechaDesdeStr, fechaHastaStr) {
           var polizaR = String(dataReest[j][17] || dataReest[j][2] || "").trim();
           var sucursalR = obtenerSucursalPorPoliza(polizaR);
 
-          var estadoLabelR = (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) ? "APROBADA" :
-                            (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) ? "NEGADA" :
-                            estadoR.includes("APLAZ") ? "APLAZADA" : "OTRO";
+          var estadoLabelR = (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) ? "APROBADO" :
+                            (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) ? "RECHAZADO" :
+                            estadoR.includes("APLAZ") ? "APLAZADO" : "OTRO";
 
           registros.push({
             solicitud: String(dataReest[j][1] || "").trim(),
@@ -1954,8 +2243,8 @@ function agente_calcularPromediosHistoricos() {
 
   regs.forEach(function(r) {
     diasMap[r.fecha] = true;
-    if (r.estado === "APROBADA") aprobadas++;
-    if (r.estado === "NEGADA") negadas++;
+    if (r.estado === "APROBADO") aprobadas++;
+    if (r.estado === "RECHAZADO") negadas++;
     if (r.tGestion !== null) { sumaG += r.tGestion; cG++; }
     if (r.tResolucion !== null && r.tResolucion > 0) {
       sumaR += r.tResolucion; cR++;
@@ -2338,11 +2627,11 @@ function agente_ejecutarDiagnostico() {
   regs.forEach(function(r) {
     if (r.tGestion !== null) { sumaG += r.tGestion; cG++; }
     if (r.tResolucion !== null && r.tResolucion > 0) { sumaR += r.tResolucion; cR++; }
-    if (r.estado === "APROBADA") aprobadas++;
-    if (r.estado === "NEGADA") negadas++;
+    if (r.estado === "APROBADO") aprobadas++;
+    if (r.estado === "RECHAZADO") negadas++;
   });
 
-  var aplazadas = regs.filter(function(r) { return r.estado === "APLAZADA"; }).length;
+  var aplazadas = regs.filter(function(r) { return r.estado === "APLAZADO"; }).length;
   var sumaCola = 0, cCola = 0;
   regs.forEach(function(r) { if (r.tCola !== null && r.tCola >= 0) { sumaCola += r.tCola; cCola++; } });
   var fueraSLA = regs.filter(function(r) { return r.tResolucion !== null && r.tResolucion > 2; }).length;
@@ -2360,6 +2649,11 @@ function agente_ejecutarDiagnostico() {
     tasaAprobacion: regs.length > 0 ? Math.round(aprobadas / regs.length * 1000) / 10 : 0,
     tasaNegacion: regs.length > 0 ? Math.round(negadas / regs.length * 1000) / 10 : 0,
     backlog: backlog.length,
+    // Mismo desglose Verde/Amarillo/Rojo que "Asignado en Proceso" en el tablero — para que el
+    // correo no muestre solo un número plano donde el tablero ya muestra el semáforo completo.
+    backlogVerde: backlog.filter(function(b) { return b.alertaSLA === "verde"; }).length,
+    backlogAmarillo: backlog.filter(function(b) { return b.alertaSLA === "amarillo"; }).length,
+    backlogRojo: backlog.filter(function(b) { return b.alertaSLA === "rojo"; }).length,
     aprobadas: aprobadas,
     negadas: negadas,
     aplazadas: aplazadas,
@@ -2374,9 +2668,9 @@ function agente_ejecutarDiagnostico() {
     if (!porAn[r.analista]) porAn[r.analista] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaG: 0, cG: 0, sumaR: 0, cR: 0, fueraSLA: 0 };
     var a = porAn[r.analista];
     a.total++;
-    if (r.estado === "APROBADA") a.aprobadas++;
-    if (r.estado === "NEGADA") a.negadas++;
-    if (r.estado === "APLAZADA") a.aplazadas++;
+    if (r.estado === "APROBADO") a.aprobadas++;
+    if (r.estado === "RECHAZADO") a.negadas++;
+    if (r.estado === "APLAZADO") a.aplazadas++;
     if (r.tGestion !== null) { a.sumaG += r.tGestion; a.cG++; }
     if (r.tResolucion !== null && r.tResolucion > 0) { a.sumaR += r.tResolucion; a.cR++; if (r.tResolucion > 2) a.fueraSLA++; }
   });
@@ -2426,9 +2720,9 @@ function agente_ejecutarDiagnostico() {
     p.total++;
     var tipoR = r.tipo || "Otro";
     p.tipos[tipoR] = (p.tipos[tipoR] || 0) + 1;
-    if (r.estado === "APROBADA") p.aprobadas++;
-    if (r.estado === "NEGADA") p.negadas++;
-    if (r.estado === "APLAZADA") p.aplazadas++;
+    if (r.estado === "APROBADO") p.aprobadas++;
+    if (r.estado === "RECHAZADO") p.negadas++;
+    if (r.estado === "APLAZADO") p.aplazadas++;
     if (r.tGestion !== null) { p.sumaG += r.tGestion; p.cG++; }
     if (r.tResolucion !== null && r.tResolucion > 0) { p.sumaR += r.tResolucion; p.cR++; if (r.tResolucion > 2) p.fueraSLA++; }
     if (r.tCola !== null && r.tCola >= 0) { p.sumaCola += r.tCola; p.cCola++; }
@@ -2777,8 +3071,9 @@ function _construirEmailAlertas(diagnostico) {
   return html;
 }
 
-function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
+function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, datosRadicado) {
   var d = diagnostico;
+  titulo = titulo || "Cierre del Día";
   var hs = d.healthScore;
   var k = d.kpis;
   var config = agente_obtenerConfig();
@@ -2795,7 +3090,7 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
 
   // Header
   html += '<tr><td style="background:#253150;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
-  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">Cierre del Día</h1>';
+  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">' + _escHtml(titulo) + '</h1>';
   html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">' + d.timestamp + '</p>';
   html += '</td></tr>';
 
@@ -2829,7 +3124,36 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
   html += '</td></tr>';
 
   // ═══════════════════════════════════════════
-  // SECCIÓN 2: Métricas Principales
+  // SECCIÓN 1.5: Radicado del Día (mismo cohorte que la sección "Radicado del Período" del tablero)
+  // ═══════════════════════════════════════════
+  if (datosRadicado) {
+    var pctAGN = datosRadicado.totalRadicadas > 0 ? Math.round((datosRadicado.aGestionNormal || 0) / datosRadicado.totalRadicadas * 1000) / 10 : 0;
+    html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+    html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#128229; Radicado del Día</h2>';
+    html += '<p style="margin:0 0 16px;font-size:12px;color:#706F6F;border-bottom:2px solid #e8edf6;padding-bottom:10px;">Lo que ingresó hoy al sistema — cohorte distinto de "Gestionado" de abajo, no tienen por qué coincidir.</p>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;"><tr>';
+    html += '<td style="text-align:center;padding:18px;background:#e8edf6;border-radius:12px;">';
+    html += '<div style="font-size:11px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Total Radicadas</div>';
+    html += '<span style="font-size:36px;font-weight:800;color:#253150;">' + (datosRadicado.totalRadicadas || 0) + '</span>';
+    html += '<div style="font-size:11px;color:#706F6F;margin-top:4px;">Ingresaron al sistema hoy</div>';
+    html += '</td></tr></table>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:11px;font-weight:700;color:#3a4d7a;margin-bottom:4px;">A Gestión Normal</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:#3a4d7a;">' + (datosRadicado.aGestionNormal || 0) + '</div>';
+    html += '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' + pctAGN + '% del total radicado</div>';
+    html += '</td>';
+    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:#fde8e8;border-radius:10px;">';
+    html += '<div style="font-size:11px;font-weight:700;color:#BD0F14;margin-bottom:4px;">Negación Directa</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:#BD0F14;">' + (datosRadicado.negacionDirecta || 0) + '</div>';
+    html += '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' + (datosRadicado.pctNegacionDirecta || 0) + '% del total radicado</div>';
+    html += '</td>';
+    html += '</tr></table>';
+    html += '</td></tr>';
+  }
+
+  // ═══════════════════════════════════════════
+  // SECCIÓN 2: Métricas Principales (Gestionado del Día)
   // ═══════════════════════════════════════════
   html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
   html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#128202; Métricas del Día</h2>';
@@ -2910,6 +3234,24 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
     html += '<div style="height:20px;"></div>';
   }
 
+  // Asignado en Proceso: mismo semáforo Verde/Amarillo/Rojo que el tablero (backlog ya tomado por un analista, sin cerrar)
+  if (k.backlog > 0) {
+    html += '<h2 style="margin:0 0 14px;font-size:15px;font-weight:800;color:#253150;">&#8987; Asignado en Proceso — ' + k.backlog + ' sin cerrar</h2>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+    [
+      { l: "Dentro de SLA", v: k.backlogVerde || 0, c: "#059669", b: "#ecfdf5" },
+      { l: "Por vencer", v: k.backlogAmarillo || 0, c: "#d97706", b: "#fffbeb" },
+      { l: "Fuera de SLA", v: k.backlogRojo || 0, c: "#BD0F14", b: "#fde8e8" }
+    ].forEach(function(bi) {
+      html += '<td width="33%" style="text-align:center;padding:10px 6px;background:' + bi.b + ';border-radius:10px;">';
+      html += '<div style="font-size:11px;font-weight:700;color:' + bi.c + ';">' + bi.l + '</div>';
+      html += '<div style="font-size:20px;font-weight:800;color:' + bi.c + ';">' + bi.v + '</div>';
+      html += '</td>';
+    });
+    html += '</tr></table>';
+    html += '<div style="height:20px;"></div>';
+  }
+
   // Producción por tipo
   if (k.prodPorTipo && Object.keys(k.prodPorTipo).length > 0) {
     html += '<h2 style="margin:0 0 14px;font-size:15px;font-weight:800;color:#253150;">&#128200; Producción por Tipo</h2>';
@@ -2929,13 +3271,13 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
   // Distribución por Estado + SLA
   html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
   html += '<td width="25%" style="text-align:center;padding:12px 6px;background:#ecfdf5;border-radius:10px;">';
-  html += '<div style="font-size:11px;font-weight:700;color:#059669;">Aprobadas</div>';
+  html += '<div style="font-size:11px;font-weight:700;color:#059669;">Aprobados</div>';
   html += '<div style="font-size:22px;font-weight:800;color:#059669;">' + (k.aprobadas || 0) + '</div></td>';
   html += '<td width="25%" style="text-align:center;padding:12px 6px;background:#fde8e8;border-radius:10px;">';
-  html += '<div style="font-size:11px;font-weight:700;color:#BD0F14;">Negadas</div>';
+  html += '<div style="font-size:11px;font-weight:700;color:#BD0F14;">Rechazados</div>';
   html += '<div style="font-size:22px;font-weight:800;color:#BD0F14;">' + (k.negadas || 0) + '</div></td>';
   html += '<td width="25%" style="text-align:center;padding:12px 6px;background:#fffbeb;border-radius:10px;">';
-  html += '<div style="font-size:11px;font-weight:700;color:#d97706;">Aplazadas</div>';
+  html += '<div style="font-size:11px;font-weight:700;color:#d97706;">Aplazados</div>';
   html += '<div style="font-size:22px;font-weight:800;color:#d97706;">' + (k.aplazadas || 0) + '</div></td>';
   var slaColor = k.slaPct >= 90 ? "#059669" : k.slaPct >= 70 ? "#d97706" : "#BD0F14";
   var slaBg = k.slaPct >= 90 ? "#ecfdf5" : k.slaPct >= 70 ? "#fffbeb" : "#fde8e8";
@@ -3060,14 +3402,15 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
     html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
     html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #d1fae5;padding-bottom:10px;">&#129302; Reporte Biometría del Día</h2>';
 
-    html += '<div style="font-size:13px;font-weight:700;color:#059669;margin-bottom:10px;">Ciclo de Broadcast (WhatsApp)</div>';
+    html += '<div style="font-size:13px;font-weight:700;color:#059669;margin-bottom:2px;">Ciclo de Broadcast (WhatsApp)</div>';
+    html += '<div style="font-size:11px;color:#706F6F;margin-bottom:10px;">Cola y Esperando Próximo Corte son en vivo (no dependen del día). El resto es actividad real de hoy — Tasa Conversión = Resueltas por WA ÷ WA Enviados, sin pasar por analista.</div>';
     html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
     var bioKpis = [
-      { label: "Consultadas", value: bio.totalConsultadas, color: "#253150", bg: "#f8fafc" },
-      { label: "WA Enviados", value: bio.totalEnviados, color: "#25D366", bg: "#ecfdf5" },
-      { label: "Tasa Envío", value: bio.tasaEnvio + "%", color: "#253150", bg: "#f8fafc" },
-      { label: "Resueltas sin asignar", value: bio.totalAprobado, color: "#059669", bg: "#ecfdf5" },
-      { label: "Enviadas a cola", value: bio.totalPendiente, color: "#d97706", bg: "#fffbeb" },
+      { label: "Cola de Asignación (en vivo)", value: bio.colaActual, color: "#d97706", bg: "#fffbeb" },
+      { label: "Esperando Próximo Corte (en vivo)", value: bio.esperandoCorte, color: "#253150", bg: "#f8fafc" },
+      { label: "WA Enviados Hoy", value: bio.totalEnviados, color: "#25D366", bg: "#ecfdf5" },
+      { label: "Resueltas por WA Hoy", value: bio.enviadasYResueltas, color: "#059669", bg: "#ecfdf5" },
+      { label: "Resueltas sin WA Hoy", value: bio.resueltasSinWA, color: "#253150", bg: "#f8fafc" },
       { label: "Tasa Conversión", value: bio.tasaConversion + "%", color: "#059669", bg: "#ecfdf5" }
     ];
     bioKpis.slice(0, 3).forEach(function(ki) {
@@ -3088,8 +3431,8 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
     if (ges.total > 0) {
       html += '<div style="font-size:13px;font-weight:700;color:#253150;margin:18px 0 10px;border-top:1px solid #e5e7eb;padding-top:14px;">Gestión de Analistas (llamadas)</div>';
       html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
-      [{ l: "Gestionadas", v: ges.total, c: "#253150" }, { l: "OK Llamada", v: ges.okLlamada, c: "#059669" }, { l: "No Contestó", v: ges.noContesto, c: "#d97706" }, { l: "Tasa Contacto", v: ges.tasaContacto + "%", c: "#253150" }].forEach(function(ki) {
-        html += '<td width="25%" style="text-align:center;padding:10px 4px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+      [{ l: "Gestionadas", v: ges.total, c: "#253150" }, { l: "OK Llamada", v: ges.okLlamada, c: "#059669" }, { l: "No Contestó", v: ges.noContesto, c: "#d97706" }, { l: "Tasa Contacto", v: ges.tasaContacto + "%", c: "#253150" }, { l: "¿Sirve la llamada?", v: (ges.tasaConversionLlamada || 0) + "%", c: "#059669" }].forEach(function(ki) {
+        html += '<td width="20%" style="text-align:center;padding:10px 4px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
         html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
         html += '<div style="font-size:20px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
         html += '</td>';
@@ -3097,7 +3440,7 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
       html += '</tr></table>';
 
       html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:6px;"><tr>';
-      [{ l: "Aprobadas", v: ges.aprobadas, c: "#059669", b: "#ecfdf5" }, { l: "Negadas", v: ges.negadas, c: "#BD0F14", b: "#fde8e8" }, { l: "Aplazadas", v: ges.aplazadas, c: "#d97706", b: "#fffbeb" }].forEach(function(ri) {
+      [{ l: "Aprobados", v: ges.aprobadas, c: "#059669", b: "#ecfdf5" }, { l: "Rechazados", v: ges.negadas, c: "#BD0F14", b: "#fde8e8" }, { l: "Aplazados", v: ges.aplazadas, c: "#d97706", b: "#fffbeb" }].forEach(function(ri) {
         html += '<td width="33%" style="text-align:center;padding:10px 6px;background:' + ri.b + ';border-radius:10px;">';
         html += '<div style="font-size:11px;font-weight:700;color:#706F6F;">' + ri.l + '</div>';
         html += '<div style="font-size:20px;font-weight:800;color:' + ri.c + ';">' + ri.v + '</div>';
@@ -3121,6 +3464,147 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola) {
   html += '<tr><td style="background:#253150;color:#fff;padding:20px 32px;border-radius:0 0 12px 12px;text-align:center;">';
   html += '<div style="font-size:12px;opacity:0.9;">Agente Coordinador — Métricas Análisis</div>';
   html += '<div style="font-size:11px;opacity:0.6;margin-top:4px;">' + d.timestamp + '</div>';
+  html += '</td></tr>';
+
+  html += '</table></td></tr></table></body></html>';
+  return html;
+}
+
+function _construirEmailReporteBiometria(bio, fecha) {
+  var ges = bio.gestion || {};
+  var convColor = bio.tasaConversion >= 60 ? "#166534" : bio.tasaConversion >= 40 ? "#a16207" : "#BD0F14";
+  var convBg = bio.tasaConversion >= 60 ? "#d1fae5" : bio.tasaConversion >= 40 ? "#fef9c3" : "#fde8e8";
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="margin:0;padding:0;background:#f0f2f5;">';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:24px 0;"><tr><td align="center">';
+  html += '<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;font-family:Arial,Helvetica,sans-serif;">';
+
+  // Header
+  html += '<tr><td style="background:#253150;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
+  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">&#129302; Reporte Biometría del Día</h1>';
+  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">' + fecha + '</p>';
+  html += '</td></tr>';
+
+  // Hero: Tasa de Conversión
+  html += '<tr><td style="background:#fff;padding:28px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+  html += '<td style="text-align:center;padding:20px;background:' + convBg + ';border-radius:12px;">';
+  html += '<div style="font-size:12px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Tasa de Conversión — ¿Sirve el WhatsApp?</div>';
+  html += '<span style="font-size:48px;font-weight:800;color:' + convColor + ';">' + bio.tasaConversion + '%</span>';
+  html += '<div style="font-size:12px;color:#706F6F;margin-top:6px;">De los WA enviados, % que se aprobó SOLO con el mensaje — sin pasar por un analista</div>';
+  html += '</td></tr></table>';
+  html += '</td></tr>';
+
+  // En vivo: Cola de Asignación + Faltan por Revisar
+  html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#8987; En Vivo (ahora mismo)</h2>';
+  html += '<p style="margin:0 0 16px;font-size:12px;color:#706F6F;border-bottom:2px solid #e8edf6;padding-bottom:10px;">No dependen del día — es el estado actual del ciclo, tomado en el momento de generar este correo</p>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+  [
+    { l: "Cola de Asignación", v: bio.colaActual, c: "#d97706", b: "#fffbeb", s: "Esperando analista, ahora mismo" },
+    { l: "Esperando Próximo Corte", v: bio.esperandoCorte, c: "#253150", b: "#f8fafc", s: "Ya tienen WA enviado, esperan el corte de las 8am/12pm" }
+  ].forEach(function(ki) {
+    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:' + ki.b + ';border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
+    html += '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' + ki.s + '</div>';
+    html += '</td>';
+  });
+  html += '</tr></table>';
+  html += '</td></tr>';
+
+  // Cascada Estricta de Hoy: mismo grupo que Consultadas SAI, cierra exacto
+  html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#128202; Cascada Estricta de Hoy</h2>';
+  html += '<p style="margin:0 0 16px;font-size:12px;color:#706F6F;border-bottom:2px solid #e8edf6;padding-bottom:10px;">De lo que ENTRÓ hoy (mismo grupo que Consultadas SAI, ' + bio.totalConsultadas + '): Sin Iniciar + Resueltas sin WA + Ya Enviadas cierra exacto contra ese total. Si el rango es corto, "Resueltas sin WA" aquí normalmente da bajo o cero — lo de hoy casi nunca alcanza a resolverse el mismo día.</p>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+  [
+    { l: "Sin Iniciar", v: bio.totalSinIniciar, c: "#706F6F", b: "#f8fafc" },
+    { l: "Resueltas sin WA", v: bio.cohorteResueltasSinWA, c: "#253150", b: "#e8edf6" },
+    { l: "Ya Enviadas", v: bio.cohorteEnviadas, c: "#25D366", b: "#ecfdf5" }
+  ].forEach(function(ki) {
+    html += '<td width="33%" style="text-align:center;padding:12px 6px;background:' + ki.b + ';border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
+    html += '</td>';
+  });
+  html += '</tr></table>';
+  html += '</td></tr>';
+
+  // Ciclo de Hoy (actividad real, incluye arrastre de días anteriores)
+  html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#128241; Ciclo de Hoy (actividad real)</h2>';
+  html += '<p style="margin:0 0 16px;font-size:12px;color:#706F6F;border-bottom:2px solid #e8edf6;padding-bottom:10px;">Cuánto pasó HOY en la vida real, sin importar cuándo entró la solicitud — por eso puede incluir casos consultados días atrás que hoy tuvieron su corte. No tiene que coincidir con la Cascada Estricta de arriba, son preguntas distintas.</p>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+  [
+    { l: "Resueltas sin WhatsApp", v: bio.resueltasSinWA, c: "#253150", b: "#e8edf6" },
+    { l: "WA Enviados", v: bio.totalEnviados, c: "#25D366", b: "#ecfdf5" }
+  ].forEach(function(ki) {
+    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:' + ki.b + ';border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
+    html += '</td>';
+  });
+  html += '</tr></table>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:8px;"><tr>';
+  [
+    { l: "Resueltas por WhatsApp", v: bio.enviadasYResueltas, c: "#059669", b: "#ecfdf5" },
+    { l: "Escaladas a Análisis", v: bio.enviadasYEscaladas, c: "#d97706", b: "#fffbeb" }
+  ].forEach(function(ki) {
+    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:' + ki.b + ';border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
+    html += '</td>';
+  });
+  html += '</tr></table>';
+  html += '</td></tr>';
+
+  // Gestión de Analistas
+  if (ges.total > 0) {
+    html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#128222; Gestión de Analistas (llamadas)</h2>';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+    [
+      { l: "Gestionadas", v: ges.total, c: "#253150" },
+      { l: "OK Llamada", v: ges.okLlamada, c: "#059669" },
+      { l: "No Contestó", v: ges.noContesto, c: "#d97706" },
+      { l: "Tasa Contacto", v: ges.tasaContacto + "%", c: "#253150" },
+      { l: "¿Sirve la llamada?", v: (ges.tasaConversionLlamada || 0) + "%", c: "#059669" }
+    ].forEach(function(ki) {
+      html += '<td width="20%" style="text-align:center;padding:10px 4px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+      html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
+      html += '<div style="font-size:20px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
+      html += '</td>';
+    });
+    html += '</tr></table>';
+
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:8px;"><tr>';
+    [
+      { l: "Aprobados", v: ges.aprobadas, c: "#059669", b: "#ecfdf5" },
+      { l: "Rechazados", v: ges.negadas, c: "#BD0F14", b: "#fde8e8" },
+      { l: "Aplazados", v: ges.aplazadas, c: "#d97706", b: "#fffbeb" }
+    ].forEach(function(ri) {
+      html += '<td width="33%" style="text-align:center;padding:10px 6px;background:' + ri.b + ';border-radius:10px;">';
+      html += '<div style="font-size:11px;font-weight:700;color:#706F6F;">' + ri.l + '</div>';
+      html += '<div style="font-size:20px;font-weight:800;color:' + ri.c + ';">' + ri.v + '</div>';
+      html += '</td>';
+    });
+    html += '</tr></table>';
+
+    var motivoKeys = Object.keys(ges.motivos || {});
+    if (motivoKeys.length > 0) {
+      html += '<div style="font-size:12px;font-weight:700;color:#d97706;margin:14px 0 6px;">Motivos de aplazamiento:</div>';
+      motivoKeys.forEach(function(m) {
+        html += '<div style="font-size:12px;color:#4a4a4a;line-height:1.6;">&#8226; ' + _escHtml(m) + ': <strong>' + ges.motivos[m] + '</strong></div>';
+      });
+    }
+    html += '</td></tr>';
+  }
+
+  // Footer
+  html += '<tr><td style="background:#253150;color:#fff;padding:20px 32px;border-radius:0 0 12px 12px;text-align:center;">';
+  html += '<div style="font-size:12px;opacity:0.9;">Agente Coordinador — Métricas Análisis</div>';
+  html += '<div style="font-size:11px;opacity:0.6;margin-top:4px;">' + fecha + '</div>';
   html += '</td></tr>';
 
   html += '</table></td></tr></table></body></html>';
@@ -3159,13 +3643,24 @@ function _fmtHorasEmail(horas) {
   return m + "m";
 }
 
+// Quien recibe reportes = quien tiene acceso al tablero (Control de Acceso), sin lista manual
+// aparte — así no hay dos lugares distintos que mantener sincronizados ni confusión sobre
+// quién realmente recibe qué. Los coordinadores reciben todos los reportes generales.
 function _obtenerDestinatarios(config) {
-  var raw = config.coordinatorEmail || "";
-  var emails = raw.split(",").map(function(e) { return e.trim(); }).filter(function(e) { return e.length > 0 && e.indexOf("@") >= 0; });
+  var emails = _obtenerListaAcceso(ACCESS_COORD_KEY);
   if (emails.length === 0) {
     var userEmail = Session.getActiveUser().getEmail();
     if (userEmail) emails.push(userEmail);
   }
+  return emails;
+}
+
+function _obtenerDestinatariosBiometria(config) {
+  var emails = _obtenerDestinatarios(config);
+  var bios = _obtenerListaAcceso(ACCESS_BIO_KEY);
+  bios.forEach(function(e) {
+    if (emails.indexOf(e) === -1) emails.push(e);
+  });
   return emails;
 }
 
@@ -3188,8 +3683,10 @@ function agente_enviarAlertasCriticas(diagnostico) {
   try {
     MailApp.sendEmail({
       to: email,
+      bcc: BCC_REPORTES_AGENTE,
       subject: "ALERTA CRITICA | " + criticas.length + " situación(es) requiere(n) atención | " + fecha + " " + hora,
       htmlBody: html,
+      name: NOMBRE_REMITENTE_AGENTE,
       noReply: true
     });
     return { sent: true, to: email, alertCount: criticas.length };
@@ -3218,13 +3715,18 @@ function agente_enviarResumenDiario() {
   var datosCola = null;
   try { datosCola = obtenerColaAsignacion(); } catch (e) { Logger.log("Aviso: No se pudo obtener cola para email: " + e.message); }
 
-  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola);
+  var datosRadicado = null;
+  try { datosRadicado = obtenerDatosMetricas(fecha, fecha); } catch (e) { Logger.log("Aviso: No se pudo obtener radicado para email: " + e.message); }
+
+  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola, null, datosRadicado);
 
   try {
     MailApp.sendEmail({
       to: email,
+      bcc: BCC_REPORTES_AGENTE,
       subject: "Cierre del Día | Salud " + (hs.score || "—") + "/100 (" + (hs.grade || "—") + ") | " + fecha,
       htmlBody: html,
+      name: NOMBRE_REMITENTE_AGENTE,
       noReply: true
     });
     return { sent: true, to: email };
@@ -3238,31 +3740,110 @@ function agente_enviarResumenManual() {
   return agente_enviarResumenDiario();
 }
 
+function agente_enviarSnapshotActual() {
+  var diagnostico = agente_ejecutarDiagnostico();
+  var config = agente_obtenerConfig();
+
+  var emails = _obtenerDestinatarios(config);
+  if (emails.length === 0) return { sent: false, reason: "sin destinatarios" };
+  var email = emails.join(",");
+
+  var ahora = new Date();
+  var fecha = Utilities.formatDate(ahora, TIMEZONE, "dd/MM/yyyy");
+  var hora = Utilities.formatDate(ahora, TIMEZONE, "HH:mm");
+  var hoy = Utilities.formatDate(ahora, TIMEZONE, "yyyy-MM-dd");
+  var hs = diagnostico.healthScore || {};
+
+  var datosBio = null;
+  try { datosBio = obtenerDatosBiometria(hoy, hoy); } catch (e) { Logger.log("Aviso: No se pudo obtener datos biometría para snapshot: " + e.message); }
+
+  var datosCola = null;
+  try { datosCola = obtenerColaAsignacion(); } catch (e) { Logger.log("Aviso: No se pudo obtener cola para snapshot: " + e.message); }
+
+  var datosRadicado = null;
+  try { datosRadicado = obtenerDatosMetricas(fecha, fecha); } catch (e) { Logger.log("Aviso: No se pudo obtener radicado para snapshot: " + e.message); }
+
+  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola, "Foto del Momento", datosRadicado);
+
+  try {
+    MailApp.sendEmail({
+      to: email,
+      bcc: BCC_REPORTES_AGENTE,
+      subject: "Foto del Momento | Salud " + (hs.score || "—") + "/100 (" + (hs.grade || "—") + ") | " + fecha + " " + hora,
+      htmlBody: html,
+      name: NOMBRE_REMITENTE_AGENTE,
+      noReply: true
+    });
+    return { sent: true, to: email };
+  } catch (e) {
+    Logger.log("Error enviando foto del momento: " + e.message);
+    return { sent: false, reason: e.message };
+  }
+}
+
+function agente_enviarReporteBiometria() {
+  var config = agente_obtenerConfig();
+
+  var emails = _obtenerDestinatariosBiometria(config);
+  if (emails.length === 0) return { sent: false, reason: "sin destinatarios" };
+  var email = emails.join(",");
+
+  var ahora = new Date();
+  var fecha = Utilities.formatDate(ahora, TIMEZONE, "dd/MM/yyyy");
+  var hoy = Utilities.formatDate(ahora, TIMEZONE, "yyyy-MM-dd");
+
+  var datosBio;
+  try {
+    datosBio = obtenerDatosBiometria(hoy, hoy);
+  } catch (e) {
+    Logger.log("Error obteniendo datos biometría para el reporte: " + e.message);
+    return { sent: false, reason: e.message };
+  }
+
+  if (!datosBio || datosBio.totalConsultadas === 0) return { sent: false, reason: "sin datos de biometría hoy" };
+
+  var html = _construirEmailReporteBiometria(datosBio, fecha);
+
+  try {
+    MailApp.sendEmail({
+      to: email,
+      bcc: BCC_REPORTES_AGENTE,
+      subject: "Reporte Biometría del Día | " + datosBio.totalConsultadas + " consultadas · " + datosBio.tasaConversion + "% conversión | " + fecha,
+      htmlBody: html,
+      name: NOMBRE_REMITENTE_AGENTE,
+      noReply: true
+    });
+    return { sent: true, to: email };
+  } catch (e) {
+    Logger.log("Error enviando reporte de biometría: " + e.message);
+    return { sent: false, reason: e.message };
+  }
+}
+
+function agente_enviarReporteBiometriaManual() {
+  return agente_enviarReporteBiometria();
+}
+
 // --- TRIGGERS ---
+
+var AGENT_TRIGGER_FNS = ["agente_triggerOperacion"];
 
 function agente_instalarTriggers() {
   agente_desinstalarTriggers();
 
-  ScriptApp.newTrigger("agente_triggerHorario")
+  ScriptApp.newTrigger("agente_triggerOperacion")
     .timeBased()
     .everyHours(1)
     .create();
 
-  ScriptApp.newTrigger("agente_triggerResumenDiario")
-    .timeBased()
-    .atHour(17)
-    .nearMinute(0)
-    .everyDays(1)
-    .create();
-
-  return { success: true, message: "Triggers instalados: horario + resumen diario 17:00" };
+  return { success: true, message: "Trigger instalado: alertas críticas, Foto del Momento y Resumen Diario, todo según tu Horario de Reporte de Operación configurado" };
 }
 
 function agente_desinstalarTriggers() {
   var triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(function(t) {
     var fn = t.getHandlerFunction();
-    if (fn === "agente_triggerHorario" || fn === "agente_triggerResumenDiario") {
+    if (AGENT_TRIGGER_FNS.indexOf(fn) !== -1) {
       ScriptApp.deleteTrigger(t);
     }
   });
@@ -3274,41 +3855,75 @@ function agente_obtenerEstadoTriggers() {
   var agentTriggers = [];
   triggers.forEach(function(t) {
     var fn = t.getHandlerFunction();
-    if (fn === "agente_triggerHorario" || fn === "agente_triggerResumenDiario") {
+    if (AGENT_TRIGGER_FNS.indexOf(fn) !== -1) {
       agentTriggers.push({ functionName: fn, type: String(t.getEventType()), id: t.getUniqueId() });
     }
   });
   return { installed: agentTriggers.length > 0, triggers: agentTriggers, count: agentTriggers.length };
 }
 
-function agente_triggerHorario() {
+// Único trigger real de Apps Script: late cada hora y decide, leyendo "Horario de Reporte de
+// Operación" (activo/horaInicio/horaFin por día + frecuenciaHoras global), si le toca:
+//   1) revisar alertas críticas (cada hora dentro de la ventana activa del día),
+//   2) enviar "Foto del Momento" (dentro de la ventana, según la frecuencia configurada),
+//   3) enviar el Resumen Diario + Reporte de Biometría (una sola vez, justo al llegar a la
+//      hora de cierre configurada para ese día — horaFin).
+// Las tres comparten la MISMA config, así que cambiar el horario aquí las mueve a las tres
+// juntas, sin reinstalar triggers.
+function agente_triggerOperacion() {
+  var config = agente_obtenerConfig();
+  var hr = config.horarioReporte || DEFAULT_AGENT_CONFIG.horarioReporte;
+  if (hr.activo === false) return;
+
   var ahora = new Date();
+  var dia = parseInt(Utilities.formatDate(ahora, TIMEZONE, "u"), 10);
+  var diaCfg = (hr.dias || {})[String(dia)];
+  if (!diaCfg || diaCfg.activo === false) return;
+
   var hora = parseInt(Utilities.formatDate(ahora, TIMEZONE, "HH"), 10);
-  if (hora < 8 || hora >= 17) return;
+  var horaInicio = diaCfg.horaInicio != null ? diaCfg.horaInicio : 8;
+  var horaFin = diaCfg.horaFin != null ? diaCfg.horaFin : 17;
+  var dentroDeVentana = hora >= horaInicio && hora < horaFin;
 
-  var dia = parseInt(Utilities.formatDate(ahora, TIMEZONE, "u"), 10);
-  if (dia > 5) return;
-
-  try {
-    var diagnostico = agente_ejecutarDiagnostico();
-    var criticas = diagnostico.alerts.filter(function(a) { return a.severity === "critico"; });
-    if (criticas.length > 0) {
-      agente_enviarAlertasCriticas(diagnostico);
+  // 1) Alertas críticas — cada hora dentro de la ventana activa
+  if (dentroDeVentana && config.notificaciones.enviarAlertasCriticas) {
+    try {
+      var diagnostico = agente_ejecutarDiagnostico();
+      var criticas = diagnostico.alerts.filter(function(a) { return a.severity === "critico"; });
+      if (criticas.length > 0) agente_enviarAlertasCriticas(diagnostico);
+    } catch (e) {
+      Logger.log("Error en revisión de alertas críticas: " + e.message);
     }
-  } catch (e) {
-    Logger.log("Error en trigger horario del agente: " + e.message);
   }
-}
 
-function agente_triggerResumenDiario() {
-  var ahora = new Date();
-  var dia = parseInt(Utilities.formatDate(ahora, TIMEZONE, "u"), 10);
-  if (dia > 5) return;
+  // 2) Foto del Momento — dentro de la ventana, respetando la frecuencia configurada
+  if (dentroDeVentana) {
+    var frecuencia = hr.frecuenciaHoras || 2;
+    if (((hora - horaInicio) % frecuencia) === 0) {
+      try {
+        agente_enviarSnapshotActual();
+      } catch (e) {
+        Logger.log("Error en Foto del Momento: " + e.message);
+      }
+    }
+  }
 
-  try {
-    agente_enviarResumenDiario();
-  } catch (e) {
-    Logger.log("Error en trigger resumen diario: " + e.message);
+  // 3) Resumen Diario + Reporte de Biometría — una sola vez, al llegar a la hora de cierre del día
+  if (hora === horaFin) {
+    if (config.notificaciones.enviarResumenDiario) {
+      try {
+        agente_enviarResumenDiario();
+      } catch (e) {
+        Logger.log("Error en resumen diario: " + e.message);
+      }
+    }
+    if (config.notificaciones.enviarResumenBiometria) {
+      try {
+        agente_enviarReporteBiometria();
+      } catch (e) {
+        Logger.log("Error en reporte de biometría: " + e.message);
+      }
+    }
   }
 }
 

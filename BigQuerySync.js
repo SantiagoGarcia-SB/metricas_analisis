@@ -34,7 +34,7 @@ var BQ_SCHEMA = [
   'bio_destino_3_rol','bio_destino_3_nombre','bio_destino_3_telefono',
   'bio_destino_4_rol','bio_destino_4_nombre','bio_destino_4_telefono',
   'es_gestionada','estado_label','fecha_cierre','fuera_sla','es_backlog',
-  'tipo_solicitud','horas_general','dentro_sla','es_aprobada_num','es_negada_num','es_aplazada_num',
+  'tipo_solicitud','horas_general','dentro_sla','es_aprobado_num','es_rechazado_num','es_aplazado_num',
   'es_estado_definitivo','es_rechazado_sai',
   'inmobiliaria','segmento','hora_cierre','fecha_fin_completa',
   't_general_fmt','t_cola_fmt','t_gestion_fmt'
@@ -91,9 +91,9 @@ function _calcularCamposDerivados(fila, scoreMap) {
 
   // estado_label: misma lógica del Apps Script
   var estadoLabel = '';
-  if (estado.indexOf('APROB') > -1 && estado.indexOf('PENDIENTE') === -1) estadoLabel = 'APROBADA';
-  else if (estado.indexOf('NEGAD') > -1 || estado.indexOf('RECHAZ') > -1) estadoLabel = 'NEGADA';
-  else if (estado.indexOf('APLAZ') > -1) estadoLabel = 'APLAZADA';
+  if (estado.indexOf('APROB') > -1 && estado.indexOf('PENDIENTE') === -1) estadoLabel = 'APROBADO';
+  else if (estado.indexOf('NEGAD') > -1 || estado.indexOf('RECHAZ') > -1) estadoLabel = 'RECHAZADO';
+  else if (estado.indexOf('APLAZ') > -1) estadoLabel = 'APLAZADO';
   else if (estado !== '') estadoLabel = 'OTRO';
 
   // fecha_cierre: fecha_fin limpia para producción diaria
@@ -125,9 +125,9 @@ function _calcularCamposDerivados(fila, scoreMap) {
   var dentroSla = (!isNaN(horasGen) && horasGen <= 2 && esGestionada === '1') ? '1' : '0';
 
   // Contadores numéricos para facilitar sumas en Looker
-  var esAprobadaNum = estadoLabel === 'APROBADA' ? '1' : '0';
-  var esNegadaNum = estadoLabel === 'NEGADA' ? '1' : '0';
-  var esAplazadaNum = estadoLabel === 'APLAZADA' ? '1' : '0';
+  var esAprobadoNum = estadoLabel === 'APROBADO' ? '1' : '0';
+  var esRechazadoNum = estadoLabel === 'RECHAZADO' ? '1' : '0';
+  var esAplazadoNum = estadoLabel === 'APLAZADO' ? '1' : '0';
 
   fila.es_gestionada = esGestionada;
   fila.estado_label = estadoLabel;
@@ -137,9 +137,9 @@ function _calcularCamposDerivados(fila, scoreMap) {
   fila.tipo_solicitud = tipoSol;
   fila.horas_general = horasGeneralStr;
   fila.dentro_sla = dentroSla;
-  fila.es_aprobada_num = esAprobadaNum;
-  fila.es_negada_num = esNegadaNum;
-  fila.es_aplazada_num = esAplazadaNum;
+  fila.es_aprobado_num = esAprobadoNum;
+  fila.es_rechazado_num = esRechazadoNum;
+  fila.es_aplazado_num = esAplazadoNum;
 
   // Inmobiliaria y segmento desde diccionario score
   var poliza = String(fila.poliza || '').trim();
