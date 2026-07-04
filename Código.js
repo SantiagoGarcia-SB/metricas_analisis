@@ -12,6 +12,21 @@ const HORA_FIN_TURNO = "17:00";
 const BCC_REPORTES_AGENTE = "santiago.garcia@segurosbolivar.com";
 const NOMBRE_REMITENTE_AGENTE = "Análisis · El Libertador";
 
+// Columna 60 (índice 0-based) de Historico_Gestiones = tipo_asignado
+function _normalizarTipoAsignado(valor) {
+  var v = String(valor || "").trim();
+  if (!v) return v;
+  var sinTilde = v.toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) {
+    return { "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U" }[c] || c;
+  });
+  if (sinTilde === 'DIGITAL') return 'Digital';
+  if (sinTilde === 'UAR') return 'UAR';
+  if (sinTilde === 'REESTUDIO') return 'Reestudio';
+  if (sinTilde === 'BIOMETRIA') return 'Biometría';
+  if (sinTilde === 'INDUCCION') return 'Inducción';
+  return v;
+}
+
 function doGet(e) {
   return HtmlService.createTemplateFromFile('MetricasPanel')
     .evaluate()
@@ -253,10 +268,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) negadas++;
     else if (estado.includes("APLAZ")) aplazadas++;
 
-    const clase = String(fila[20] || "").toUpperCase().trim();
-    let tipoSol = 'Digital';
-    if (estado.includes('BIOMETRIA')) tipoSol = 'Biometría';
-    else if (clase === 'INDUCCION') tipoSol = 'Inducción';
+    let tipoSol = _normalizarTipoAsignado(fila[60]) || 'Digital';
 
     if (!tipoMap[fechaGestionStr]) tipoMap[fechaGestionStr] = { Digital: 0, UAR: 0, Reestudio: 0, 'Biometría': 0, 'Inducción': 0 };
     tipoMap[fechaGestionStr][tipoSol]++;
@@ -573,10 +585,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
       }
       var polizaBack = String(data[i][1] || "").trim();
       var infoSegBack = obtenerSegmentoInmobiliaria(polizaBack, scoreMap);
-      var claseBack = String(data[i][20] || "").toUpperCase().trim();
-      var tipoBack = 'Digital';
-      if (claseBack === 'BIOMETRIA' || claseBack === 'BIOMETRÍA') tipoBack = 'Biometría';
-      else if (claseBack === 'INDUCCION' || claseBack === 'INDUCCIÓN') tipoBack = 'Inducción';
+      var tipoBack = _normalizarTipoAsignado(data[i][60]) || 'Digital';
       backlogDetalle.push({
         solicitud:      String(data[i][0]  || "").trim(),
         fechaAsignacion: fechaAsig,
@@ -1216,7 +1225,6 @@ function admin_obtenerDetallePorAnalista(correoAnalista, fechaFiltro) {
     const solicitudId = String(dataSol[i][0] || "").trim();
     const poliza = String(dataSol[i][1] || "");
     const estado = String(dataSol[i][16] || "").toUpperCase();
-    const clase = String(dataSol[i][20] || "").toUpperCase();
     const fechaRadicacion = String(dataSol[i][17] || "").trim();
     const fechaAsignacion = String(dataSol[i][24] || "").trim();
     const fechaFin = String(dataSol[i][26] || "").trim();
@@ -1226,9 +1234,7 @@ function admin_obtenerDetallePorAnalista(correoAnalista, fechaFiltro) {
     const tiempoGeneral = tiempoSLA;
 
     if (!solicitudId) continue;
-    let tipo = 'Digital';
-    if (estado.includes('BIOMETRIA')) tipo = 'Biometría';
-    else if (clase === 'INDUCCION') tipo = 'Inducción';
+    let tipo = _normalizarTipoAsignado(dataSol[i][60]) || 'Digital';
 
     if (fechaFin !== "" && coincideFecha(fechaFin, fechaStr)) {
       gestionadas.push({
