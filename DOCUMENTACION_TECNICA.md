@@ -142,7 +142,7 @@ window.onload()
     │
     ├── 6. Calcula Backlog (hoja "solicitud" + reestudios)
     │       ├── Solicitudes con fecha_asignación ≠ "" AND fecha_fin = ""
-    │       └── Semáforo: 🟢 <45min | 🟡 45-90min | 🔴 >90min
+    │       └── Semáforo: 🟢 <15min | 🟡 15-30min | 🔴 >30min
     │
     ├── 7. Agrega y formatea resultados
     │       ├── KPIs: totales, promedios, tasas
@@ -358,7 +358,7 @@ const HORA_FIN_TURNO = "17:00";
 | Indicador | Meta | Criterio |
 |-----------|------|----------|
 | **Tiempo General (Resolución)** | ≤ 2 horas | Radicación → Cierre |
-| **Semáforo Backlog** | 🟢 <45min · 🟡 45-90min · 🔴 >90min | Tiempo desde asignación |
+| **Semáforo Backlog** | 🟢 <15min · 🟡 15-30min · 🔴 >30min | Tiempo desde asignación |
 | **Tendencia SLA alerta** | <80% cumplimiento diario | Punto rojo en gráfico |
 | **Tasa negación alta** | >20% por sucursal | Color rojo en gráfico |
 
