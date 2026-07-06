@@ -1888,7 +1888,6 @@ var DEFAULT_AGENT_CONFIG = {
     maxTiempoColaMin: 45,
     maxBacklog: 15,
     maxTasaNegacionPct: 25,
-    minSolicitudesDiaEquipo: 80,
     umbralMinutosPausa: 90
   },
   umbrales: {
@@ -1907,10 +1906,10 @@ var DEFAULT_AGENT_CONFIG = {
     chequeoConexionOffsetMin: 30,
     enviarAlertasCriticas: true,
     alertasCriticasFrecuenciaHoras: 1,
+    // Foto del Momento incluye tanto la vista agregada (salud, KPIs, radicado) como el
+    // detalle por analista (antes era el correo separado "Corte de Gestión").
     enviarFotoMomento: true,
     fotoMomentoFrecuenciaHoras: 2,
-    enviarCorteGestion: true,
-    corteGestionFrecuenciaHoras: 2,
     enviarResumenDiario: true,
     enviarResumenBiometria: true
   },
@@ -1983,8 +1982,6 @@ function agente_obtenerConfig() {
         parsed.notificaciones.fotoMomentoFrecuenciaHoras = (parsed.horarioReporte && parsed.horarioReporte.frecuenciaHoras) || 2;
       }
       if (parsed.notificaciones.alertasCriticasFrecuenciaHoras === undefined) parsed.notificaciones.alertasCriticasFrecuenciaHoras = 1;
-      if (parsed.notificaciones.enviarCorteGestion === undefined) parsed.notificaciones.enviarCorteGestion = true;
-      if (parsed.notificaciones.corteGestionFrecuenciaHoras === undefined) parsed.notificaciones.corteGestionFrecuenciaHoras = 2;
       if (parsed.metas && parsed.metas.umbralMinutosPausa === undefined) parsed.metas.umbralMinutosPausa = 90;
       return parsed;
     } catch (e) {}
@@ -2709,6 +2706,19 @@ function agente_ejecutarDiagnostico() {
     prodPorTipo: prodPorTipo
   };
 
+  // Ritmo esperado del equipo A ESTA HORA (mismo criterio que la alerta de productividad y que
+  // el "esperado" por analista): cupos reales asignados si existen, si no meta genérica × analistas
+  // activos, prorrateado por la fracción de jornada (8am-5pm) ya transcurrida. Evita que "Métricas
+  // del Día" se vea "atrás" a media mañana solo por comparar contra la meta del día completo.
+  var horaKpi = parseInt(Utilities.formatDate(new Date(), TIMEZONE, "HH"), 10);
+  var minKpi = parseInt(Utilities.formatDate(new Date(), TIMEZONE, "mm"), 10);
+  var horasTranscurridasKpi = horaKpi >= 17 ? 9 : Math.max(1, (horaKpi - 8) + minKpi / 60);
+  var totalCuposKpi = 0;
+  Object.keys(cuposMap || {}).forEach(function(ck) { totalCuposKpi += (cuposMap[ck].total || 0); });
+  kpis.esperadoHoyEquipo = totalCuposKpi > 0
+    ? Math.round(totalCuposKpi * (horasTranscurridasKpi / 9))
+    : Math.round(config.metas.solicitudesPorDiaPorAnalista * Math.max(1, analistas.length) * (horasTranscurridasKpi / 9));
+
   // Análisis detallado por analista
   var porAn = {};
   regs.forEach(function(r) {
@@ -3118,7 +3128,7 @@ function _construirEmailAlertas(diagnostico) {
   return html;
 }
 
-function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, datosRadicado) {
+function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, datosRadicado, datosCorteGestion) {
   var d = diagnostico;
   titulo = titulo || "Cierre del Día";
   var hs = d.healthScore;
@@ -3207,7 +3217,7 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, 
   html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-bottom:4px;">';
 
   var kpiItems = [
-    { label: "Solicitudes Gestionadas", value: k.totalGestionadas, meta: config.metas.minSolicitudesDiaEquipo, icon: "&#128196;" },
+    { label: "Solicitudes Gestionadas", value: k.totalGestionadas, meta: k.esperadoHoyEquipo, metaLabel: "Esperadas a esta hora", icon: "&#128196;" },
     { label: "Tiempo de Gestión", value: _fmtMinEmail(k.tiempoGestionProm), meta: _fmtMinEmail(config.metas.maxTiempoGestionMin), icon: "&#9201;" },
     { label: "Tiempo General", value: _fmtHorasEmail(k.tiempoGeneralProm), meta: _fmtHorasEmail(config.metas.maxTiempoGeneralHoras), icon: "&#128337;" },
     { label: "Tasa de Aprobación", value: k.tasaAprobacion + "%", meta: null, icon: "&#9989;" },
@@ -3220,7 +3230,7 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, 
     html += '<td width="33%" style="text-align:center;padding:14px 8px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
     html += '<div style="font-size:12px;font-weight:700;color:#706F6F;margin-bottom:6px;">' + ki.icon + ' ' + ki.label + '</div>';
     html += '<div style="font-size:24px;font-weight:800;color:#253150;">' + ki.value + '</div>';
-    if (ki.meta !== null) html += '<div style="font-size:11px;color:#94a3b8;margin-top:4px;">Meta: ' + ki.meta + '</div>';
+    if (ki.meta !== null) html += '<div style="font-size:11px;color:#94a3b8;margin-top:4px;">' + (ki.metaLabel || "Meta") + ': ' + ki.meta + '</div>';
     html += '</td>';
   });
   html += '</tr>';
@@ -3231,7 +3241,7 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, 
     html += '<td width="33%" style="text-align:center;padding:14px 8px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
     html += '<div style="font-size:12px;font-weight:700;color:#706F6F;margin-bottom:6px;">' + ki.icon + ' ' + ki.label + '</div>';
     html += '<div style="font-size:24px;font-weight:800;color:#253150;">' + ki.value + '</div>';
-    if (ki.meta !== null) html += '<div style="font-size:11px;color:#94a3b8;margin-top:4px;">Meta: ' + ki.meta + '</div>';
+    if (ki.meta !== null) html += '<div style="font-size:11px;color:#94a3b8;margin-top:4px;">' + (ki.metaLabel || "Meta") + ': ' + ki.meta + '</div>';
     html += '</td>';
   });
   html += '</tr>';
@@ -3386,6 +3396,13 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, 
     }
   }
   html += '</td></tr>';
+
+  // ═══════════════════════════════════════════
+  // SECCIÓN 3.5: Corte de Gestión (detalle por analista) — solo en Foto del Momento
+  // ═══════════════════════════════════════════
+  if (datosCorteGestion && datosCorteGestion.analistas && datosCorteGestion.analistas.length > 0) {
+    html += _htmlSeccionCorteGestion(datosCorteGestion);
+  }
 
   // ═══════════════════════════════════════════
   // SECCIÓN 4: Top Analistas
@@ -3996,13 +4013,19 @@ function agente_enviarSnapshotActual() {
   var datosRadicado = null;
   try { datosRadicado = obtenerDatosMetricas(fecha, fecha); } catch (e) { Logger.log("Aviso: No se pudo obtener radicado para snapshot: " + e.message); }
 
-  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola, "Foto del Momento", datosRadicado);
+  var datosCorteGestion = null;
+  try { datosCorteGestion = agente_obtenerCorteGestion(); } catch (e) { Logger.log("Aviso: No se pudo obtener corte de gestión para snapshot: " + e.message); }
+
+  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola, "Foto del Momento", datosRadicado, datosCorteGestion);
+
+  var atencion = datosCorteGestion && datosCorteGestion.analistas ? datosCorteGestion.analistas.filter(function(a) { return a.semaforo === "rojo" || a.semaforo === "amarillo"; }).length : null;
+  var subject = "Foto del Momento | Salud " + (hs.score || "—") + "/100 (" + (hs.grade || "—") + ")" + (atencion !== null ? " | " + atencion + " requieren atención" : "") + " | " + fecha + " " + hora;
 
   try {
     MailApp.sendEmail({
       to: email,
       bcc: BCC_REPORTES_AGENTE,
-      subject: "Foto del Momento | Salud " + (hs.score || "—") + "/100 (" + (hs.grade || "—") + ") | " + fecha + " " + hora,
+      subject: subject,
       htmlBody: html,
       name: NOMBRE_REMITENTE_AGENTE,
       noReply: true
@@ -4197,7 +4220,8 @@ function _agente_leerHistoricoEstadosHoy() {
   return porAnalista;
 }
 
-// Ensambla el detalle por analista para el correo "Corte de Gestión": producción y desglose de
+// Ensambla el detalle por analista para la sección "Corte de Gestión" del correo Foto del
+// Momento: producción y desglose de
 // resultados del día (obtenerRendimientoPorDia), ritmo esperado según el promedio histórico de
 // 30 días (agente_calcularPromediosHistoricos), y distribución del tiempo entre ACTIVO y el
 // resto de estados (_agente_leerHistoricoEstadosHoy) — todas fuentes que ya existen en otras
@@ -4406,7 +4430,10 @@ function _renderSparklineHoras(detalleHoras) {
   return html;
 }
 
-function _construirEmailCorteGestion(datos) {
+// Sección "Corte de Gestión" (detalle por analista) embebida dentro del email de Foto del
+// Momento — devuelve solo las filas de tabla (sin doctype/header/footer propios), para
+// insertarse en el mismo documento que _construirEmailResumenDiario.
+function _htmlSeccionCorteGestion(datos) {
   var analistas = datos.analistas || [];
   var rojos = analistas.filter(function(a) { return a.semaforo === "rojo"; });
   var amarillos = analistas.filter(function(a) { return a.semaforo === "amarillo"; });
@@ -4418,18 +4445,11 @@ function _construirEmailCorteGestion(datos) {
   });
   var totalGestionado = analistas.reduce(function(s, a) { return s + a.gestionadas; }, 0);
 
-  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="margin:0;padding:0;background:#f0f2f5;">';
-  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:24px 0;"><tr><td align="center">';
-  html += '<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;font-family:Arial,Helvetica,sans-serif;">';
-
-  // Header
-  html += '<tr><td style="background:#253150;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
-  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">Corte de Gestión</h1>';
-  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">' + _escHtml(datos.fecha) + ' ' + _escHtml(datos.hora) + '</p>';
-  html += '</td></tr>';
+  var html = '';
 
   // Resumen
   html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#128101; Corte de Gestión — Detalle por Analista</h2>';
   html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
   [
     { l: "Requieren Atención", v: atencion.length, c: "#BD0F14", bg: "#fde8e8" },
@@ -4549,53 +4569,7 @@ function _construirEmailCorteGestion(datos) {
     html += '</td></tr>';
   }
 
-  // Footer
-  html += '<tr><td style="background:#253150;color:#fff;padding:20px 32px;border-radius:0 0 12px 12px;text-align:center;">';
-  html += '<div style="font-size:12px;opacity:0.9;">Agente Coordinador — Métricas Análisis</div>';
-  html += '<div style="font-size:11px;opacity:0.6;margin-top:4px;">' + _escHtml(datos.fecha) + ' ' + _escHtml(datos.hora) + '</div>';
-  html += '</td></tr>';
-
-  html += '</table></td></tr></table></body></html>';
   return html;
-}
-
-function agente_enviarCorteGestion() {
-  var config = agente_obtenerConfig();
-  var emails = _obtenerDestinatarios(config);
-  if (emails.length === 0) return { sent: false, reason: "sin destinatarios" };
-  var email = emails.join(",");
-
-  var datos;
-  try {
-    datos = agente_obtenerCorteGestion();
-  } catch (e) {
-    Logger.log("Error obteniendo corte de gestión: " + e.message);
-    return { sent: false, reason: e.message };
-  }
-
-  if (!datos.analistas || datos.analistas.length === 0) return { sent: false, reason: "sin analistas activos" };
-
-  var atencion = datos.analistas.filter(function(a) { return a.semaforo === "rojo" || a.semaforo === "amarillo"; }).length;
-  var html = _construirEmailCorteGestion(datos);
-
-  try {
-    MailApp.sendEmail({
-      to: email,
-      bcc: BCC_REPORTES_AGENTE,
-      subject: "Corte de Gestión | " + atencion + " requieren atención de " + datos.analistas.length + " | " + datos.fecha + " " + datos.hora,
-      htmlBody: html,
-      name: NOMBRE_REMITENTE_AGENTE,
-      noReply: true
-    });
-    return { sent: true, to: email, atencion: atencion, total: datos.analistas.length };
-  } catch (e) {
-    Logger.log("Error enviando corte de gestión: " + e.message);
-    return { sent: false, reason: e.message };
-  }
-}
-
-function agente_enviarCorteGestionManual() {
-  return agente_enviarCorteGestion();
 }
 
 // --- TRIGGERS ---
@@ -4610,7 +4584,7 @@ function agente_instalarTriggers() {
     .everyMinutes(30)
     .create();
 
-  return { success: true, message: "Trigger instalado: Inicio de Operación, Chequeo de Conexión, alertas críticas, Foto del Momento, Corte de Gestión y Resumen Diario, todo según tu Horario de Reporte de Operación y las frecuencias que configures para cada correo" };
+  return { success: true, message: "Trigger instalado: Inicio de Operación, Chequeo de Conexión, alertas críticas, Foto del Momento (incluye detalle por analista) y Resumen Diario, todo según tu Horario de Reporte de Operación y las frecuencias que configures para cada correo" };
 }
 
 function agente_desinstalarTriggers() {
@@ -4642,8 +4616,9 @@ function agente_obtenerEstadoTriggers() {
 //   0) enviar "Inicio de Operación" (una sola vez, justo al llegar a horaInicio),
 //   0b) enviar "Chequeo de Conexión" (una sola vez, chequeoConexionOffsetMin después de horaInicio),
 //   1) revisar alertas críticas (dentro de la ventana, cada alertasCriticasFrecuenciaHoras),
-//   2) enviar "Foto del Momento" (dentro de la ventana, cada fotoMomentoFrecuenciaHoras),
-//   2b) enviar "Corte de Gestión" (dentro de la ventana, cada corteGestionFrecuenciaHoras),
+//   2) enviar "Foto del Momento" (dentro de la ventana, cada fotoMomentoFrecuenciaHoras —
+//      incluye salud/KPIs agregados y el detalle por analista, antes separado como "Corte de
+//      Gestión"),
 //   3) enviar el Resumen Diario + Reporte de Biometría (una sola vez, justo al llegar a la
 //      hora de cierre configurada para ese día — horaFin).
 // Cada correo tiene su propio interruptor Y su propia frecuencia — no se mueven juntos. Todas
@@ -4668,6 +4643,30 @@ function _agente_tocaPorFrecuencia(bucketAhora, bucketInicio, frecuenciaHoras) {
   var bucketsPorCiclo = Math.max(1, Math.round((frecuenciaHoras || 1) * 2));
   var bucketsDesdeInicio = (bucketAhora - bucketInicio) / 30;
   return bucketsDesdeInicio >= 0 && (bucketsDesdeInicio % bucketsPorCiclo) === 0;
+}
+
+// Motivos que NO son una falla real — son el resultado esperado de la lógica del correo (ej.
+// "no había alertas críticas en este momento") y no deben generar un aviso.
+var AGENT_RAZONES_NO_ALERTAR = ["sin alertas criticas", "desactivado", "sin datos de biometría hoy"];
+
+// Si un envío automático no logró salir (sin destinatarios, error de MailApp, excepción), avisa
+// por correo directo al admin — para no depender de revisar Logger.log o el panel manualmente.
+function _agente_notificarSiFallo(nombreCorreo, resultado) {
+  if (!resultado || resultado.sent) return;
+  if (AGENT_RAZONES_NO_ALERTAR.indexOf(resultado.reason) !== -1) return;
+  try {
+    MailApp.sendEmail({
+      to: BCC_REPORTES_AGENTE,
+      subject: "⚠ Agente Coordinador: \"" + nombreCorreo + "\" no se envió",
+      htmlBody: '<p style="font-family:Arial,sans-serif;font-size:14px;">El correo automático <b>' + _escHtml(nombreCorreo) + '</b> no se pudo enviar.</p>' +
+        '<p style="font-family:Arial,sans-serif;font-size:14px;"><b>Motivo:</b> ' + _escHtml(String(resultado.reason || "desconocido")) + '</p>' +
+        '<p style="font-family:Arial,sans-serif;font-size:12px;color:#706F6F;">' + Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy HH:mm") + '</p>',
+      name: NOMBRE_REMITENTE_AGENTE,
+      noReply: true
+    });
+  } catch (e) {
+    Logger.log("Error enviando aviso de fallo (" + nombreCorreo + "): " + e.message);
+  }
 }
 
 function agente_triggerOperacion() {
@@ -4699,9 +4698,10 @@ function agente_triggerOperacion() {
   // 0) Inicio de Operación — una sola vez, en el bucket exacto de horaInicio
   if (bucketAhora === bucketInicio && noti.enviarInicioOperacion) {
     try {
-      agente_enviarInicioOperacion();
+      _agente_notificarSiFallo("Inicio de Operación", agente_enviarInicioOperacion());
     } catch (e) {
       Logger.log("Error en inicio de operación: " + e.message);
+      _agente_notificarSiFallo("Inicio de Operación", { sent: false, reason: e.message });
     }
   }
 
@@ -4709,9 +4709,10 @@ function agente_triggerOperacion() {
   var bucketChequeo = bucketInicio + Math.max(30, Math.round((noti.chequeoConexionOffsetMin || 30) / 30) * 30);
   if (bucketAhora === bucketChequeo && noti.enviarChequeoConexion) {
     try {
-      agente_enviarChequeoConexion();
+      _agente_notificarSiFallo("Chequeo de Conexión", agente_enviarChequeoConexion());
     } catch (e) {
       Logger.log("Error en chequeo de conexión: " + e.message);
+      _agente_notificarSiFallo("Chequeo de Conexión", { sent: false, reason: e.message });
     }
   }
 
@@ -4720,27 +4721,20 @@ function agente_triggerOperacion() {
     try {
       var diagnostico = agente_ejecutarDiagnostico();
       var criticas = diagnostico.alerts.filter(function(a) { return a.severity === "critico"; });
-      if (criticas.length > 0) agente_enviarAlertasCriticas(diagnostico);
+      if (criticas.length > 0) _agente_notificarSiFallo("Alertas Críticas", agente_enviarAlertasCriticas(diagnostico));
     } catch (e) {
       Logger.log("Error en revisión de alertas críticas: " + e.message);
+      _agente_notificarSiFallo("Alertas Críticas", { sent: false, reason: e.message });
     }
   }
 
   // 2) Foto del Momento — dentro de la ventana, con su propia frecuencia independiente
   if (dentroDeVentana && noti.enviarFotoMomento && _agente_tocaPorFrecuencia(bucketAhora, bucketInicio, noti.fotoMomentoFrecuenciaHoras)) {
     try {
-      agente_enviarSnapshotActual();
+      _agente_notificarSiFallo("Foto del Momento", agente_enviarSnapshotActual());
     } catch (e) {
       Logger.log("Error en Foto del Momento: " + e.message);
-    }
-  }
-
-  // 2b) Corte de Gestión — dentro de la ventana, con su propia frecuencia independiente
-  if (dentroDeVentana && noti.enviarCorteGestion && _agente_tocaPorFrecuencia(bucketAhora, bucketInicio, noti.corteGestionFrecuenciaHoras)) {
-    try {
-      agente_enviarCorteGestion();
-    } catch (e) {
-      Logger.log("Error en corte de gestión: " + e.message);
+      _agente_notificarSiFallo("Foto del Momento", { sent: false, reason: e.message });
     }
   }
 
@@ -4748,16 +4742,18 @@ function agente_triggerOperacion() {
   if (bucketAhora === bucketFin) {
     if (config.notificaciones.enviarResumenDiario) {
       try {
-        agente_enviarResumenDiario();
+        _agente_notificarSiFallo("Resumen Diario", agente_enviarResumenDiario());
       } catch (e) {
         Logger.log("Error en resumen diario: " + e.message);
+        _agente_notificarSiFallo("Resumen Diario", { sent: false, reason: e.message });
       }
     }
     if (config.notificaciones.enviarResumenBiometria) {
       try {
-        agente_enviarReporteBiometria();
+        _agente_notificarSiFallo("Reporte de Biometría", agente_enviarReporteBiometria());
       } catch (e) {
         Logger.log("Error en reporte de biometría: " + e.message);
+        _agente_notificarSiFallo("Reporte de Biometría", { sent: false, reason: e.message });
       }
     }
   }

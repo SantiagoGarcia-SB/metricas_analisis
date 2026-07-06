@@ -788,7 +788,6 @@
                             <button class="agent-quick-btn" onclick="enviarResumenManualAgente()"><i class="bi bi-envelope"></i> Enviar Resumen por Correo</button>
                             <button class="agent-quick-btn" onclick="enviarReporteBiometriaManualAgente()"><i class="bi bi-fingerprint"></i> Enviar Reporte Biometría</button>
                             <button class="agent-quick-btn" onclick="enviarSnapshotManualAgente()"><i class="bi bi-camera"></i> Enviar Foto del Momento</button>
-                            <button class="agent-quick-btn" onclick="enviarCorteGestionManualAgente()"><i class="bi bi-people"></i> Enviar Corte de Gestión</button>
                             <button class="agent-quick-btn" onclick="document.getElementById('seccionConfigMetas').scrollIntoView({behavior:'smooth'})"><i class="bi bi-gear"></i> Configurar Metas</button>
                         </div>
                         <div style="margin-top:16px;">
@@ -937,21 +936,7 @@
                                                     <option value="4">Cada 4 horas</option>
                                                     <option value="6">Cada 6 horas</option>
                                                 </select>
-                                                dentro de la ventana activa
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td>Corte de Gestión <span class="btn-help-chart" onclick="ayudaConfig('enviarCorteGestion')">?</span></td>
-                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarCorteGestion" checked></td>
-                                            <td>
-                                                <select class="form-select form-select-sm" id="cfgCorteGestionFrecuencia" style="width:auto;display:inline-block;">
-                                                    <option value="0.5">Cada 30 min</option>
-                                                    <option value="1">Cada 1 hora</option>
-                                                    <option value="2">Cada 2 horas</option>
-                                                    <option value="3">Cada 3 horas</option>
-                                                    <option value="4">Cada 4 horas</option>
-                                                </select>
-                                                dentro de la ventana activa
+                                                dentro de la ventana activa — incluye detalle por analista
                                             </td>
                                         </tr>
                                         <tr>
@@ -1024,7 +1009,7 @@
                 <div class="table-header">
                     <div>
                         <div class="table-title"><i class="bi bi-alarm me-2" style="color:var(--azul);"></i>Automatización (Triggers)</div>
-                        <div class="table-sub">El "motor" que hace automáticos los 7 correos configurados arriba (Inicio de Operación, Chequeo de Conexión, Alertas Críticas, Foto del Momento, Corte de Gestión, Resumen Diario y Reporte Biometría). Late cada 30 minutos y decide qué le toca enviar según el interruptor y la frecuencia de cada correo, y el "Horario de Reporte de Operación" de más abajo. Sin este trigger instalado, la configuración queda guardada pero nada se envía solo.</div>
+                        <div class="table-sub">El "motor" que hace automáticos los 6 correos configurados arriba (Inicio de Operación, Chequeo de Conexión, Alertas Críticas, Foto del Momento, Resumen Diario y Reporte Biometría). Late cada 30 minutos y decide qué le toca enviar según el interruptor y la frecuencia de cada correo, y el "Horario de Reporte de Operación" de más abajo. Sin este trigger instalado, la configuración queda guardada pero nada se envía solo.</div>
                     </div>
                     <div id="triggerStatusBadge"></div>
                 </div>
