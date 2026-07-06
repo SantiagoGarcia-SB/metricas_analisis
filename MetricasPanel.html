@@ -22,7 +22,7 @@
             <div class="splash-dot"></div>
         </div>
         <div class="splash-saludo"><span id="splashSaludoTexto">Buenas</span>, <span class="splash-nombre" id="splashNombre">…</span></div>
-        <div class="splash-subtitulo" id="splashSubtitulo">Preparando tu panel de administración</div>
+        <div class="splash-subtitulo" id="splashSubtitulo">Preparando tu panel de métricas</div>
         <div class="splash-frase">Tu visión impulsa a todo el equipo</div>
         <div class="splash-pasos">
             <div class="splash-paso activo" id="splashPaso1">
@@ -783,9 +783,12 @@
                         <div class="table-title mb-3"><i class="bi bi-lightning-charge me-2" style="color:var(--rojo);"></i>Acciones Rápidas</div>
                         <div class="agent-quick-actions" style="flex-direction:column;">
                             <button class="agent-quick-btn agent-quick-btn-primary" onclick="recalcularAgente()"><i class="bi bi-arrow-repeat"></i> Recalcular Diagnóstico</button>
+                            <button class="agent-quick-btn" onclick="enviarInicioOperacionManualAgente()"><i class="bi bi-sunrise"></i> Enviar Inicio de Operación</button>
+                            <button class="agent-quick-btn" onclick="enviarChequeoConexionManualAgente()"><i class="bi bi-wifi"></i> Enviar Chequeo de Conexión</button>
                             <button class="agent-quick-btn" onclick="enviarResumenManualAgente()"><i class="bi bi-envelope"></i> Enviar Resumen por Correo</button>
                             <button class="agent-quick-btn" onclick="enviarReporteBiometriaManualAgente()"><i class="bi bi-fingerprint"></i> Enviar Reporte Biometría</button>
                             <button class="agent-quick-btn" onclick="enviarSnapshotManualAgente()"><i class="bi bi-camera"></i> Enviar Foto del Momento</button>
+                            <button class="agent-quick-btn" onclick="enviarCorteGestionManualAgente()"><i class="bi bi-people"></i> Enviar Corte de Gestión</button>
                             <button class="agent-quick-btn" onclick="document.getElementById('seccionConfigMetas').scrollIntoView({behavior:'smooth'})"><i class="bi bi-gear"></i> Configurar Metas</button>
                         </div>
                         <div style="margin-top:16px;">
@@ -875,35 +878,101 @@
                             <label class="form-label">Desviación histórica % <span class="btn-help-chart" onclick="ayudaConfig('desviacion')">?</span></label>
                             <input type="number" class="form-control" id="cfgDesviacion" min="5" max="100">
                         </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Umbral pausas (min) <span class="btn-help-chart" onclick="ayudaConfig('umbralPausa')">?</span></label>
+                            <input type="number" class="form-control" id="cfgUmbralPausa" min="10">
+                        </div>
                         <div class="col-md-6 d-flex align-items-center">
                             <div style="font-size:0.78rem;color:var(--text-muted);background:var(--bg-page);border-radius:10px;padding:10px 14px;">
                                 <i class="bi bi-info-circle me-1" style="color:var(--azul);"></i>
                                 Los reportes llegan a los correos de <b>Control de Acceso al Tablero</b> (más abajo): Coordinadores reciben todos los reportes, Biometría solo el reporte de biometría. No hay una lista aparte que mantener.
                             </div>
                         </div>
-                        <div class="col-md-3 d-flex align-items-end">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="cfgEnviarCriticas" checked>
-                                <label class="form-check-label" style="font-size:0.75rem;font-weight:600;">Alertas críticas <span class="btn-help-chart" onclick="ayudaConfig('enviarCriticas')">?</span></label>
-                            </div>
-                        </div>
-                        <div class="col-md-3 d-flex align-items-end">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="cfgEnviarResumen" checked>
-                                <label class="form-check-label" style="font-size:0.75rem;font-weight:600;">Resumen diario <span class="btn-help-chart" onclick="ayudaConfig('enviarResumen')">?</span></label>
-                            </div>
-                        </div>
-                        <div class="col-md-3 d-flex align-items-end">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="cfgEnviarBiometria" checked>
-                                <label class="form-check-label" style="font-size:0.75rem;font-weight:600;">Reporte biometría <span class="btn-help-chart" onclick="ayudaConfig('enviarBiometria')">?</span></label>
+                        <div class="col-md-12">
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle" style="font-size:0.8rem;">
+                                    <thead><tr><th>Correo</th><th class="text-center">Activo</th><th>Cada cuánto / cuándo</th></tr></thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Inicio de Operación <span class="btn-help-chart" onclick="ayudaConfig('enviarInicio')">?</span></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarInicio" checked></td>
+                                            <td style="color:var(--text-light);font-size:0.75rem;">Una vez, a la hora "Desde" del día</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Chequeo de Conexión <span class="btn-help-chart" onclick="ayudaConfig('enviarChequeoConexion')">?</span></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarChequeoConexion" checked></td>
+                                            <td>
+                                                <select class="form-select form-select-sm" id="cfgChequeoConexionOffset" style="width:auto;display:inline-block;">
+                                                    <option value="15">15 min después de "Desde"</option>
+                                                    <option value="30">30 min después de "Desde"</option>
+                                                    <option value="45">45 min después de "Desde"</option>
+                                                    <option value="60">1 hora después de "Desde"</option>
+                                                    <option value="90">1.5 horas después de "Desde"</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>Alertas Críticas <span class="btn-help-chart" onclick="ayudaConfig('enviarCriticas')">?</span></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarCriticas" checked></td>
+                                            <td>
+                                                <select class="form-select form-select-sm" id="cfgAlertasCriticasFrecuencia" style="width:auto;display:inline-block;">
+                                                    <option value="0.5">Cada 30 min</option>
+                                                    <option value="1">Cada 1 hora</option>
+                                                    <option value="2">Cada 2 horas</option>
+                                                    <option value="3">Cada 3 horas</option>
+                                                    <option value="4">Cada 4 horas</option>
+                                                </select>
+                                                dentro de la ventana activa
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>Foto del Momento <span class="btn-help-chart" onclick="ayudaConfig('enviarFotoMomento')">?</span></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarFotoMomento" checked></td>
+                                            <td>
+                                                <select class="form-select form-select-sm" id="cfgFotoMomentoFrecuencia" style="width:auto;display:inline-block;">
+                                                    <option value="0.5">Cada 30 min</option>
+                                                    <option value="1">Cada 1 hora</option>
+                                                    <option value="2">Cada 2 horas</option>
+                                                    <option value="3">Cada 3 horas</option>
+                                                    <option value="4">Cada 4 horas</option>
+                                                    <option value="6">Cada 6 horas</option>
+                                                </select>
+                                                dentro de la ventana activa
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>Corte de Gestión <span class="btn-help-chart" onclick="ayudaConfig('enviarCorteGestion')">?</span></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarCorteGestion" checked></td>
+                                            <td>
+                                                <select class="form-select form-select-sm" id="cfgCorteGestionFrecuencia" style="width:auto;display:inline-block;">
+                                                    <option value="0.5">Cada 30 min</option>
+                                                    <option value="1">Cada 1 hora</option>
+                                                    <option value="2">Cada 2 horas</option>
+                                                    <option value="3">Cada 3 horas</option>
+                                                    <option value="4">Cada 4 horas</option>
+                                                </select>
+                                                dentro de la ventana activa
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>Resumen Diario <span class="btn-help-chart" onclick="ayudaConfig('enviarResumen')">?</span></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarResumen" checked></td>
+                                            <td style="color:var(--text-light);font-size:0.75rem;">Una vez, a la hora "Hasta" del día</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Reporte Biometría <span class="btn-help-chart" onclick="ayudaConfig('enviarBiometria')">?</span></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarBiometria" checked></td>
+                                            <td style="color:var(--text-light);font-size:0.75rem;">Junto al Resumen Diario, a la hora "Hasta"</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
 
                     <hr class="my-3">
                     <div class="table-title mb-1" style="font-size:0.85rem;"><i class="bi bi-clock-history me-2" style="color:var(--azul);"></i>Horario de Reporte de Operación <span class="btn-help-chart" onclick="ayudaConfig('horarioReporte')">?</span></div>
-                    <div class="table-sub mb-3">Controla las 3 alertas/reportes automáticos: Alertas Críticas y "Foto del Momento" se revisan en cada hora activa; el Resumen Diario (+ Reporte de Biometría) se envía una sola vez, justo a la hora "Hasta" de cada día</div>
+                    <div class="table-sub mb-3">Define la ventana activa del día ("Desde"/"Hasta" por día de la semana, más abajo). Cada correo de arriba tiene su propio interruptor y su propia frecuencia — no se mueven juntos.</div>
                     <div class="row g-3">
                         <div class="col-md-4 d-flex align-items-end">
                             <div class="form-check form-switch">
@@ -911,31 +980,21 @@
                                 <label class="form-check-label" style="font-size:0.75rem;font-weight:600;">Activar reporte periódico</label>
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Frecuencia</label>
-                            <select class="form-select" id="cfgReporteFrecuencia">
-                                <option value="1">Cada 1 hora</option>
-                                <option value="2">Cada 2 horas</option>
-                                <option value="3">Cada 3 horas</option>
-                                <option value="4">Cada 4 horas</option>
-                                <option value="6">Cada 6 horas</option>
-                            </select>
-                        </div>
                     </div>
                     <div class="row g-3 mt-1">
                         <div class="col-md-12">
-                            <label class="form-label d-block mb-2">Horario por día <span style="font-weight:400;color:var(--text-light);">(entre semana y fin de semana suelen ser distintos)</span></label>
+                            <label class="form-label d-block mb-2">Horario por día <span style="font-weight:400;color:var(--text-light);">(entre semana y fin de semana suelen ser distintos; el motor solo entiende pasos de 30 min, ej. 12:00 o 12:30)</span></label>
                             <div class="table-responsive">
                                 <table class="table table-sm align-middle" style="font-size:0.8rem;width:auto;">
-                                    <thead><tr><th>Día</th><th class="text-center">Activo</th><th>Desde (hora)</th><th>Hasta (hora)</th></tr></thead>
+                                    <thead><tr><th>Día</th><th class="text-center">Activo</th><th>Desde</th><th>Hasta</th></tr></thead>
                                     <tbody id="cfgReporteDiasTabla">
-                                        <tr><td>Lunes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia1Activo"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia1Inicio" min="0" max="23" style="width:80px;"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia1Fin" min="0" max="23" style="width:80px;"></td></tr>
-                                        <tr><td>Martes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia2Activo"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia2Inicio" min="0" max="23" style="width:80px;"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia2Fin" min="0" max="23" style="width:80px;"></td></tr>
-                                        <tr><td>Miércoles</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia3Activo"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia3Inicio" min="0" max="23" style="width:80px;"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia3Fin" min="0" max="23" style="width:80px;"></td></tr>
-                                        <tr><td>Jueves</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia4Activo"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia4Inicio" min="0" max="23" style="width:80px;"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia4Fin" min="0" max="23" style="width:80px;"></td></tr>
-                                        <tr><td>Viernes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia5Activo"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia5Inicio" min="0" max="23" style="width:80px;"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia5Fin" min="0" max="23" style="width:80px;"></td></tr>
-                                        <tr><td>Sábado</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia6Activo"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia6Inicio" min="0" max="23" style="width:80px;"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia6Fin" min="0" max="23" style="width:80px;"></td></tr>
-                                        <tr><td>Domingo</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia7Activo"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia7Inicio" min="0" max="23" style="width:80px;"></td><td><input type="number" class="form-control form-control-sm" id="cfgDia7Fin" min="0" max="23" style="width:80px;"></td></tr>
+                                        <tr><td>Lunes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia1Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia1Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia1Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Martes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia2Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia2Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia2Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Miércoles</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia3Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia3Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia3Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Jueves</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia4Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia4Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia4Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Viernes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia5Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia5Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia5Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Sábado</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia6Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia6Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia6Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Domingo</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia7Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia7Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia7Fin" style="width:110px;"></td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -965,7 +1024,7 @@
                 <div class="table-header">
                     <div>
                         <div class="table-title"><i class="bi bi-alarm me-2" style="color:var(--azul);"></i>Automatización (Triggers)</div>
-                        <div class="table-sub">Un solo chequeo cada hora que envía alertas críticas, Foto del Momento y Resumen Diario — todo según el "Horario de Reporte de Operación" configurado abajo</div>
+                        <div class="table-sub">El "motor" que hace automáticos los 7 correos configurados arriba (Inicio de Operación, Chequeo de Conexión, Alertas Críticas, Foto del Momento, Corte de Gestión, Resumen Diario y Reporte Biometría). Late cada 30 minutos y decide qué le toca enviar según el interruptor y la frecuencia de cada correo, y el "Horario de Reporte de Operación" de más abajo. Sin este trigger instalado, la configuración queda guardada pero nada se envía solo.</div>
                     </div>
                     <div id="triggerStatusBadge"></div>
                 </div>

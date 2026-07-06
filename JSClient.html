@@ -372,7 +372,7 @@ var _ayudaTextos={
     tiemposSucursal:{t:'Comparativa Tiempos por Sucursal',d:'Promedio de T. Gestión y T. General por sucursal. Identifica sucursales con tiempos de respuesta superiores al promedio.'},
     negacionSucursal:{t:'Tasa Negación por Sucursal',d:'Porcentaje de solicitudes negadas en cada sucursal. Rojo >20%, gris >10%, azul <10%. Ayuda a detectar sucursales con criterios más restrictivos.'},
     tendenciaSLA:{t:'Tendencia SLA Diaria',d:'Evolución diaria del porcentaje de cumplimiento del SLA (meta: resolución en menos de 2 horas). Los puntos rojos indican días con cumplimiento menor al 80%. Muestra la mejora o deterioro del servicio día a día.'},
-    semaforo:{t:'Semáforo Operativo de Backlog',d:'Solicitudes actualmente en gestión ordenadas por tiempo de espera. 🟢 Menos de 45 min (dentro de SLA). 🟡 Entre 45 y 90 min (en riesgo). 🔴 Más de 90 min (fuera de SLA). Priorizar las rojas.'},
+    semaforo:{t:'Semáforo Operativo de Backlog',d:'Solicitudes actualmente en gestión ordenadas por tiempo de espera. 🟢 Menos de 15 min (dentro de SLA). 🟡 Entre 15 y 30 min (en riesgo). 🔴 Más de 30 min (fuera de SLA). Priorizar las rojas.'},
     prodSucursal:{t:'Producción por Sucursal',d:'Producción diaria apilada por sucursal. Muestra cómo se distribuye el volumen de gestión entre las diferentes oficinas a lo largo del tiempo.'},
     prodTipo:{t:'Producción por Tipo',d:'Producción diaria apilada por tipo de estudio (Digital, UAR, Reestudio, Biometría, Inducción). Visualiza qué tipo de solicitudes dominan cada día.'},
     mensualTipo:{t:'Producción Mensual por Tipo',d:'Acumulado mensual discriminado por tipo. Permite ver tendencias de largo plazo y estacionalidad en la demanda por cada tipo de estudio.'},
@@ -1078,7 +1078,7 @@ function descargarExcelConsolidado() {
         var backlog = window._backlogDetalle || [];
         var bkRows = [['Solicitud', 'Analista', 'Origen', 'Tipo', 'Inmobiliaria', 'Segmento', 'Fecha Asignación', 'Minutos en Espera', 'Semáforo']];
         backlog.forEach(function(b) {
-            var semaforo = b.alertaSLA === 'rojo' ? 'ROJO (>90 min)' : b.alertaSLA === 'amarillo' ? 'AMARILLO (45-90 min)' : 'VERDE (<45 min)';
+            var semaforo = b.alertaSLA === 'rojo' ? 'ROJO (>30 min)' : b.alertaSLA === 'amarillo' ? 'AMARILLO (15-30 min)' : 'VERDE (<15 min)';
             bkRows.push([b.solicitud || '', b.analista || '', b.origen || '', b.tipo || '', b.inmobiliaria || '', b.segmento || '', b.fechaAsignacion || '', b.minutosEspera || 0, semaforo]);
         });
         var wsBacklog = XLSX.utils.aoa_to_sheet(bkRows);
@@ -1960,14 +1960,27 @@ function renderConfigAgente(config) {
     document.getElementById('cfgMaxCola').value = config.metas.maxTiempoColaMin || 45;
     document.getElementById('cfgMaxBacklog').value = config.metas.maxBacklog || 15;
     document.getElementById('cfgDesviacion').value = config.umbrales.desviacionHistoricaPct || 20;
+    document.getElementById('cfgUmbralPausa').value = config.metas.umbralMinutosPausa || 90;
     document.getElementById('cfgEnviarCriticas').checked = config.notificaciones.enviarAlertasCriticas !== false;
     document.getElementById('cfgEnviarResumen').checked = config.notificaciones.enviarResumenDiario !== false;
     document.getElementById('cfgEnviarBiometria').checked = config.notificaciones.enviarResumenBiometria !== false;
+    document.getElementById('cfgEnviarInicio').checked = config.notificaciones.enviarInicioOperacion !== false;
+    document.getElementById('cfgEnviarChequeoConexion').checked = config.notificaciones.enviarChequeoConexion !== false;
+    document.getElementById('cfgEnviarFotoMomento').checked = config.notificaciones.enviarFotoMomento !== false;
+    document.getElementById('cfgEnviarCorteGestion').checked = config.notificaciones.enviarCorteGestion !== false;
+    document.getElementById('cfgChequeoConexionOffset').value = String(config.notificaciones.chequeoConexionOffsetMin || 30);
+    document.getElementById('cfgAlertasCriticasFrecuencia').value = String(config.notificaciones.alertasCriticasFrecuenciaHoras || 1);
+    document.getElementById('cfgFotoMomentoFrecuencia').value = String(config.notificaciones.fotoMomentoFrecuenciaHoras || 2);
+    document.getElementById('cfgCorteGestionFrecuencia').value = String(config.notificaciones.corteGestionFrecuenciaHoras || 2);
 
-    var _hrDefaultDias = { "1": { activo: true, horaInicio: 8, horaFin: 17 }, "2": { activo: true, horaInicio: 8, horaFin: 17 }, "3": { activo: true, horaInicio: 8, horaFin: 17 }, "4": { activo: true, horaInicio: 8, horaFin: 17 }, "5": { activo: true, horaInicio: 8, horaFin: 17 }, "6": { activo: false, horaInicio: 8, horaFin: 13 }, "7": { activo: false, horaInicio: 8, horaFin: 13 } };
-    var hr = config.horarioReporte || { activo: true, frecuenciaHoras: 2, dias: _hrDefaultDias };
+    var _hrDefaultDias = { "1": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "2": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "3": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "4": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "5": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "6": { activo: false, horaInicio: "08:00", horaFin: "13:00" }, "7": { activo: false, horaInicio: "08:00", horaFin: "13:00" } };
+    // Compatibilidad: si el valor todavía viene como hora entera vieja (ej. 8), lo pasa a "HH:mm".
+    function _hrNormaliza(v, fallback) {
+        if (typeof v === 'number') return String(v).padStart(2, '0') + ':00';
+        return v != null ? v : fallback;
+    }
+    var hr = config.horarioReporte || { activo: true, dias: _hrDefaultDias };
     document.getElementById('cfgReporteActivo').checked = hr.activo !== false;
-    document.getElementById('cfgReporteFrecuencia').value = String(hr.frecuenciaHoras || 2);
     var diasCfg = hr.dias || _hrDefaultDias;
     for (var dNum = 1; dNum <= 7; dNum++) {
         var dCfg = diasCfg[String(dNum)] || _hrDefaultDias[String(dNum)];
@@ -1975,8 +1988,8 @@ function renderConfigAgente(config) {
         var elInicio = document.getElementById('cfgDia' + dNum + 'Inicio');
         var elFin = document.getElementById('cfgDia' + dNum + 'Fin');
         if (elActivo) elActivo.checked = dCfg.activo !== false;
-        if (elInicio) elInicio.value = dCfg.horaInicio != null ? dCfg.horaInicio : 8;
-        if (elFin) elFin.value = dCfg.horaFin != null ? dCfg.horaFin : 17;
+        if (elInicio) elInicio.value = _hrNormaliza(dCfg.horaInicio, "08:00");
+        if (elFin) elFin.value = _hrNormaliza(dCfg.horaFin, "17:00");
     }
 }
 
@@ -1987,32 +2000,41 @@ function guardarConfigAgente() {
             maxTiempoGestionMin: parseInt(document.getElementById('cfgMaxGestion').value) || 20,
             maxTiempoGeneralHoras: parseFloat(document.getElementById('cfgMaxGeneral').value) || 2,
             maxTiempoColaMin: parseInt(document.getElementById('cfgMaxCola').value) || 45,
-            maxBacklog: parseInt(document.getElementById('cfgMaxBacklog').value) || 15
+            maxBacklog: parseInt(document.getElementById('cfgMaxBacklog').value) || 15,
+            umbralMinutosPausa: parseInt(document.getElementById('cfgUmbralPausa').value) || 90
         },
         umbrales: {
             desviacionHistoricaPct: parseInt(document.getElementById('cfgDesviacion').value) || 20
         },
         notificaciones: {
             enviarAlertasCriticas: document.getElementById('cfgEnviarCriticas').checked,
+            alertasCriticasFrecuenciaHoras: parseFloat(document.getElementById('cfgAlertasCriticasFrecuencia').value) || 1,
             enviarResumenDiario: document.getElementById('cfgEnviarResumen').checked,
-            enviarResumenBiometria: document.getElementById('cfgEnviarBiometria').checked
+            enviarResumenBiometria: document.getElementById('cfgEnviarBiometria').checked,
+            enviarInicioOperacion: document.getElementById('cfgEnviarInicio').checked,
+            enviarChequeoConexion: document.getElementById('cfgEnviarChequeoConexion').checked,
+            chequeoConexionOffsetMin: parseInt(document.getElementById('cfgChequeoConexionOffset').value) || 30,
+            enviarFotoMomento: document.getElementById('cfgEnviarFotoMomento').checked,
+            fotoMomentoFrecuenciaHoras: parseFloat(document.getElementById('cfgFotoMomentoFrecuencia').value) || 2,
+            enviarCorteGestion: document.getElementById('cfgEnviarCorteGestion').checked,
+            corteGestionFrecuenciaHoras: parseFloat(document.getElementById('cfgCorteGestionFrecuencia').value) || 2
         },
         horarioReporte: {
             activo: document.getElementById('cfgReporteActivo').checked,
-            frecuenciaHoras: parseInt(document.getElementById('cfgReporteFrecuencia').value) || 2,
             dias: {}
         }
     };
     [1, 2, 3, 4, 5, 6, 7].forEach(function(d) {
         var elActivo = document.getElementById('cfgDia' + d + 'Activo');
-        var hInicio = parseInt(document.getElementById('cfgDia' + d + 'Inicio').value);
-        var hFin = parseInt(document.getElementById('cfgDia' + d + 'Fin').value);
+        var hInicio = document.getElementById('cfgDia' + d + 'Inicio').value;
+        var hFin = document.getElementById('cfgDia' + d + 'Fin').value;
         config.horarioReporte.dias[String(d)] = {
             activo: elActivo ? elActivo.checked : false,
-            horaInicio: isNaN(hInicio) ? 8 : hInicio,
-            horaFin: isNaN(hFin) ? 17 : hFin
+            horaInicio: hInicio || "08:00",
+            horaFin: hFin || "17:00"
         };
     });
+    Swal.fire({ title: 'Guardando...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
     google.script.run
         .withSuccessHandler(function(res) {
             Swal.fire({ icon: 'success', title: 'Configuración guardada', text: 'Las metas y umbrales se actualizaron correctamente.', timer: 2000, showConfirmButton: false });
@@ -2075,8 +2097,9 @@ function renderEstadoTriggers(triggers) {
 }
 
 function instalarTriggersAgente() {
-    Swal.fire({ title: 'Instalar Trigger', text: 'Se creará un único chequeo automático cada hora que envía alertas críticas, "Foto del Momento" y el Resumen Diario, todo según lo que definas en "Horario de Reporte de Operación" (más abajo). ¿Continuar?', icon: 'question', showCancelButton: true, confirmButtonColor: '#253150', confirmButtonText: 'Instalar', cancelButtonText: 'Cancelar' }).then(function(result) {
+    Swal.fire({ title: 'Instalar Trigger', text: 'Se creará un único chequeo automático cada 30 minutos que envía Inicio de Operación, Chequeo de Conexión, alertas críticas, "Foto del Momento" y el Resumen Diario, todo según lo que definas en "Horario de Reporte de Operación" (más abajo). ¿Continuar?', icon: 'question', showCancelButton: true, confirmButtonColor: '#253150', confirmButtonText: 'Instalar', cancelButtonText: 'Cancelar' }).then(function(result) {
         if (!result.isConfirmed) return;
+        Swal.fire({ title: 'Instalando...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
         google.script.run
             .withSuccessHandler(function(res) {
                 Swal.fire({ icon: 'success', title: 'Trigger instalado', text: res.message, timer: 2500, showConfirmButton: false });
@@ -2090,6 +2113,7 @@ function instalarTriggersAgente() {
 function desinstalarTriggersAgente() {
     Swal.fire({ title: 'Desinstalar Triggers', text: '¿Desactivar las revisiones automáticas?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#BD0F14', confirmButtonText: 'Desinstalar', cancelButtonText: 'Cancelar' }).then(function(result) {
         if (!result.isConfirmed) return;
+        Swal.fire({ title: 'Desinstalando...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
         google.script.run
             .withSuccessHandler(function() {
                 Swal.fire({ icon: 'success', title: 'Triggers eliminados', timer: 1500, showConfirmButton: false });
@@ -2176,6 +2200,60 @@ function enviarSnapshotManualAgente() {
     });
 }
 
+function enviarInicioOperacionManualAgente() {
+    Swal.fire({ title: 'Enviar Inicio de Operación', text: 'Se enviará por correo el total radicado y la cola pendiente por tipo de estudio. ¿Continuar?', icon: 'question', showCancelButton: true, confirmButtonColor: '#253150', confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar' }).then(function(result) {
+        if (!result.isConfirmed) return;
+        Swal.fire({ title: 'Enviando...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
+        google.script.run
+            .withSuccessHandler(function(res) {
+                Swal.close();
+                if (res.sent) {
+                    Swal.fire({ icon: 'success', title: 'Correo enviado', text: 'Inicio de Operación enviado a ' + res.to, timer: 2500, showConfirmButton: false });
+                } else {
+                    Swal.fire({ icon: 'warning', title: 'No se envió', text: res.reason });
+                }
+            })
+            .withFailureHandler(function(e) { Swal.fire({ icon: 'error', title: 'Error', text: e.message }); })
+            .agente_enviarInicioOperacionManual();
+    });
+}
+
+function enviarChequeoConexionManualAgente() {
+    Swal.fire({ title: 'Enviar Chequeo de Conexión', text: 'Se enviará por correo la lista de analistas activos (con hora de primera asignación y primer resultado) y la de los no activos, agrupados por su estado. ¿Continuar?', icon: 'question', showCancelButton: true, confirmButtonColor: '#253150', confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar' }).then(function(result) {
+        if (!result.isConfirmed) return;
+        Swal.fire({ title: 'Enviando...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
+        google.script.run
+            .withSuccessHandler(function(res) {
+                Swal.close();
+                if (res.sent) {
+                    Swal.fire({ icon: 'success', title: 'Correo enviado', text: 'Chequeo de Conexión enviado a ' + res.to, timer: 2500, showConfirmButton: false });
+                } else {
+                    Swal.fire({ icon: 'warning', title: 'No se envió', text: res.reason });
+                }
+            })
+            .withFailureHandler(function(e) { Swal.fire({ icon: 'error', title: 'Error', text: e.message }); })
+            .agente_enviarChequeoConexionManual();
+    });
+}
+
+function enviarCorteGestionManualAgente() {
+    Swal.fire({ title: 'Enviar Corte de Gestión', text: 'Se enviará por correo el detalle de producción de cada analista activo (gestionadas vs. esperadas, tiempos en pausa y ritmo por hora). ¿Continuar?', icon: 'question', showCancelButton: true, confirmButtonColor: '#253150', confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar' }).then(function(result) {
+        if (!result.isConfirmed) return;
+        Swal.fire({ title: 'Enviando...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
+        google.script.run
+            .withSuccessHandler(function(res) {
+                Swal.close();
+                if (res.sent) {
+                    Swal.fire({ icon: 'success', title: 'Correo enviado', text: 'Corte de Gestión enviado a ' + res.to, timer: 2500, showConfirmButton: false });
+                } else {
+                    Swal.fire({ icon: 'warning', title: 'No se envió', text: res.reason });
+                }
+            })
+            .withFailureHandler(function(e) { Swal.fire({ icon: 'error', title: 'Error', text: e.message }); })
+            .agente_enviarCorteGestionManual();
+    });
+}
+
 // === BADGE SIDEBAR ===
 function actualizarBadgeSidebar(alerts) {
     var badge = document.getElementById('badgeAlertasSidebar');
@@ -2199,14 +2277,19 @@ var _ayudaConfigTextos = {
     maxNegacion: { t: 'Máx. Tasa de Negación %', d: 'Porcentaje máximo aceptable de solicitudes negadas/rechazadas respecto al total gestionado. Si una sucursal o el global supera este umbral, se genera una alerta. Tasas altas pueden indicar problemas de documentación o criterios muy restrictivos.' },
     minEquipo: { t: 'Mín. Solicitudes/día del equipo', d: 'Cantidad mínima total de solicitudes que todo el equipo debe gestionar en un día. Sirve como meta global. Se usa en el cálculo del Health Score de productividad. Si el equipo produce menos que este valor, se refleja en el score.' },
     desviacion: { t: 'Desviación Histórica % umbral', d: 'Porcentaje de desviación permitido respecto al promedio histórico de 30 días. Si una métrica actual se desvía más de este porcentaje (hacia peor), el agente genera una alerta informativa. Ejemplo: 20 significa que si el tiempo de gestión sube más del 20% respecto al promedio, se alerta.' },
-    enviarCriticas: { t: 'Enviar Alertas Críticas', d: 'Si está activado, el agente enviará un correo automático cuando detecte alertas de severidad "crítica", revisado cada hora dentro de la ventana activa que definas en "Horario de Reporte de Operación". Llega a todos los Coordinadores registrados en Control de Acceso.' },
-    enviarResumen: { t: 'Enviar Resumen Diario', d: 'Si está activado, el agente enviará un correo con el resumen operativo completo del día justo al llegar a la hora "Hasta" de cada día en "Horario de Reporte de Operación". Incluye Health Score, KPIs, alertas, top analistas, backlog y sugerencias. Llega a todos los Coordinadores.' },
-    enviarBiometria: { t: 'Enviar Reporte de Biometría', d: 'Si está activado, el agente enviará un correo dedicado con los datos de la pestaña Biometría (ciclo de broadcast, cola, en proceso, gestión de analistas), junto con el Resumen Diario, a la hora "Hasta" configurada en "Horario de Reporte de Operación". Si no hay datos del día, no se envía.' },
+    umbralPausa: { t: 'Umbral de pausas (minutos)', d: 'Minutos acumulados en estados no productivos (BREAK, ALMUERZO, INCAPACIDAD, etc. — cualquier estado distinto de ACTIVO en Historico_Estados) a partir de los cuales el correo "Corte de Gestión" resalta a ese analista con una advertencia. Ejemplo: 90 significa que si alguien acumula más de 1h30 en pausas hoy, se marca en rojo en su tarjeta.' },
+    enviarCriticas: { t: 'Enviar Alertas Críticas', d: 'Si está activado, el agente revisa si hay alertas de severidad "crítica" con la frecuencia que elijas en el selector de esta misma fila (30 min, 1h, 2h, 3h o 4h), siempre dentro de la ventana activa del día ("Desde"/"Hasta", más abajo). Solo envía correo si efectivamente hay alguna crítica en ese momento. Llega a todos los Coordinadores registrados en Control de Acceso. Esta frecuencia es independiente de la de Foto del Momento.' },
+    enviarResumen: { t: 'Enviar Resumen Diario', d: 'Si está activado, el agente enviará un correo con el resumen operativo completo del día justo al llegar a la hora "Hasta" de cada día. Incluye Health Score, KPIs, alertas, top analistas, backlog y sugerencias. Es un envío único al cierre, no periódico. Llega a todos los Coordinadores.' },
+    enviarBiometria: { t: 'Enviar Reporte de Biometría', d: 'Si está activado, el agente enviará un correo dedicado con los datos de la pestaña Biometría (ciclo de broadcast, cola, en proceso, gestión de analistas), junto con el Resumen Diario, a la hora "Hasta". Si no hay datos del día, no se envía.' },
+    enviarInicio: { t: 'Enviar Inicio de Operación', d: 'Si está activado, el agente enviará un correo justo al llegar a la hora "Desde" de cada día, con el total de estudios radicados hasta ese momento y la cola pendiente al iniciar desglosada por cada tipo de estudio (Digital, Desplazamiento, Inducción, Reestudio, UAR Nueva, UAR Deudor, Biometría Fallida). Es un envío único al arranque, no periódico. Llega a todos los Coordinadores registrados en Control de Acceso.' },
+    enviarChequeoConexion: { t: 'Enviar Chequeo de Conexión', d: 'Si está activado, el agente enviará un correo una sola vez, tantos minutos/horas después de la hora "Desde" como elijas en el selector de esta fila (15min, 30min, 45min, 1h o 1.5h). Trae todos los analistas de la hoja Usuarios, divididos en dos grupos: los de Estado ACTIVO (hora de su primera solicitud asignada, de su primer resultado, y cuántas lleva gestionadas hoy, cruzando Historico_Gestiones + Reestudios) y los que no están en ACTIVO, agrupados por el estado exacto que tengan (BREAK, INCAPACIDAD, VACACIONES, etc.). Pensado para que el coordinador y el controller puedan reaccionar temprano si algo salió mal al iniciar la operación.' },
+    enviarFotoMomento: { t: 'Enviar Foto del Momento', d: 'Si está activado, el agente envía un correo con el estado actual de la operación (salud, KPIs y alertas en ese instante), repitiendo con la frecuencia que elijas en el selector de esta fila (30 min, 1h, 2h, 3h, 4h o 6h), dentro de la ventana activa del día. Esta frecuencia es independiente de la de Alertas Críticas — puedes, por ejemplo, revisar alertas cada 30 min pero mandar la Foto del Momento solo cada 2 horas.' },
+    enviarCorteGestion: { t: 'Enviar Corte de Gestión', d: 'Si está activado, el agente envía un correo con el detalle de producción de CADA analista activo, repitiendo con la frecuencia de esta fila, dentro de la ventana activa. Incluye una media de producción por Equipo arriba, y por analista muestra: gestionadas hoy vs. lo esperado con % de cumplimiento (ajustado por su tiempo realmente activo, no por horas de turno), aprobadas/negadas/aplazadas, tiempo de gestión promedio, si se conectó antes de la hora "Desde" configurada, estado actual (cruzando Historico_Estados), minutos en pausas/breaks del día (con aviso si supera el "Umbral pausas" configurado más abajo), y un mini-gráfico de solicitudes cerradas por hora. Ordena primero a quienes van por debajo del ritmo esperado, para que el coordinador sepa con quién hablar primero.' },
     saludOperativa: { t: 'Salud Operativa', d: 'Es un puntaje de <b>0 a 100</b> que resume en un solo número qué tan bien está funcionando la operación en este momento. Se calcula combinando 5 factores:<br><br>• <b>SLA (25%)</b> — ¿Estamos respondiendo dentro del tiempo permitido (2 horas)?<br>• <b>Productividad (20%)</b> — ¿Estamos gestionando la cantidad esperada de solicitudes?<br>• <b>Tiempo de Gestión (15%)</b> — ¿Qué tan rápido trabaja el equipo cada solicitud?<br>• <b>Backlog (15%)</b> — ¿Cuántas solicitudes están acumuladas sin cerrar?<br>• <b>Actividad del Equipo (25%)</b> — ¿Todos los analistas activos están gestionando hoy?<br><br>Las calificaciones son: <b>A</b> (90-100) Excelente · <b>B</b> (75-89) Bien · <b>C</b> (60-74) Regular · <b>D</b> (40-59) Deficiente · <b>F</b> (0-39) Crítico.' },
     componentes: { t: 'Componentes del Score', d: 'Cada barra representa uno de los 6 factores que componen la Salud Operativa. El número a la derecha es el puntaje de ese factor (0-100) y entre paréntesis su peso en el cálculo total.<br><br>• <b>Verde (80+)</b> — Ese aspecto está bien<br>• <b>Amarillo (60-79)</b> — Necesita atención<br>• <b>Rojo (menos de 60)</b> — Problema que requiere acción<br><br>Esto te permite ver rápidamente <i>qué parte específica</i> de la operación está fallando, en lugar de solo ver un número general.' },
     seguimiento: { t: 'Analistas que Requieren Seguimiento', d: 'Esta sección identifica automáticamente a los analistas con los que debes conversar hoy, basándose en su rendimiento del día. Cada tarjeta incluye:<br><br>• <b>Nombre del analista</b> y el motivo por el cual necesita seguimiento<br>• <b>Datos de sustento</b> — cifras concretas (gestiones, tiempos, tasas) comparadas con la meta y el promedio del equipo<br>• <b>Punto de conversación</b> — lo que puedes decirle al analista con datos específicos<br><br>Se detectan 3 situaciones: <b>inactividad</b> (sin gestiones hoy), <b>baja producción</b> (por debajo del ritmo esperado a esta hora), <b>tiempos altos</b> (gestión más lenta que la meta) y <b>fuera de SLA</b> (tiempo general mayor a la meta).' },
     calidadDatos: { t: 'Reporte de Calidad de Datos', d: 'Esta sección revisa automáticamente los registros del día para detectar problemas en los datos de las hojas:<br><br>• <b>Registros Hoy</b> — Total de solicitudes gestionadas hoy<br>• <b>Campos Vacíos</b> — Registros con datos faltantes (ID, estado, analista o fecha). Si hay muchos, las métricas pueden ser imprecisas.<br>• <b>Outliers</b> — Valores atípicos (tiempos extremadamente altos). Pueden ser errores de registro o solicitudes genuinamente complejas.<br>• <b>Analistas Activos</b> — Cuántos analistas han gestionado hoy vs cuántos están marcados como activos.<br>• <b>Backlog Actual</b> — Solicitudes asignadas que aún no se han cerrado.<br><br>Haz click en cualquier tarjeta para ver el desglose detallado.' },
-    horarioReporte: { t: 'Horario de Reporte de Operación', d: 'Controla las 3 alertas/reportes automáticos del agente: Alertas Críticas y "Foto del Momento" se revisan en cada hora dentro de la ventana activa; el Resumen Diario (+ Reporte de Biometría) se envía una sola vez, justo al llegar a la hora "Hasta" de cada día. Cada día de la semana tiene su propio horario activo/inactivo — útil porque entre semana y fin de semana la operación trabaja distinto. "Frecuencia" solo aplica a "Foto del Momento" (cada cuántas horas se repite dentro de la ventana). El motor solo "late" cada hora; esta configuración decide qué le toca hacer en esa hora, así que cambiarla aquí no requiere reinstalar el trigger.' }
+    horarioReporte: { t: 'Horario de Reporte de Operación', d: 'Define la ventana activa de la operación: hora "Desde" y "Hasta" por cada día de la semana (entre semana y fin de semana suelen ser distintos). "Inicio de Operación" sale a la hora "Desde"; "Resumen Diario"/"Reporte Biometría" salen a la hora "Hasta"; "Chequeo de Conexión", "Alertas Críticas" y "Foto del Momento" usan esta ventana como límite, pero cada uno tiene su propio interruptor y su propia frecuencia configurable en la tabla de arriba — ya no comparten una sola frecuencia. El motor "late" cada 30 minutos; esta configuración decide qué le toca hacer en cada tick, así que cambiarla aquí no requiere reinstalar el trigger.' }
 };
 function ayudaConfig(id) {
     var info = _ayudaConfigTextos[id];
