@@ -133,6 +133,7 @@ function aplicarPermisos(permiso) {
         document.getElementById('barraFiltrosFecha').style.display = '';
         document.getElementById('barraFiltrosGenerales').style.display = '';
         _initFechasYCargar();
+        cargarResumenSaludOperativa();
     } else if (permiso.rol === 'biometria') {
         document.getElementById('sidebarNav').style.display = '';
         document.querySelectorAll('.nav-link-admin').forEach(function(a) {
@@ -386,7 +387,7 @@ var _ayudaTextos={
     bioEscaladas:{t:'Cola de Asignación',d:'Solicitudes esperando que un analista las tome, en este momento.'},
     bioEsperandoCorte:{t:'Esperando Próximo Corte',d:'Ya se les envió el WhatsApp. Esperan el corte de las 8am o 12pm para saber si se resolvieron o hay que escalarlas.'},
     bioSeccionEnVivo:{t:'En Vivo',d:'El estado del proceso ahora mismo — no cambia según la fecha que elijas arriba.'},
-    bioSeccionCascada:{t:'Cascada Estricta del Período',d:'Sigue a las solicitudes consultadas en el rango elegido y en qué quedó cada una. Por diseño, las 3 tarjetas siempre suman el total de Consultadas SAI.'},
+    bioSeccionCascada:{t:'Cascada Estricta del Período',d:'Sigue a las solicitudes consultadas en el rango elegido y en qué quedó cada una: <b>Sin Iniciar</b> + <b>Resueltas sin WA</b> + <b>Ya Enviadas</b> siempre suman exactamente el total de <b>Consultadas SAI</b> del mismo período — es la misma torta, dividida en 3.'},
     bioSeccionCiclo:{t:'Ciclo del Período',d:'Todo lo que pasó en el rango elegido, sin importar cuándo entró cada solicitud (puede incluir casos de días anteriores). No tiene que cuadrar con la Cascada de arriba.'},
     bioConsultadas:{t:'Consultadas SAI',d:'Solicitudes que trajo el API de SAI en el rango de fechas seleccionado.'},
     bioCascadaSinIniciar:{t:'Sin Iniciar',d:'De lo consultado en el rango, cuántas aún no cumplen las 4 horas para su primer contacto.'},
@@ -706,21 +707,21 @@ function renderChartEstados(dist){if(chartEstados)chartEstados.destroy();var ctx
 
 function renderChartAnalistas(pa){if(chartAnalistas)chartAnalistas.destroy();if(!pa||pa.length===0)return;var ctx=document.getElementById('chartAnalistas').getContext('2d');var top=pa.slice(0,10);chartAnalistas=new Chart(ctx,{type:'bar',data:{labels:top.map(function(a){return a.nombre;}),datasets:[{label:'Solicitudes',data:top.map(function(a){return a.total;}),backgroundColor:'#BD0F14',borderRadius:6}]},options:{responsive:true,indexAxis:'y',plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:11},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
 
-function renderChartSLA(sd){if(chartSLA)chartSLA.destroy();if(!sd||sd.length===0)return;var ctx=document.getElementById('chartSLA').getContext('2d');chartSLA=new Chart(ctx,{type:'bar',data:{labels:sd.map(function(d){return d.fecha;}),datasets:[{label:'Dentro SLA',data:sd.map(function(d){return d.dentroSLA;}),backgroundColor:'#253150',borderRadius:4},{label:'Fuera SLA',data:sd.map(function(d){return d.fueraSLA;}),backgroundColor:'#BD0F14',borderRadius:4}]},options:{responsive:true,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
+function renderChartSLA(sd){if(chartSLA)chartSLA.destroy();if(!sd||sd.length===0)return;var ctx=document.getElementById('chartSLA').getContext('2d');chartSLA=new Chart(ctx,{type:'bar',data:{labels:sd.map(function(d){return d.fecha;}),datasets:[{label:'Dentro SLA',data:sd.map(function(d){return d.dentroSLA;}),backgroundColor:'#253150',borderRadius:4},{label:'Fuera SLA',data:sd.map(function(d){return d.fueraSLA;}),backgroundColor:'#BD0F14',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
 
-function renderChartSucursal(ps){if(chartSucursal)chartSucursal.destroy();if(!ps||!ps.sucursales||ps.sucursales.length===0)return;var ctx=document.getElementById('chartSucursal').getContext('2d');var col=['#BD0F14','#253150','#706F6F','#3a4d7a','#8b0a0e','#a0a0a0','#4a4a4a','#c75050','#5a7ab5'];var ds=ps.sucursales.map(function(s,i){return{label:s,data:ps.datos[s],backgroundColor:col[i%col.length],borderRadius:3};});chartSucursal=new Chart(ctx,{type:'bar',data:{labels:ps.fechas,datasets:ds},options:{responsive:true,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
+function renderChartSucursal(ps){if(chartSucursal)chartSucursal.destroy();if(!ps||!ps.sucursales||ps.sucursales.length===0)return;var ctx=document.getElementById('chartSucursal').getContext('2d');var col=['#BD0F14','#253150','#706F6F','#3a4d7a','#8b0a0e','#a0a0a0','#4a4a4a','#c75050','#5a7ab5'];var ds=ps.sucursales.map(function(s,i){return{label:s,data:ps.datos[s],backgroundColor:col[i%col.length],borderRadius:3};});chartSucursal=new Chart(ctx,{type:'bar',data:{labels:ps.fechas,datasets:ds},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
 
-function renderChartTipo(pt){if(chartTipo)chartTipo.destroy();if(!pt||pt.length===0)return;var ctx=document.getElementById('chartTipo').getContext('2d');chartTipo=new Chart(ctx,{type:'bar',data:{labels:pt.map(function(d){return d.fecha;}),datasets:[{label:'Digital',data:pt.map(function(d){return d.Digital;}),backgroundColor:'#253150',borderRadius:3},{label:'UAR',data:pt.map(function(d){return d.UAR;}),backgroundColor:'#BD0F14',borderRadius:3},{label:'Reestudio',data:pt.map(function(d){return d.Reestudio;}),backgroundColor:'#706F6F',borderRadius:3},{label:'Biometría',data:pt.map(function(d){return d.Biometria;}),backgroundColor:'#3a4d7a',borderRadius:3},{label:'Inducción',data:pt.map(function(d){return d.Induccion;}),backgroundColor:'#8b0a0e',borderRadius:3}]},options:{responsive:true,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
+function renderChartTipo(pt){if(chartTipo)chartTipo.destroy();if(!pt||pt.length===0)return;var ctx=document.getElementById('chartTipo').getContext('2d');chartTipo=new Chart(ctx,{type:'bar',data:{labels:pt.map(function(d){return d.fecha;}),datasets:[{label:'Digital',data:pt.map(function(d){return d.Digital;}),backgroundColor:'#253150',borderRadius:3},{label:'UAR',data:pt.map(function(d){return d.UAR;}),backgroundColor:'#BD0F14',borderRadius:3},{label:'Reestudio',data:pt.map(function(d){return d.Reestudio;}),backgroundColor:'#706F6F',borderRadius:3},{label:'Biometría',data:pt.map(function(d){return d.Biometria;}),backgroundColor:'#3a4d7a',borderRadius:3},{label:'Inducción',data:pt.map(function(d){return d.Induccion;}),backgroundColor:'#8b0a0e',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
 
-function renderChartMensual(pt){if(chartMensual)chartMensual.destroy();if(!pt||pt.length===0)return;var m={};pt.forEach(function(d){var p=d.fecha.split('/'),k=p[1]+'/'+p[2];if(!m[k])m[k]={Digital:0,UAR:0,Reestudio:0,Biometria:0,Induccion:0};m[k].Digital+=d.Digital;m[k].UAR+=d.UAR;m[k].Reestudio+=d.Reestudio;m[k].Biometria+=d.Biometria;m[k].Induccion+=d.Induccion;});var mo=Object.keys(m).sort(function(a,b){var pa=a.split('/'),pb=b.split('/');return new Date(pa[1],pa[0]-1)-new Date(pb[1],pb[0]-1);});var nm=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];var lb=mo.map(function(x){var p=x.split('/');return nm[parseInt(p[0])-1]+' '+p[1];});var ctx=document.getElementById('chartMensual').getContext('2d');chartMensual=new Chart(ctx,{type:'bar',data:{labels:lb,datasets:[{label:'Digital',data:mo.map(function(x){return m[x].Digital;}),backgroundColor:'#253150',borderRadius:3},{label:'UAR',data:mo.map(function(x){return m[x].UAR;}),backgroundColor:'#BD0F14',borderRadius:3},{label:'Reestudio',data:mo.map(function(x){return m[x].Reestudio;}),backgroundColor:'#706F6F',borderRadius:3},{label:'Biometría',data:mo.map(function(x){return m[x].Biometria;}),backgroundColor:'#3a4d7a',borderRadius:3},{label:'Inducción',data:mo.map(function(x){return m[x].Induccion;}),backgroundColor:'#8b0a0e',borderRadius:3}]},options:{responsive:true,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
+function renderChartMensual(pt){if(chartMensual)chartMensual.destroy();if(!pt||pt.length===0)return;var m={};pt.forEach(function(d){var p=d.fecha.split('/'),k=p[1]+'/'+p[2];if(!m[k])m[k]={Digital:0,UAR:0,Reestudio:0,Biometria:0,Induccion:0};m[k].Digital+=d.Digital;m[k].UAR+=d.UAR;m[k].Reestudio+=d.Reestudio;m[k].Biometria+=d.Biometria;m[k].Induccion+=d.Induccion;});var mo=Object.keys(m).sort(function(a,b){var pa=a.split('/'),pb=b.split('/');return new Date(pa[1],pa[0]-1)-new Date(pb[1],pb[0]-1);});var nm=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];var lb=mo.map(function(x){var p=x.split('/');return nm[parseInt(p[0])-1]+' '+p[1];});var ctx=document.getElementById('chartMensual').getContext('2d');chartMensual=new Chart(ctx,{type:'bar',data:{labels:lb,datasets:[{label:'Digital',data:mo.map(function(x){return m[x].Digital;}),backgroundColor:'#253150',borderRadius:3},{label:'UAR',data:mo.map(function(x){return m[x].UAR;}),backgroundColor:'#BD0F14',borderRadius:3},{label:'Reestudio',data:mo.map(function(x){return m[x].Reestudio;}),backgroundColor:'#706F6F',borderRadius:3},{label:'Biometría',data:mo.map(function(x){return m[x].Biometria;}),backgroundColor:'#3a4d7a',borderRadius:3},{label:'Inducción',data:mo.map(function(x){return m[x].Induccion;}),backgroundColor:'#8b0a0e',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
 
-function renderChartMensualSucursal(ps){if(chartMensualSucursal)chartMensualSucursal.destroy();if(!ps||!ps.fechas||ps.fechas.length===0)return;var m={},ss={};ps.fechas.forEach(function(f,i){var p=f.split('/'),k=p[1]+'/'+p[2];if(!m[k])m[k]={};ps.sucursales.forEach(function(s){ss[s]=true;m[k][s]=(m[k][s]||0)+ps.datos[s][i];});});var mo=Object.keys(m).sort(function(a,b){var pa=a.split('/'),pb=b.split('/');return new Date(pa[1],pa[0]-1)-new Date(pb[1],pb[0]-1);});var nm=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];var lb=mo.map(function(x){var p=x.split('/');return nm[parseInt(p[0])-1]+' '+p[1];});var suc=Object.keys(ss).sort();var col=['#BD0F14','#253150','#706F6F','#3a4d7a','#8b0a0e','#a0a0a0','#4a4a4a'];var ds=suc.map(function(s,i){return{label:s,data:mo.map(function(x){return m[x][s]||0;}),backgroundColor:col[i%col.length],borderRadius:3};});var ctx=document.getElementById('chartMensualSucursal').getContext('2d');chartMensualSucursal=new Chart(ctx,{type:'bar',data:{labels:lb,datasets:ds},options:{responsive:true,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
+function renderChartMensualSucursal(ps){if(chartMensualSucursal)chartMensualSucursal.destroy();if(!ps||!ps.fechas||ps.fechas.length===0)return;var m={},ss={};ps.fechas.forEach(function(f,i){var p=f.split('/'),k=p[1]+'/'+p[2];if(!m[k])m[k]={};ps.sucursales.forEach(function(s){ss[s]=true;m[k][s]=(m[k][s]||0)+ps.datos[s][i];});});var mo=Object.keys(m).sort(function(a,b){var pa=a.split('/'),pb=b.split('/');return new Date(pa[1],pa[0]-1)-new Date(pb[1],pb[0]-1);});var nm=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];var lb=mo.map(function(x){var p=x.split('/');return nm[parseInt(p[0])-1]+' '+p[1];});var suc=Object.keys(ss).sort();var col=['#BD0F14','#253150','#706F6F','#3a4d7a','#8b0a0e','#a0a0a0','#4a4a4a'];var ds=suc.map(function(s,i){return{label:s,data:mo.map(function(x){return m[x][s]||0;}),backgroundColor:col[i%col.length],borderRadius:3};});var ctx=document.getElementById('chartMensualSucursal').getContext('2d');chartMensualSucursal=new Chart(ctx,{type:'bar',data:{labels:lb,datasets:ds},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
 
 function renderNegacionSucursal(d){if(chartNegacionSucursal)chartNegacionSucursal.destroy();var ctx=document.getElementById('chartNegacionSucursal').getContext('2d');if(!d||d.length===0){ctx.font='12px Manrope';ctx.fillStyle='#706F6F';ctx.textAlign='center';ctx.fillText('Sin datos',ctx.canvas.width/2,80);return;}chartNegacionSucursal=new Chart(ctx,{type:'bar',data:{labels:d.map(function(x){return x.sucursal;}),datasets:[{label:'%',data:d.map(function(x){return x.tasa;}),backgroundColor:d.map(function(x){return x.tasa>20?'#BD0F14':x.tasa>10?'#706F6F':'#253150';}),borderRadius:5}]},options:{responsive:true,indexAxis:'y',scales:{x:{max:100,ticks:{callback:function(v){return v+'%';}}}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(v){return v>0?v+'%':'';}},legend:{display:false}}}});}
 
-function renderTendenciaSLA(d){if(chartTendenciaSLA)chartTendenciaSLA.destroy();var ctx=document.getElementById('chartTendenciaSLA').getContext('2d');if(!d||d.length===0){ctx.font='12px Manrope';ctx.fillStyle='#706F6F';ctx.textAlign='center';ctx.fillText('Sin datos',ctx.canvas.width/2,80);return;}chartTendenciaSLA=new Chart(ctx,{type:'line',data:{labels:d.map(function(x){return x.fecha;}),datasets:[{label:'% SLA',data:d.map(function(x){return x.pctCumplimiento;}),borderColor:'#253150',backgroundColor:'rgba(37,49,80,0.06)',borderWidth:2.5,fill:true,tension:0.3,pointBackgroundColor:d.map(function(x){return x.pctCumplimiento<80?'#BD0F14':'#253150';}),pointRadius:4,pointBorderColor:'#fff',pointBorderWidth:2}]},options:{responsive:true,scales:{y:{min:0,max:100,ticks:{callback:function(v){return v+'%';}}}},plugins:{datalabels:{display:false},legend:{display:false},tooltip:{callbacks:{label:function(t){return t.raw+'% cumplimiento';}}}}}}); }
+function renderTendenciaSLA(d){if(chartTendenciaSLA)chartTendenciaSLA.destroy();var ctx=document.getElementById('chartTendenciaSLA').getContext('2d');if(!d||d.length===0){ctx.font='12px Manrope';ctx.fillStyle='#706F6F';ctx.textAlign='center';ctx.fillText('Sin datos',ctx.canvas.width/2,80);return;}chartTendenciaSLA=new Chart(ctx,{type:'line',data:{labels:d.map(function(x){return x.fecha;}),datasets:[{label:'% SLA',data:d.map(function(x){return x.pctCumplimiento;}),borderColor:'#253150',backgroundColor:'rgba(37,49,80,0.06)',borderWidth:2.5,fill:true,tension:0.3,pointBackgroundColor:d.map(function(x){return x.pctCumplimiento<80?'#BD0F14':'#253150';}),pointRadius:4,pointBorderColor:'#fff',pointBorderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{min:0,max:100,ticks:{callback:function(v){return v+'%';}}}},plugins:{datalabels:{display:false},legend:{display:false},tooltip:{callbacks:{label:function(t){return t.raw+'% cumplimiento';}}}}}}); }
 
-function renderHeatmapHora(d){if(chartHeatmapHora)chartHeatmapHora.destroy();var ctx=document.getElementById('chartHeatmapHora').getContext('2d');var h=[],v=[];for(var i=7;i<=18;i++){h.push(i+':00');v.push((d&&d[i])||0);}var mx=Math.max.apply(null,v)||1;chartHeatmapHora=new Chart(ctx,{type:'bar',data:{labels:h,datasets:[{label:'Sol.',data:v,backgroundColor:v.map(function(x){var p=x/mx;return p>0.7?'#BD0F14':p>0.4?'#253150':p>0?'#3a4d7a':'#e5e7eb';}),borderRadius:4}]},options:{responsive:true,plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(x){return x>0?x:'';}},legend:{display:false}}}});}
+function renderHeatmapHora(d){if(chartHeatmapHora)chartHeatmapHora.destroy();var ctx=document.getElementById('chartHeatmapHora').getContext('2d');var h=[],v=[];for(var i=7;i<=18;i++){h.push(i+':00');v.push((d&&d[i])||0);}var mx=Math.max.apply(null,v)||1;chartHeatmapHora=new Chart(ctx,{type:'bar',data:{labels:h,datasets:[{label:'Sol.',data:v,backgroundColor:v.map(function(x){var p=x/mx;return p>0.7?'#BD0F14':p>0.4?'#253150':p>0?'#3a4d7a':'#e5e7eb';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(x){return x>0?x:'';}},legend:{display:false}}}});}
 
 function renderTiemposPorTipo(td){
   if(chartTiemposPorTipo)chartTiemposPorTipo.destroy();
@@ -1611,6 +1612,45 @@ function guardarListasAccesoUI() {
     }).guardarListasAcceso(_listaCoord, _listaBio);
 }
 
+// Trae el mismo diagnóstico del Agente Coordinador para mostrar una versión condensada (Salud +
+// alertas críticas) arriba de Resumen General, sin esperar a que alguien entre a esa pestaña.
+// Reutiliza onDatosAgenteCargados para poblar también (oculto) la pestaña Agente Coordinador —
+// así, si luego la abren, ya no tiene que volver a pedir los datos.
+function cargarResumenSaludOperativa() {
+    google.script.run
+        .withSuccessHandler(function(datos) {
+            onDatosAgenteCargados(datos);
+            renderResumenSaludBanner(datos);
+        })
+        .withFailureHandler(function(e) {
+            console.error('No se pudo cargar el resumen de Salud Operativa: ' + e.message);
+        })
+        .agente_obtenerDatosDashboard();
+}
+
+function renderResumenSaludBanner(datos) {
+    var banner = document.getElementById('resumenSaludBanner');
+    if (!banner) return;
+    var hs = datos.healthScore || {};
+    var grade = hs.grade || 'F';
+    var badge = document.getElementById('resumenSaludBadge');
+    badge.textContent = grade;
+    badge.className = 'agent-gauge-grade agent-grade-' + grade;
+    document.getElementById('resumenSaludScoreValor').textContent = hs.score != null ? hs.score : '—';
+
+    var criticas = (datos.alerts || []).filter(function(a) { return a.severity === 'critico'; }).length;
+    var msg;
+    if (criticas > 0) {
+        msg = '<i class="bi bi-exclamation-triangle-fill" style="color:var(--rojo);margin-right:6px;"></i>' +
+            criticas + ' alerta' + (criticas === 1 ? '' : 's') + ' crítica' + (criticas === 1 ? '' : 's') +
+            ' requiere' + (criticas === 1 ? '' : 'n') + ' atención hoy';
+    } else {
+        msg = '<i class="bi bi-check-circle-fill" style="color:#059669;margin-right:6px;"></i>Sin alertas críticas por ahora';
+    }
+    document.getElementById('resumenSaludAlertas').innerHTML = msg;
+    banner.style.display = '';
+}
+
 function cargarDatosAgente() {
     document.getElementById('agenteSpinner').style.display = 'block';
     document.getElementById('agenteContenido').style.display = 'none';
@@ -1754,7 +1794,15 @@ function renderAlertasAgente(alerts) {
         html += '<div style="flex:1;"><div class="agent-alert-title"><i class="bi ' + icon + ' me-1"></i>' + esc(al.title) + '</div>';
         html += '<div class="agent-alert-desc">' + esc(al.description) + '</div>';
         if (al.suggestion) html += '<div class="agent-alert-suggestion"><i class="bi bi-lightbulb me-1"></i>' + esc(al.suggestion) + '</div>';
-        if (al.affectedEntities && al.affectedEntities.length > 0) html += '<div style="font-size:0.7rem;color:var(--text-light);margin-top:4px;"><strong>Afecta:</strong> ' + esc(al.affectedEntities.join(', ')) + '</div>';
+        if (al.affectedEntities && al.affectedEntities.length > 0) {
+            html += '<div style="margin-top:8px;">';
+            html += '<div style="font-size:0.66rem;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;">Afecta (' + al.affectedEntities.length + ')</div>';
+            html += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+            al.affectedEntities.forEach(function(nombre) {
+                html += '<span style="display:inline-block;background:#fff;border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:0.7rem;color:var(--text-muted);font-weight:600;white-space:nowrap;">' + esc(nombre) + '</span>';
+            });
+            html += '</div></div>';
+        }
         html += '</div>';
         html += '<span class="badge-pill" style="background:var(--bg-page);font-size:0.6rem;">' + (catLabels[al.category] || al.category) + '</span>';
         html += '</div></div>';
@@ -1970,6 +2018,9 @@ function renderConfigAgente(config) {
     document.getElementById('cfgChequeoConexionOffset').value = String(config.notificaciones.chequeoConexionOffsetMin || 30);
     document.getElementById('cfgAlertasCriticasFrecuencia').value = String(config.notificaciones.alertasCriticasFrecuenciaHoras || 1);
     document.getElementById('cfgFotoMomentoFrecuencia').value = String(config.notificaciones.fotoMomentoFrecuenciaHoras || 2);
+    // Arranca desactivado a propósito (ver ayuda) — por eso === true en vez de !== false.
+    document.getElementById('cfgEnviarInformeIndividual').checked = config.notificaciones.enviarInformeIndividual === true;
+    document.getElementById('cfgInformeIndividualDia').value = String(config.notificaciones.informeIndividualDiaISO || 5);
 
     var _hrDefaultDias = { "1": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "2": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "3": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "4": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "5": { activo: true, horaInicio: "08:00", horaFin: "17:00" }, "6": { activo: false, horaInicio: "08:00", horaFin: "13:00" }, "7": { activo: false, horaInicio: "08:00", horaFin: "13:00" } };
     // Compatibilidad: si el valor todavía viene como hora entera vieja (ej. 8), lo pasa a "HH:mm".
@@ -2013,7 +2064,9 @@ function guardarConfigAgente() {
             enviarChequeoConexion: document.getElementById('cfgEnviarChequeoConexion').checked,
             chequeoConexionOffsetMin: parseInt(document.getElementById('cfgChequeoConexionOffset').value) || 30,
             enviarFotoMomento: document.getElementById('cfgEnviarFotoMomento').checked,
-            fotoMomentoFrecuenciaHoras: parseFloat(document.getElementById('cfgFotoMomentoFrecuencia').value) || 2
+            fotoMomentoFrecuenciaHoras: parseFloat(document.getElementById('cfgFotoMomentoFrecuencia').value) || 2,
+            enviarInformeIndividual: document.getElementById('cfgEnviarInformeIndividual').checked,
+            informeIndividualDiaISO: parseInt(document.getElementById('cfgInformeIndividualDia').value) || 5
         },
         horarioReporte: {
             activo: document.getElementById('cfgReporteActivo').checked,
@@ -2196,6 +2249,42 @@ function enviarSnapshotManualAgente() {
     });
 }
 
+function enviarInformeIndividualManualAgente() {
+    Swal.fire({ title: 'Calculando destinatarios...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
+    google.script.run
+        .withSuccessHandler(function(info) {
+            if (!info.total || info.total === 0) {
+                Swal.fire({ icon: 'warning', title: 'Nadie para enviar', text: 'Ningún analista tiene gestiones registradas esta semana (' + info.fechaDesdeActual + ' al ' + info.fechaHastaActual + ') todavía.' });
+                return;
+            }
+            Swal.fire({
+                title: 'Enviar Informe Individual',
+                html: 'Se enviará un correo personal a <b>' + info.total + ' analista(s)</b> con gestiones entre el ' + info.fechaDesdeActual + ' y el ' + info.fechaHastaActual + '. Cada uno recibe solo su propio resumen. ¿Continuar?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#253150',
+                confirmButtonText: 'Enviar a los ' + info.total,
+                cancelButtonText: 'Cancelar'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+                Swal.fire({ title: 'Enviando...', didOpen: function() { Swal.showLoading(); }, allowOutsideClick: false });
+                google.script.run
+                    .withSuccessHandler(function(res) {
+                        Swal.close();
+                        if (res.sent) {
+                            Swal.fire({ icon: 'success', title: 'Correos enviados', text: res.enviados + ' de ' + res.totalCandidatos + ' analista(s) recibieron su informe.' + (res.fallidos && res.fallidos.length ? ' (' + res.fallidos.length + ' fallaron)' : ''), timer: 3500, showConfirmButton: false });
+                        } else {
+                            Swal.fire({ icon: 'warning', title: 'No se envió', text: res.reason || 'Sin analistas con gestiones esta semana.' });
+                        }
+                    })
+                    .withFailureHandler(function(e) { Swal.fire({ icon: 'error', title: 'Error', text: e.message }); })
+                    .agente_enviarInformeIndividualAnalistas();
+            });
+        })
+        .withFailureHandler(function(e) { Swal.fire({ icon: 'error', title: 'Error', text: e.message }); })
+        .agente_contarCandidatosInformeIndividual();
+}
+
 function enviarInicioOperacionManualAgente() {
     Swal.fire({ title: 'Enviar Inicio de Operación', text: 'Se enviará por correo el total radicado y la cola pendiente por tipo de estudio. ¿Continuar?', icon: 'question', showCancelButton: true, confirmButtonColor: '#253150', confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar' }).then(function(result) {
         if (!result.isConfirmed) return;
@@ -2259,6 +2348,7 @@ var _ayudaConfigTextos = {
     enviarCriticas: { t: 'Enviar Alertas Críticas', d: 'Si está activado, el agente revisa si hay alertas de severidad "crítica" con la frecuencia que elijas en el selector de esta misma fila (30 min, 1h, 2h, 3h o 4h), siempre dentro de la ventana activa del día ("Desde"/"Hasta", más abajo). Solo envía correo si efectivamente hay alguna crítica en ese momento. Llega a todos los Coordinadores registrados en Control de Acceso. Esta frecuencia es independiente de la de Foto del Momento.' },
     enviarResumen: { t: 'Enviar Resumen Diario', d: 'Si está activado, el agente enviará un correo con el resumen operativo completo del día justo al llegar a la hora "Hasta" de cada día. Incluye Health Score, KPIs, alertas, top analistas, backlog y sugerencias. Es un envío único al cierre, no periódico. Llega a todos los Coordinadores.' },
     enviarBiometria: { t: 'Enviar Reporte de Biometría', d: 'Si está activado, el agente enviará un correo dedicado con los datos de la pestaña Biometría (ciclo de broadcast, cola, en proceso, gestión de analistas), junto con el Resumen Diario, a la hora "Hasta". Si no hay datos del día, no se envía.' },
+    enviarInformeIndividual: { t: 'Informe Individual Semanal', d: 'A diferencia de los demás correos (que van a Coordinadores), este llega directo a <b>cada analista</b>, uno por uno, el día de la semana que elijas en el selector, a la hora "Hasta". Solo lo recibe quien tuvo al menos una gestión cerrada esa semana. Compara solo contra la propia semana anterior del analista (nunca contra el equipo ni contra otros analistas), y si una métrica empeoró simplemente no muestra la comparación — nunca resalta una caída. El botón "Enviar Informe Individual" en Acciones Rápidas te deja dispararlo a demanda (mostrando antes cuántos analistas lo recibirán), sin esperar al día configurado.' },
     enviarInicio: { t: 'Enviar Inicio de Operación', d: 'Si está activado, el agente enviará un correo justo al llegar a la hora "Desde" de cada día, con el total de estudios radicados hasta ese momento y la cola pendiente al iniciar desglosada por cada tipo de estudio (Digital, Desplazamiento, Inducción, Reestudio, UAR Nueva, UAR Deudor, Biometría Fallida). Es un envío único al arranque, no periódico. Llega a todos los Coordinadores registrados en Control de Acceso.' },
     enviarChequeoConexion: { t: 'Enviar Chequeo de Conexión', d: 'Si está activado, el agente enviará un correo una sola vez, tantos minutos/horas después de la hora "Desde" como elijas en el selector de esta fila (15min, 30min, 45min, 1h o 1.5h). Trae todos los analistas de la hoja Usuarios, divididos en dos grupos: los de Estado ACTIVO (hora de su primera solicitud asignada, de su primer resultado, y cuántas lleva gestionadas hoy, cruzando Historico_Gestiones + Reestudios) y los que no están en ACTIVO, agrupados por el estado exacto que tengan (BREAK, INCAPACIDAD, VACACIONES, etc.). Pensado para que el coordinador y el controller puedan reaccionar temprano si algo salió mal al iniciar la operación.' },
     enviarFotoMomento: { t: 'Enviar Foto del Momento', d: 'Si está activado, el agente envía un correo con el estado actual de la operación en ese instante, repitiendo con la frecuencia que elijas en el selector de esta fila (30 min, 1h, 2h, 3h, 4h o 6h), dentro de la ventana activa del día. Esta frecuencia es independiente de la de Alertas Críticas. Incluye la vista agregada (salud, KPIs, radicado, alertas, top analistas) y también el detalle de producción de CADA analista activo: una media de producción por Equipo, y por analista, gestionadas hoy vs. lo esperado con % de cumplimiento (ajustado por su tiempo realmente activo, no por horas de turno), aprobadas/negadas/aplazadas, tiempo de gestión promedio, si se conectó antes de la hora "Desde" configurada, estado actual (cruzando Historico_Estados), minutos en pausas/breaks del día (con aviso si supera el "Umbral pausas" configurado más abajo), y un mini-gráfico de solicitudes cerradas por hora. Ordena primero a quienes van por debajo del ritmo esperado, para que el coordinador sepa con quién hablar primero.' },

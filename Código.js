@@ -1911,7 +1911,11 @@ var DEFAULT_AGENT_CONFIG = {
     enviarFotoMomento: true,
     fotoMomentoFrecuenciaHoras: 2,
     enviarResumenDiario: true,
-    enviarResumenBiometria: true
+    enviarResumenBiometria: true,
+    // Informe Individual Semanal (uno por analista, viernes a horaFin) — arranca apagado para
+    // poder probarlo primero con agente_enviarInformeIndividualManual antes de activarlo para todos.
+    enviarInformeIndividual: false,
+    informeIndividualDiaISO: 5
   },
   horarioReporte: {
     activo: true,
@@ -1982,6 +1986,8 @@ function agente_obtenerConfig() {
         parsed.notificaciones.fotoMomentoFrecuenciaHoras = (parsed.horarioReporte && parsed.horarioReporte.frecuenciaHoras) || 2;
       }
       if (parsed.notificaciones.alertasCriticasFrecuenciaHoras === undefined) parsed.notificaciones.alertasCriticasFrecuenciaHoras = 1;
+      if (parsed.notificaciones.enviarInformeIndividual === undefined) parsed.notificaciones.enviarInformeIndividual = false;
+      if (parsed.notificaciones.informeIndividualDiaISO === undefined) parsed.notificaciones.informeIndividualDiaISO = 5;
       if (parsed.metas && parsed.metas.umbralMinutosPausa === undefined) parsed.metas.umbralMinutosPausa = 90;
       return parsed;
     } catch (e) {}
@@ -2333,6 +2339,121 @@ function agente_calcularPromediosHistoricos() {
   } catch (e) {}
 
   return result;
+}
+
+// --- INFORME INDIVIDUAL SEMANAL ---
+
+// Calcula, por analista, sus métricas de "esta semana" (lunes de esta semana hasta hoy) contra el
+// mismo tramo de la semana anterior (mismo número de días, para que la comparación sea justa —
+// nunca semana completa vs semana parcial) más una racha de días hábiles consecutivos con al menos
+// una gestión cerrada. Reutiliza _agente_leerDatosRango en una sola lectura para ambas semanas.
+function _agente_calcularRendimientoSemanal() {
+  var hoy = new Date();
+  var diaISOHoy = parseInt(Utilities.formatDate(hoy, TIMEZONE, "u"), 10); // 1=lunes...7=domingo
+
+  var lunesActual = new Date(hoy);
+  lunesActual.setDate(hoy.getDate() - (diaISOHoy - 1));
+  lunesActual.setHours(0, 0, 0, 0);
+
+  var lunesAnterior = new Date(lunesActual);
+  lunesAnterior.setDate(lunesActual.getDate() - 7);
+
+  var desdeStr = Utilities.formatDate(lunesAnterior, TIMEZONE, "dd/MM/yyyy");
+  var hastaStr = Utilities.formatDate(hoy, TIMEZONE, "dd/MM/yyyy");
+  var datos = _agente_leerDatosRango(desdeStr, hastaStr);
+  var registros = (datos && datos.registros) || [];
+
+  // Tramo comparable: lunes..hoy (o lunes..viernes si se corre en fin de semana), y el mismo tramo
+  // de la semana anterior.
+  var topDiaISO = Math.min(diaISOHoy, 5);
+  var diasActual = [];
+  for (var d = 1; d <= topDiaISO; d++) {
+    var f = new Date(lunesActual);
+    f.setDate(lunesActual.getDate() + (d - 1));
+    diasActual.push(Utilities.formatDate(f, TIMEZONE, "dd/MM/yyyy"));
+  }
+  var diasPrev = diasActual.map(function(fStr) {
+    var dt = parseFechaDDMMYYYY(fStr);
+    dt.setDate(dt.getDate() - 7);
+    return Utilities.formatDate(dt, TIMEZONE, "dd/MM/yyyy");
+  });
+
+  var actualSet = {}; diasActual.forEach(function(f) { actualSet[f] = true; });
+  var prevSet = {}; diasPrev.forEach(function(f) { prevSet[f] = true; });
+
+  var porAnalista = {};
+  registros.forEach(function(r) {
+    if (!r.correo) return;
+    var enActual = !!actualSet[r.fecha];
+    var enPrev = !!prevSet[r.fecha];
+
+    if (!porAnalista[r.correo]) {
+      porAnalista[r.correo] = {
+        nombre: r.analista,
+        correo: r.correo,
+        actual: { total: 0, sumaG: 0, cG: 0, dentroSLA: 0, totalSLA: 0 },
+        prev: { total: 0, sumaG: 0, cG: 0, dentroSLA: 0, totalSLA: 0 },
+        porDia: {}
+      };
+    }
+    var a = porAnalista[r.correo];
+
+    // La racha mira actividad reciente en general, no solo dentro de las dos ventanas de comparación.
+    a.porDia[r.fecha] = (a.porDia[r.fecha] || 0) + 1;
+
+    if (!enActual && !enPrev) return;
+    var bucket = enActual ? a.actual : a.prev;
+    bucket.total++;
+    if (r.tGestion !== null) { bucket.sumaG += r.tGestion; bucket.cG++; }
+    if (r.tResolucion !== null && r.tResolucion > 0) {
+      bucket.totalSLA++;
+      if (r.tResolucion <= 2) bucket.dentroSLA++;
+    }
+  });
+
+  var config = agente_obtenerConfig();
+  var diasHabiles = (config.horarioReporte && config.horarioReporte.dias) || {};
+
+  var resultado = Object.keys(porAnalista).map(function(correo) {
+    var a = porAnalista[correo];
+
+    // Racha: días hábiles consecutivos, desde hoy hacia atrás, con al menos una gestión cerrada.
+    // Se detiene en el primer día hábil sin gestiones; los días no laborales (según horarioReporte)
+    // se saltan sin romper la racha.
+    var racha = 0;
+    var cursor = new Date(hoy);
+    for (var back = 0; back < 30; back++) {
+      var fechaCursorStr = Utilities.formatDate(cursor, TIMEZONE, "dd/MM/yyyy");
+      var isoCursor = parseInt(Utilities.formatDate(cursor, TIMEZONE, "u"), 10);
+      var cfgDia = diasHabiles[String(isoCursor)];
+      var esHabil = !cfgDia || cfgDia.activo !== false;
+      if (esHabil) {
+        if ((a.porDia[fechaCursorStr] || 0) > 0) racha++;
+        else break;
+      }
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
+    return {
+      nombre: a.nombre,
+      correo: a.correo,
+      gestionadas: a.actual.total,
+      gestionadasPrev: a.prev.total,
+      tiempoProm: a.actual.cG > 0 ? Math.round(a.actual.sumaG / a.actual.cG * 10) / 10 : null,
+      tiempoPromPrev: a.prev.cG > 0 ? Math.round(a.prev.sumaG / a.prev.cG * 10) / 10 : null,
+      slaPct: a.actual.totalSLA > 0 ? Math.round(a.actual.dentroSLA / a.actual.totalSLA * 1000) / 10 : null,
+      slaPctPrev: a.prev.totalSLA > 0 ? Math.round(a.prev.dentroSLA / a.prev.totalSLA * 1000) / 10 : null,
+      racha: racha
+    };
+  });
+
+  return {
+    fechaDesdeActual: diasActual[0],
+    fechaHastaActual: diasActual[diasActual.length - 1],
+    fechaDesdePrev: diasPrev[0],
+    fechaHastaPrev: diasPrev[diasPrev.length - 1],
+    porAnalista: resultado
+  };
 }
 
 // --- 7 REGLAS DE DETECCIÓN ---
@@ -3391,7 +3512,10 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, 
     if (infos.length > 0) {
       html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
       html += '<td style="background:#e8edf6;border-left:5px solid #253150;border-radius:0 10px 10px 0;padding:14px 18px;">';
-      html += '<div style="font-weight:800;font-size:14px;color:#253150;">&#128309; ' + infos.length + ' Informativa(s)</div>';
+      html += '<div style="font-weight:800;font-size:14px;color:#253150;margin-bottom:6px;">&#128309; ' + infos.length + ' Informativa(s)</div>';
+      infos.forEach(function(a) {
+        html += '<div style="font-size:13px;color:#4a4a4a;line-height:1.5;margin-bottom:4px;">&#8226; ' + _escHtml(a.title) + '</div>';
+      });
       html += '</td></tr></table>';
     }
   }
@@ -3541,8 +3665,8 @@ function _construirEmailInicioOperacion(datosCola, datosRadicado, fecha) {
 
   // Header
   html += '<tr><td style="background:#253150;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
-  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">Inicio de Operación</h1>';
-  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">' + _escHtml(fecha) + '</p>';
+  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">&#9728;&#65039; Inicio de Operación</h1>';
+  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">¡Buenos días! Así arranca la operación hoy — ' + _escHtml(fecha) + '</p>';
   html += '</td></tr>';
 
   // Sección: Total Estudios Radicados (mismo cohorte que "Radicado del Período" del tablero)
@@ -3616,7 +3740,7 @@ function _construirEmailInicioOperacion(datosCola, datosRadicado, fecha) {
   return html;
 }
 
-function _construirEmailChequeoConexion(listaActivos, porEstado, fecha, horaChequeo) {
+function _construirEmailChequeoConexion(listaActivos, porEstado, fecha, horaChequeo, offsetMin) {
   var totalNoActivos = Object.keys(porEstado).reduce(function(acc, k) { return acc + porEstado[k].length; }, 0);
   var sinAsignacion = listaActivos.filter(function(a) { return !a.primeraAsignacion; }).length;
 
@@ -3626,8 +3750,9 @@ function _construirEmailChequeoConexion(listaActivos, porEstado, fecha, horaCheq
 
   // Header
   html += '<tr><td style="background:#253150;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
-  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">Chequeo de Conexión</h1>';
-  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">30 min después del inicio · ' + _escHtml(fecha) + ' ' + _escHtml(horaChequeo) + '</p>';
+  var offsetLabel = _fmtMinEmail(offsetMin || 30) + ' después del inicio';
+  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">&#128075; Chequeo de Conexión</h1>';
+  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">Un vistazo rápido a quién ya está conectado — ' + _escHtml(offsetLabel) + ' · ' + _escHtml(fecha) + ' ' + _escHtml(horaChequeo) + '</p>';
   html += '</td></tr>';
 
   // Resumen
@@ -3732,7 +3857,7 @@ function _construirEmailReporteBiometria(bio, fecha) {
   // Header
   html += '<tr><td style="background:#253150;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
   html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">&#129302; Reporte Biometría del Día</h1>';
-  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">' + fecha + '</p>';
+  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">Así se movió la biometría hoy — ' + fecha + '</p>';
   html += '</td></tr>';
 
   // Hero: Tasa de Conversión
@@ -3934,7 +4059,7 @@ function agente_enviarAlertasCriticas(diagnostico) {
     MailApp.sendEmail({
       to: email,
       bcc: BCC_REPORTES_AGENTE,
-      subject: "ALERTA CRITICA | " + criticas.length + " situación(es) requiere(n) atención | " + fecha + " " + hora,
+      subject: "ALERTA CRÍTICA | " + criticas.length + " situación(es) requiere(n) atención | " + fecha + " " + hora,
       htmlBody: html,
       name: NOMBRE_REMITENTE_AGENTE,
       noReply: true
@@ -4220,6 +4345,154 @@ function _agente_leerHistoricoEstadosHoy() {
   return porAnalista;
 }
 
+// Construye el correo individual de la semana para un analista. A diferencia de Corte de Gestión
+// (que usa semáforo rojo/amarillo/verde para coordinadores), este tiene tono cálido y compara solo
+// contra la propia semana anterior del analista — nunca contra el equipo. Regla de tono: si una
+// métrica empeoró respecto a la semana pasada, se muestra el número de esta semana sin flecha ni
+// texto de variación (nunca se dice explícitamente "bajaste"); la comparación solo aparece cuando
+// el cambio es igual o mejor.
+function _construirEmailInformeIndividual(m, rango) {
+  var primerNombre = String(m.nombre || "").trim().split(/\s+/)[0] || "";
+  primerNombre = primerNombre.charAt(0) + primerNombre.slice(1).toLowerCase();
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="margin:0;padding:0;background:#f0f2f5;">';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:24px 0;"><tr><td align="center">';
+  html += '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;font-family:Arial,Helvetica,sans-serif;">';
+
+  html += '<tr><td style="background:#253150;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
+  html += '<div style="font-size:13px;opacity:0.85;letter-spacing:0.5px;text-transform:uppercase;">Tu semana en números</div>';
+  html += '<h1 style="margin:6px 0 0;font-size:22px;font-weight:800;">&#128075; Hola, ' + _escHtml(primerNombre) + '</h1>';
+  html += '<p style="margin:8px 0 0;font-size:13px;opacity:0.9;">' + _escHtml(rango.fechaDesdeActual) + ' al ' + _escHtml(rango.fechaHastaActual) + '</p>';
+  html += '</td></tr>';
+
+  html += '<tr><td style="background:#fff;padding:28px 32px;">';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+
+  // Volumen gestionado — mejora si es mayor o igual que la semana pasada.
+  var mejoraVolumen = m.gestionadasPrev != null && m.gestionadasPrev > 0 && m.gestionadas >= m.gestionadasPrev;
+  html += '<td width="50%" style="text-align:center;padding:16px 10px;background:#f8fafc;border-radius:12px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">&#128193; Casos gestionados</div>';
+  html += '<div style="font-size:30px;font-weight:800;color:#253150;">' + m.gestionadas + '</div>';
+  if (mejoraVolumen) {
+    var pctVol = Math.round((m.gestionadas - m.gestionadasPrev) / m.gestionadasPrev * 100);
+    html += '<div style="font-size:11px;font-weight:700;color:#166534;margin-top:4px;">&#9650; ' + (pctVol > 0 ? pctVol + "% más" : "Igual") + ' que la semana pasada</div>';
+  }
+  html += '</td>';
+
+  // Tiempo promedio de gestión — mejora si es menor o igual que la semana pasada.
+  var mejoraTiempo = m.tiempoProm != null && m.tiempoPromPrev != null && m.tiempoProm <= m.tiempoPromPrev;
+  html += '<td width="50%" style="text-align:center;padding:16px 10px;background:#f8fafc;border-radius:12px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">&#9201; Tiempo promedio</div>';
+  html += '<div style="font-size:30px;font-weight:800;color:#253150;">' + (m.tiempoProm != null ? _fmtMinEmail(m.tiempoProm) : "—") + '</div>';
+  if (mejoraTiempo && m.tiempoProm < m.tiempoPromPrev) {
+    html += '<div style="font-size:11px;font-weight:700;color:#166534;margin-top:4px;">&#9650; Más ágil que la semana pasada</div>';
+  }
+  html += '</td>';
+  html += '</tr></table>';
+
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:8px;"><tr>';
+
+  // % dentro de SLA — mejora si es mayor o igual que la semana pasada.
+  var mejoraSla = m.slaPct != null && m.slaPctPrev != null && m.slaPct >= m.slaPctPrev;
+  html += '<td width="50%" style="text-align:center;padding:16px 10px;background:#f0fdf4;border-radius:12px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">&#9989; Dentro de tiempo objetivo</div>';
+  html += '<div style="font-size:30px;font-weight:800;color:#166534;">' + (m.slaPct != null ? m.slaPct + "%" : "—") + '</div>';
+  if (mejoraSla && m.slaPct > m.slaPctPrev) {
+    html += '<div style="font-size:11px;font-weight:700;color:#166534;margin-top:4px;">&#9650; Mejor que la semana pasada</div>';
+  }
+  html += '</td>';
+
+  // Racha — solo se muestra si hay algo que celebrar (2+ días); si no, se omite en vez de mostrar un número bajo.
+  html += '<td width="50%" style="text-align:center;padding:16px 10px;background:' + (m.racha >= 2 ? '#fff7ed' : '#f8fafc') + ';border-radius:12px;">';
+  html += '<div style="font-size:11px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">&#128293; Constancia</div>';
+  if (m.racha >= 2) {
+    html += '<div style="font-size:30px;font-weight:800;color:#c2410c;">' + m.racha + '</div>';
+    html += '<div style="font-size:11px;font-weight:700;color:#c2410c;margin-top:4px;">días seguidos gestionando</div>';
+  } else {
+    html += '<div style="font-size:16px;font-weight:700;color:#94a3b8;padding-top:6px;">Vas arrancando esta semana</div>';
+  }
+  html += '</td>';
+  html += '</tr></table>';
+
+  html += '<p style="font-size:13px;color:#4a4a4a;line-height:1.6;margin:24px 0 0;">Gracias por tu trabajo esta semana. Este es solo un vistazo rápido de tu propio avance — ¡sigue así! &#128170;</p>';
+  html += '</td></tr>';
+
+  html += '<tr><td style="background:#253150;color:#fff;padding:18px 32px;border-radius:0 0 12px 12px;text-align:center;">';
+  html += '<div style="font-size:12px;opacity:0.9;">Equipo de Analítica — El Libertador</div>';
+  html += '</td></tr>';
+
+  html += '</table></td></tr></table></body></html>';
+  return html;
+}
+
+// Envía el Informe Individual Semanal a cada analista con al menos una gestión cerrada esta
+// semana. Si se pasa correoPrueba, envía solo a esa dirección (con [PRUEBA] en el asunto) para
+// poder revisar el copy real antes de activarlo para todos — ver notificaciones.enviarInformeIndividual.
+// Cuenta a cuántos analistas les llegaría el Informe Individual Semanal si se enviara ahora mismo,
+// sin enviar nada — para que la UI pueda mostrar el número en el diálogo de confirmación antes del
+// envío real.
+function agente_contarCandidatosInformeIndividual() {
+  var rendimiento = _agente_calcularRendimientoSemanal();
+  var candidatos = rendimiento.porAnalista.filter(function(m) { return m.gestionadas > 0 && m.correo; });
+  return { total: candidatos.length, fechaDesdeActual: rendimiento.fechaDesdeActual, fechaHastaActual: rendimiento.fechaHastaActual };
+}
+
+function agente_enviarInformeIndividualAnalistas(correoPrueba) {
+  var rendimiento = _agente_calcularRendimientoSemanal();
+  var rango = { fechaDesdeActual: rendimiento.fechaDesdeActual, fechaHastaActual: rendimiento.fechaHastaActual };
+
+  var candidatos = rendimiento.porAnalista.filter(function(m) { return m.gestionadas > 0 && m.correo; });
+
+  var enviados = 0;
+  var fallidos = [];
+
+  if (!correoPrueba && candidatos.length === 0) {
+    return { sent: false, modo: "masivo", enviados: 0, totalCandidatos: 0, fallidos: [], reason: "sin analistas con gestiones esta semana" };
+  }
+
+  if (correoPrueba) {
+    var muestra = candidatos[0] || { nombre: "Analista", correo: correoPrueba, gestionadas: 0, gestionadasPrev: null, tiempoProm: null, tiempoPromPrev: null, slaPct: null, slaPctPrev: null, racha: 0 };
+    try {
+      MailApp.sendEmail({
+        to: correoPrueba,
+        subject: "[PRUEBA] Tu resumen de la semana · " + rango.fechaDesdeActual + " al " + rango.fechaHastaActual,
+        htmlBody: _construirEmailInformeIndividual(muestra, rango),
+        name: NOMBRE_REMITENTE_AGENTE,
+        noReply: true
+      });
+      return { sent: true, modo: "prueba", to: correoPrueba, muestraDe: muestra.nombre };
+    } catch (e) {
+      return { sent: false, modo: "prueba", reason: e.message };
+    }
+  }
+
+  candidatos.forEach(function(m) {
+    try {
+      MailApp.sendEmail({
+        to: m.correo,
+        subject: "Tu resumen de la semana · " + rango.fechaDesdeActual + " al " + rango.fechaHastaActual,
+        htmlBody: _construirEmailInformeIndividual(m, rango),
+        name: NOMBRE_REMITENTE_AGENTE,
+        noReply: true
+      });
+      enviados++;
+    } catch (e) {
+      fallidos.push({ correo: m.correo, reason: e.message });
+    }
+  });
+
+  return { sent: enviados > 0, modo: "masivo", enviados: enviados, totalCandidatos: candidatos.length, fallidos: fallidos };
+}
+
+// Requiere el correo de prueba explícitamente — si se ejecuta desde el editor de Apps Script con
+// el botón ▶ (sin argumento), NO debe caer al modo masivo por accidente.
+function agente_enviarInformeIndividualManual(correoPrueba) {
+  if (!correoPrueba) {
+    throw new Error("agente_enviarInformeIndividualManual requiere un correo de prueba, ej.: agente_enviarInformeIndividualManual('tu-correo@segurosbolivar.com'). Para enviar a todos los analistas usa agente_enviarInformeIndividualAnalistas() directamente.");
+  }
+  return agente_enviarInformeIndividualAnalistas(correoPrueba);
+}
+
 // Ensambla el detalle por analista para la sección "Corte de Gestión" del correo Foto del
 // Momento: producción y desglose de
 // resultados del día (obtenerRendimientoPorDia), ritmo esperado según el promedio histórico de
@@ -4391,7 +4664,7 @@ function agente_enviarChequeoConexion() {
   });
 
   var totalNoActivos = Object.keys(porEstado).reduce(function(acc, k) { return acc + porEstado[k].length; }, 0);
-  var html = _construirEmailChequeoConexion(listaActivos, porEstado, fecha, hora);
+  var html = _construirEmailChequeoConexion(listaActivos, porEstado, fecha, hora, config.notificaciones.chequeoConexionOffsetMin);
 
   try {
     MailApp.sendEmail({
@@ -4647,7 +4920,7 @@ function _agente_tocaPorFrecuencia(bucketAhora, bucketInicio, frecuenciaHoras) {
 
 // Motivos que NO son una falla real — son el resultado esperado de la lógica del correo (ej.
 // "no había alertas críticas en este momento") y no deben generar un aviso.
-var AGENT_RAZONES_NO_ALERTAR = ["sin alertas criticas", "desactivado", "sin datos de biometría hoy"];
+var AGENT_RAZONES_NO_ALERTAR = ["sin alertas criticas", "desactivado", "sin datos de biometría hoy", "sin analistas con gestiones esta semana"];
 
 // Si un envío automático no logró salir (sin destinatarios, error de MailApp, excepción), avisa
 // por correo directo al admin — para no depender de revisar Logger.log o el panel manualmente.
@@ -4754,6 +5027,17 @@ function agente_triggerOperacion() {
       } catch (e) {
         Logger.log("Error en reporte de biometría: " + e.message);
         _agente_notificarSiFallo("Reporte de Biometría", { sent: false, reason: e.message });
+      }
+    }
+
+    // 4) Informe Individual Semanal — una sola vez, el día ISO configurado (viernes por defecto),
+    // en el mismo bucket de horaFin que el Resumen Diario.
+    if (config.notificaciones.enviarInformeIndividual && dia === (config.notificaciones.informeIndividualDiaISO || 5)) {
+      try {
+        _agente_notificarSiFallo("Informe Individual Semanal", agente_enviarInformeIndividualAnalistas());
+      } catch (e) {
+        Logger.log("Error en informe individual semanal: " + e.message);
+        _agente_notificarSiFallo("Informe Individual Semanal", { sent: false, reason: e.message });
       }
     }
   }

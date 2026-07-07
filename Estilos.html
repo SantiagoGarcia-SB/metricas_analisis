@@ -101,6 +101,18 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
     overflow:hidden;
 }
 #sidebar:hover { width:var(--sidebar-w); box-shadow:4px 0 20px rgba(37,49,80,0.12); }
+
+/* Pista de que el sidebar se expande al pasar el mouse — visible solo mientras está colapsado,
+   con un pulso breve al cargar la página para que se note sin estorbar después. */
+@keyframes sidebarHintPulse { 0%,100% { opacity:0.55; transform:translateX(0); } 50% { opacity:1; transform:translateX(2px); } }
+.sidebar-expand-hint {
+    position:absolute; top:30px; right:6px;
+    color:var(--text-light); font-size:0.7rem; pointer-events:none;
+    transition:opacity 0.2s ease; animation:sidebarHintPulse 1.4s ease-in-out 3;
+}
+#sidebar:hover .sidebar-expand-hint { opacity:0; }
+@media (prefers-reduced-motion: reduce) { .sidebar-expand-hint { animation:none; } }
+
 #sidebar .sidebar-brand {
     display:flex; align-items:center; gap:12px;
     padding:22px 12px; border-bottom:1px solid var(--border);
@@ -210,6 +222,17 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
 .metric-detail-value { font-size:1.5rem; font-weight:800; color:var(--text-main); line-height:1.3; }
 .metric-detail-pct { font-size:1.15rem; font-weight:800; flex-shrink:0; }
 
+/* Pista visual de que la tarjeta abre un detalle al hacer clic — solo en las que de verdad
+   tienen onclick, para no prometer una interacción que no existe. pointer-events:none para que
+   nunca interfiera con el clic real de la tarjeta. */
+.metric-detail-card[onclick], .tipo-card[onclick], .bio-ciclo-card[onclick] { position:relative; }
+.metric-detail-card[onclick]::after, .tipo-card[onclick]::after, .bio-ciclo-card[onclick]::after {
+    content:"\203A"; position:absolute; bottom:6px; right:9px;
+    font-size:0.85rem; line-height:1; color:var(--text-light);
+    opacity:0.55; pointer-events:none; transition:opacity 0.2s ease;
+}
+.metric-detail-card[onclick]:hover::after, .tipo-card[onclick]:hover::after, .bio-ciclo-card[onclick]:hover::after { opacity:0.9; }
+
 .table-container {
     background:var(--bg-card); border-radius:var(--radius); padding:26px;
     box-shadow:var(--shadow); border:1px solid var(--border); margin-top:24px;
@@ -283,6 +306,18 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
 }
 .rendimiento-toggle.active { background:var(--rojo); color:white; }
 .rendimiento-toggle:hover:not(.active) { background:var(--gris-light); }
+
+/* Mini-navegación por anclas — para pestañas largas (Producción, Biometría) donde conviene
+   saltar directo a una sección en vez de hacer scroll por todo. Puramente de navegación: no
+   cambia ni depende de ningún dato, así que no hay riesgo de afectar el resto de la pestaña. */
+.mini-nav { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+.mini-nav-chip {
+    font-family:'Manrope',sans-serif; font-size:0.75rem; font-weight:700;
+    color:var(--azul); background:var(--azul-light); border:1px solid #c7d2e8;
+    border-radius:20px; padding:6px 14px; cursor:pointer; transition:all 0.15s;
+    white-space:nowrap;
+}
+.mini-nav-chip:hover { background:var(--azul); color:#fff; border-color:var(--azul); }
 .btn-nav-fecha {
     width:30px; height:30px; border-radius:8px;
     border:1.5px solid var(--border); background:var(--bg-card);

@@ -298,7 +298,24 @@ Pero las hojas de cálculo que ese dashboard lee sí se alimentan mediante trigg
 | **Fuera de SLA** | Fila con clase `table-danger` | Analista con solicitudes >2h |
 | **Puntos rojos en tendencia SLA** | Chart.js pointBackgroundColor condicional | Día con cumplimiento <80% |
 
-El sistema **no envía correos ni notificaciones push**. Toda la información es visual dentro del dashboard.
+### Correos Automáticos (Agente)
+
+El motor `agente_triggerOperacion()` (dispara cada 30 min vía trigger instalable) envía los
+siguientes correos según `DEFAULT_AGENT_CONFIG.notificaciones`, cada uno con su propio interruptor:
+
+| Correo | Destinatario | Cuándo | Función |
+|--------|-------------|--------|---------|
+| Inicio de Operación | Coordinadores (`_obtenerDestinatarios`) | Una vez, a `horaInicio` | `agente_enviarInicioOperacion` |
+| Chequeo de Conexión | Coordinadores | `horaInicio` + offset configurable | `agente_enviarChequeoConexion` |
+| Alertas Críticas | Coordinadores | Dentro de ventana, frecuencia propia | `agente_enviarAlertasCriticas` |
+| Foto del Momento | Coordinadores | Dentro de ventana, frecuencia propia (incluye detalle por analista / Corte de Gestión) | `agente_enviarSnapshotActual` |
+| Resumen Diario + Biometría | Coordinadores | Una vez, a `horaFin` | `agente_enviarResumenDiario`, `agente_enviarReporteBiometria` |
+| **Informe Individual Semanal** | **Cada analista, uno por uno** (solo quien tuvo gestiones en la semana) | Una vez por semana, el día ISO de `informeIndividualDiaISO` (viernes por defecto) a `horaFin` | `agente_enviarInformeIndividualAnalistas` |
+
+El Informe Individual Semanal es distinto en tono al resto: no usa semáforo rojo/amarillo/verde ni
+compara contra otros analistas, solo contra la propia semana anterior del mismo analista (ver
+`_agente_calcularRendimientoSemanal`). Arranca desactivado (`enviarInformeIndividual: false`); se
+prueba con `agente_enviarInformeIndividualManual(correo)` antes de activarlo para todos.
 
 ---
 

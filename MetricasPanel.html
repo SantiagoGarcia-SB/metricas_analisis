@@ -47,6 +47,7 @@
 <div id="particles-js" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;"></div>
 
 <div id="sidebar">
+    <i class="bi bi-chevron-right sidebar-expand-hint" aria-hidden="true"></i>
     <div class="sidebar-brand">
         <div class="brand-icon"><i class="bi bi-bar-chart-fill"></i></div>
         <span class="brand-name">Métricas Análisis</span>
@@ -183,6 +184,24 @@
         <!-- TAB: Resumen General -->
         <div id="tab-resumen" class="tab-panel">
 
+        <!-- Salud Operativa condensada — la respuesta a "¿qué hago hoy?" del Agente Coordinador,
+             traída al frente en vez de dejarla solo en la última pestaña. Oculto hasta que carga
+             para no mostrar un grado F de mentira mientras llega el diagnóstico real. -->
+        <div class="table-container mb-4" id="resumenSaludBanner" style="margin-top:0;display:none;cursor:pointer;" onclick="document.getElementById('navAgente').click();" title="Ver Agente Coordinador">
+            <div class="d-flex align-items-center flex-wrap" style="gap:20px;">
+                <div class="d-flex align-items-center" style="gap:14px;">
+                    <div id="resumenSaludBadge" class="agent-gauge-grade agent-grade-F" style="font-size:1.2rem;padding:7px 16px;">F</div>
+                    <div>
+                        <div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;">Salud Operativa</div>
+                        <div style="font-size:1.5rem;font-weight:800;color:var(--azul);line-height:1.1;"><span id="resumenSaludScoreValor">—</span><span style="font-size:0.85rem;font-weight:600;color:var(--text-muted);">/100</span></div>
+                    </div>
+                </div>
+                <div style="width:1px;align-self:stretch;background:var(--border);"></div>
+                <div id="resumenSaludAlertas" style="flex:1;min-width:220px;font-size:0.85rem;color:var(--text-muted);font-weight:600;">Cargando diagnóstico del Agente Coordinador…</div>
+                <div class="btn-outline-brand" style="pointer-events:none;flex-shrink:0;"><i class="bi bi-robot"></i> Ver Agente Coordinador <i class="bi bi-chevron-right ms-1"></i></div>
+            </div>
+        </div>
+
         <!-- Radicado del Período (cohorte: fecha de radicación / resultado en solicitudes pendientes) -->
         <!-- Macro → micro: hero con el total, barra proporcional del desglose, y tarjetas de detalle con el % ya pegado al número -->
         <div class="bio-ciclo-section-title">Radicado del Período <span class="bio-rango-badge" id="metricaRangoTexto1">(hoy)</span></div>
@@ -312,7 +331,7 @@
                 <div class="table-header">
                     <div>
                         <div class="table-title"><i class="bi bi-traffic-light me-2" style="color:var(--rojo);"></i>Detalle por Solicitud<span class="btn-help-chart" onclick="ayudaGrafico('semaforo')">?</span></div>
-                        <div class="table-sub">Priorización automática por tiempo de espera. 🟢 &lt;45min · 🟡 45-90min · 🔴 &gt;90min</div>
+                        <div class="table-sub">Priorización automática por tiempo de espera. 🟢 &lt;15min · 🟡 15-30min · 🔴 &gt;30min</div>
                     </div>
                 </div>
                 <div class="table-responsive">
@@ -406,8 +425,16 @@
 
         <!-- TAB: Producción -->
         <div id="tab-produccion" class="tab-panel" style="display:none;">
+        <!-- Mini-navegación — salta directo a una sección sin hacer scroll por toda la pestaña -->
+        <div class="mini-nav">
+            <span class="mini-nav-chip" onclick="document.getElementById('prodSeccionTipo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-tags me-1"></i>Por Tipo</span>
+            <span class="mini-nav-chip" onclick="document.getElementById('prodSeccionDiaria').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-graph-up me-1"></i>Producción Diaria</span>
+            <span class="mini-nav-chip" onclick="document.getElementById('prodSeccionMensual').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-calendar3 me-1"></i>Mensual</span>
+            <span class="mini-nav-chip" onclick="document.getElementById('prodSeccionHora').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-grid-3x3 me-1"></i>Por Hora</span>
+            <span class="mini-nav-chip" onclick="document.getElementById('prodSeccionVolumen').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-building me-1"></i>Volumen</span>
+        </div>
         <!-- Cards Producción por Tipo -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:24px;">
+        <div id="prodSeccionTipo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:24px;">
             <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoGeneral')"><div class="tipo-icon" style="background:var(--azul);"><i class="bi bi-stack"></i></div><div class="tipo-info"><span class="tipo-label">General</span><span class="tipo-value" id="kpiTipoGeneral">0</span></div><span class="tipo-prom">~<span id="kpiTipoGeneralProm">0</span>/día</span></div>
             <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoDigital')"><div class="tipo-icon" style="background:#253150;"><i class="bi bi-laptop"></i></div><div class="tipo-info"><span class="tipo-label">Digital</span><span class="tipo-value" id="kpiTipoDigital">0</span></div><span class="tipo-prom">~<span id="kpiTipoDigitalProm">0</span>/día</span></div>
             <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoUAR')"><div class="tipo-icon" style="background:#BD0F14;"><i class="bi bi-envelope-paper"></i></div><div class="tipo-info"><span class="tipo-label">UAR</span><span class="tipo-value" id="kpiTipoUAR">0</span></div><span class="tipo-prom">~<span id="kpiTipoUARProm">0</span>/día</span></div>
@@ -417,20 +444,20 @@
         </div>
 
         <!-- Producción Diaria -->
-        <div class="table-container mb-4" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Producción Diaria<span class="btn-help-chart" onclick="ayudaGrafico('produccionDiaria')">?</span></div><div style="position:relative;height:240px;"><canvas id="chartProduccion"></canvas></div></div>
+        <div id="prodSeccionDiaria" class="table-container mb-4" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Producción Diaria<span class="btn-help-chart" onclick="ayudaGrafico('produccionDiaria')">?</span></div><div style="position:relative;height:240px;"><canvas id="chartProduccion"></canvas></div></div>
 
         <div class="row g-4 mb-4">
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('prodSucursal')">?</span></div><canvas id="chartSucursal" height="180"></canvas></div></div>
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-tags me-2" style="color:var(--azul);"></i>Producción por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('prodTipo')">?</span></div><canvas id="chartTipo" height="180"></canvas></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('prodSucursal')">?</span></div><div style="position:relative;height:220px;"><canvas id="chartSucursal"></canvas></div></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-tags me-2" style="color:var(--azul);"></i>Producción por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('prodTipo')">?</span></div><div style="position:relative;height:220px;"><canvas id="chartTipo"></canvas></div></div></div>
         </div>
-        <div class="table-container mb-4"><div class="table-header"><div><div class="table-title"><i class="bi bi-calendar3 me-2" style="color:var(--azul);"></i>Producción Mensual por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('mensualTipo')">?</span></div><div class="table-sub">Total por mes discriminado por tipo</div></div></div><canvas id="chartMensual" height="90"></canvas></div>
-        <div class="table-container mb-4"><div class="table-header"><div><div class="table-title"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción Mensual por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('mensualSucursal')">?</span></div><div class="table-sub">Total por mes discriminado por sucursal</div></div></div><canvas id="chartMensualSucursal" height="90"></canvas></div>
+        <div id="prodSeccionMensual" class="table-container mb-4"><div class="table-header"><div><div class="table-title"><i class="bi bi-calendar3 me-2" style="color:var(--azul);"></i>Producción Mensual por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('mensualTipo')">?</span></div><div class="table-sub">Total por mes discriminado por tipo</div></div></div><div style="position:relative;height:220px;"><canvas id="chartMensual"></canvas></div></div>
+        <div class="table-container mb-4"><div class="table-header"><div><div class="table-title"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Producción Mensual por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('mensualSucursal')">?</span></div><div class="table-sub">Total por mes discriminado por sucursal</div></div></div><div style="position:relative;height:220px;"><canvas id="chartMensualSucursal"></canvas></div></div>
 
         <!-- Producción por Hora del Día -->
-        <div class="table-container mb-4" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-grid-3x3 me-2" style="color:var(--azul);"></i>Producción por Hora del Día<span class="btn-help-chart" onclick="ayudaGrafico('heatmapHora')">?</span></div><div class="table-sub mb-3">Solicitudes cerradas por franja horaria</div><canvas id="chartHeatmapHora" height="140"></canvas></div>
+        <div id="prodSeccionHora" class="table-container mb-4" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-grid-3x3 me-2" style="color:var(--azul);"></i>Producción por Hora del Día<span class="btn-help-chart" onclick="ayudaGrafico('heatmapHora')">?</span></div><div class="table-sub mb-3">Solicitudes cerradas por franja horaria</div><div style="position:relative;height:180px;"><canvas id="chartHeatmapHora"></canvas></div></div>
 
         <!-- Volumen por Inmobiliaria y Sucursal -->
-        <div class="row g-4 mb-4">
+        <div id="prodSeccionVolumen" class="row g-4 mb-4">
             <div class="col-lg-6">
                 <div class="table-container" style="margin-top:0;">
                     <div class="table-title mb-2"><i class="bi bi-building me-2" style="color:var(--azul);"></i>Volumen por Inmobiliaria<span class="btn-help-chart" onclick="ayudaGrafico('volumenInmob')">?</span></div>
@@ -569,6 +596,16 @@
             </div>
             <div id="biometriaContenido" style="display:none;">
 
+            <!-- Mini-navegación — salta directo a una sección sin hacer scroll por toda la pestaña -->
+            <div class="mini-nav">
+                <span class="mini-nav-chip" onclick="document.getElementById('bioConversionBanner').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-graph-up-arrow me-1"></i>Conversión</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaEnVivo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-broadcast me-1"></i>En Vivo</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaCascada').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-diagram-3 me-1"></i>Cascada</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaCiclo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-calendar-check me-1"></i>Ciclo del Período</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaTendenciaDia').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-calendar3 me-1"></i>Tendencia por Día</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaGestion').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-telephone me-1"></i>Gestión</span>
+            </div>
+
             <!-- Filtros Biometría -->
             <div class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);">
                 <div class="d-flex align-items-center gap-2">
@@ -626,7 +663,7 @@
             </div>
 
             <!-- En vivo: no dependen del rango de fechas -->
-            <div class="bio-ciclo-section-title"><i class="bi bi-broadcast me-1"></i>En Vivo <span class="bio-rango-badge">ahora mismo</span> <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionEnVivo')">?</span></div>
+            <div id="bioAnclaEnVivo" class="bio-ciclo-section-title"><i class="bi bi-broadcast me-1"></i>En Vivo <span class="bio-rango-badge">ahora mismo</span> <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionEnVivo')">?</span></div>
             <div class="bio-live-row">
                 <div class="bio-live-card bio-live-rojo" style="cursor:pointer;" onclick="drilldownBio('colaAsignacion')">
                     <div>
@@ -645,16 +682,16 @@
             </div>
 
             <!-- Cascada estricta: mismo grupo que "Consultadas SAI", cierra exacto -->
-            <div class="bio-ciclo-section-title"><i class="bi bi-diagram-3 me-1"></i>Cascada Estricta del Período <span id="bioRangoTexto1" class="bio-rango-badge"></span> — mismo grupo que Consultadas SAI <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionCascada')">?</span></div>
+            <div id="bioAnclaCascada" class="bio-ciclo-section-title"><i class="bi bi-diagram-3 me-1"></i>Cascada Estricta del Período <span id="bioRangoTexto1" class="bio-rango-badge"></span> — mismo grupo que Consultadas SAI <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionCascada')">?</span></div>
             <div class="bio-ciclo-row bio-ciclo-row-3">
                 <div class="bio-ciclo-card bio-c-azul" style="cursor:pointer;" onclick="drilldownBio('cascadaSinIniciar')"><div class="bio-ciclo-label"><i class="bi bi-hourglass me-1"></i>Sin Iniciar <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioCascadaSinIniciar')">?</span></div><div class="bio-ciclo-value" id="bioCascadaSinIniciar">0</div><div class="bio-ciclo-sub">Aún no llega su corte</div></div>
                 <div class="bio-ciclo-card bio-c-azul" style="cursor:pointer;" onclick="drilldownBio('cascadaResueltasSinWA')"><div class="bio-ciclo-label"><i class="bi bi-person-check me-1"></i>Resueltas sin WA <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioCascadaResueltasSinWA')">?</span></div><div class="bio-ciclo-value" id="bioCascadaResueltasSinWA">0</div><div class="bio-ciclo-sub">De lo que ENTRÓ en el período, cuánto ya se resolvió solo</div></div>
                 <div class="bio-ciclo-card bio-c-azul" style="cursor:pointer;" onclick="drilldownBio('cascadaEnviadas')"><div class="bio-ciclo-label"><i class="bi bi-whatsapp me-1" style="color:#25D366;"></i>Ya Enviadas <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioCascadaEnviadas')">?</span></div><div class="bio-ciclo-value" id="bioCascadaEnviadas">0</div><div class="bio-ciclo-sub">Del período, ya tienen WA enviado</div></div>
             </div>
-            <div class="table-sub mb-4" style="margin-top:-10px;">Sin Iniciar + Resueltas sin WA + Ya Enviadas (del período seleccionado) = Consultadas SAI, exacto.</div>
+            <div class="table-sub mb-4" style="margin-top:-10px;">Estas 3 tarjetas son el desglose exacto de "Consultadas SAI" — no se solapan ni dejan casos por fuera. <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionCascada')" style="margin-left:0;">?</span></div>
 
             <!-- Ciclo del período seleccionado (hoy por defecto) -->
-            <div class="bio-ciclo-section-title"><i class="bi bi-calendar-check me-1"></i>Ciclo del Período <span id="bioRangoTexto2" class="bio-rango-badge"></span> — actividad real, incluye arrastre de fuera del rango <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionCiclo')">?</span></div>
+            <div id="bioAnclaCiclo" class="bio-ciclo-section-title"><i class="bi bi-calendar-check me-1"></i>Ciclo del Período <span id="bioRangoTexto2" class="bio-rango-badge"></span> — actividad real, incluye arrastre de fuera del rango <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionCiclo')">?</span></div>
             <div class="bio-ciclo-row bio-ciclo-row-5">
                 <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('cicloConsultadas')"><div class="bio-ciclo-label"><i class="bi bi-search me-1"></i>Consultadas SAI <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioConsultadas')">?</span></div><div class="bio-ciclo-value" id="bioCicloConsultadas">0</div><div class="bio-ciclo-sub">Traídas del API en el período</div></div>
                 <div class="bio-ciclo-card bio-c-azul" style="cursor:pointer;" onclick="drilldownBio('cicloResueltasSinWA')"><div class="bio-ciclo-label"><i class="bi bi-person-check me-1"></i>Resueltas sin WhatsApp <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioActResueltasSinWA')">?</span></div><div class="bio-ciclo-value" id="bioCicloResueltasSinWA">0</div><div class="bio-ciclo-sub">Se resolvieron solas EN el período, sin importar cuándo entraron</div></div>
@@ -664,7 +701,7 @@
             </div>
 
             <!-- Actividad operativa por día (por fecha real de cada evento) -->
-            <div class="bio-kpi-section-title mt-4" style="font-size:0.85rem;"><i class="bi bi-calendar3"></i>Tendencia por Día</div>
+            <div id="bioAnclaTendenciaDia" class="bio-kpi-section-title mt-4" style="font-size:0.85rem;"><i class="bi bi-calendar3"></i>Tendencia por Día</div>
             <div class="table-sub mb-3">Evolución diaria de las mismas cifras de "Ciclo del Período" — útil para ver el rango de fechas completo día por día, no solo el total.</div>
 
             <!-- Resultado Broadcast por día -->
@@ -689,7 +726,7 @@
             </div>
 
             <!-- Resultados de Gestión -->
-            <div class="table-container mb-4" style="border-left:4px solid var(--azul);">
+            <div id="bioAnclaGestion" class="table-container mb-4" style="border-left:4px solid var(--azul);">
                 <div class="table-title mb-1"><i class="bi bi-telephone me-2" style="color:var(--azul);"></i>Resultados de Gestión<span class="btn-help-chart" onclick="ayudaGrafico('bioGestion')">?</span></div>
                 <div class="table-sub mb-3">Resultado de las llamadas y gestión de solicitudes de biometría asignadas a analistas</div>
 
@@ -754,10 +791,11 @@
             </div>
             <div id="agenteContenido" style="display:none;">
 
+            <div class="bio-ciclo-section-title" style="margin-top:0;">Estado y Decisiones <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-muted);">— lo que hay que saber y con quién hablar hoy</span></div>
             <!-- Health Score + Quick Actions -->
             <div class="row g-4 mb-4">
                 <div class="col-lg-4">
-                    <div class="table-container" style="margin-top:0;text-align:center;padding:30px 20px;">
+                    <div class="table-container" style="margin-top:0;text-align:center;padding:30px 20px;height:100%;box-sizing:border-box;">
                         <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-light);letter-spacing:1.2px;margin-bottom:2px;">Salud Operativa <span class="btn-help-chart" onclick="ayudaConfig('saludOperativa')">?</span></div>
                         <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:10px;line-height:1.3;">Puntaje general de cómo va la operación hoy</div>
                         <div style="position:relative;width:200px;height:120px;margin:0 auto;">
@@ -772,23 +810,24 @@
                     </div>
                 </div>
                 <div class="col-lg-4">
-                    <div class="table-container" style="margin-top:0;">
+                    <div class="table-container" style="margin-top:0;height:100%;box-sizing:border-box;">
                         <div class="table-title mb-1"><i class="bi bi-bar-chart-fill me-2" style="color:var(--azul);"></i>Componentes del Score <span class="btn-help-chart" onclick="ayudaConfig('componentes')">?</span></div>
                         <div class="table-sub mb-3">Cada barra muestra qué tan bien va ese aspecto de la operación</div>
                         <div id="componentesScore"></div>
                     </div>
                 </div>
                 <div class="col-lg-4">
-                    <div class="table-container" style="margin-top:0;">
+                    <div class="table-container" style="margin-top:0;height:100%;box-sizing:border-box;">
                         <div class="table-title mb-3"><i class="bi bi-lightning-charge me-2" style="color:var(--rojo);"></i>Acciones Rápidas</div>
-                        <div class="agent-quick-actions" style="flex-direction:column;">
-                            <button class="agent-quick-btn agent-quick-btn-primary" onclick="recalcularAgente()"><i class="bi bi-arrow-repeat"></i> Recalcular Diagnóstico</button>
-                            <button class="agent-quick-btn" onclick="enviarInicioOperacionManualAgente()"><i class="bi bi-sunrise"></i> Enviar Inicio de Operación</button>
-                            <button class="agent-quick-btn" onclick="enviarChequeoConexionManualAgente()"><i class="bi bi-wifi"></i> Enviar Chequeo de Conexión</button>
-                            <button class="agent-quick-btn" onclick="enviarResumenManualAgente()"><i class="bi bi-envelope"></i> Enviar Resumen por Correo</button>
-                            <button class="agent-quick-btn" onclick="enviarReporteBiometriaManualAgente()"><i class="bi bi-fingerprint"></i> Enviar Reporte Biometría</button>
-                            <button class="agent-quick-btn" onclick="enviarSnapshotManualAgente()"><i class="bi bi-camera"></i> Enviar Foto del Momento</button>
-                            <button class="agent-quick-btn" onclick="document.getElementById('seccionConfigMetas').scrollIntoView({behavior:'smooth'})"><i class="bi bi-gear"></i> Configurar Metas</button>
+                        <div class="agent-quick-actions" style="display:grid;grid-template-columns:1fr 1fr;">
+                            <button class="agent-quick-btn agent-quick-btn-primary" onclick="recalcularAgente()" style="grid-column:1 / -1;"><i class="bi bi-arrow-repeat"></i> Recalcular Diagnóstico</button>
+                            <button class="agent-quick-btn" onclick="enviarInicioOperacionManualAgente()"><i class="bi bi-sunrise"></i> Inicio de Operación</button>
+                            <button class="agent-quick-btn" onclick="enviarChequeoConexionManualAgente()"><i class="bi bi-wifi"></i> Chequeo de Conexión</button>
+                            <button class="agent-quick-btn" onclick="enviarResumenManualAgente()"><i class="bi bi-envelope"></i> Resumen por Correo</button>
+                            <button class="agent-quick-btn" onclick="enviarReporteBiometriaManualAgente()"><i class="bi bi-fingerprint"></i> Reporte Biometría</button>
+                            <button class="agent-quick-btn" onclick="enviarSnapshotManualAgente()"><i class="bi bi-camera"></i> Foto del Momento</button>
+                            <button class="agent-quick-btn" onclick="enviarInformeIndividualManualAgente()"><i class="bi bi-person-lines-fill"></i> Informe Individual</button>
+                            <button class="agent-quick-btn" onclick="document.getElementById('seccionConfigMetas').scrollIntoView({behavior:'smooth'})" style="grid-column:1 / -1;"><i class="bi bi-gear"></i> Configurar Metas</button>
                         </div>
                         <div style="margin-top:16px;">
                             <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;">KPIs del Día</div>
@@ -826,6 +865,18 @@
                 <div id="alertasAgenteContainer"></div>
             </div>
 
+            <!-- Historial de Alertas — junto a Alertas Activas: mismo tema (ahora vs. en el tiempo) -->
+            <div class="table-container mb-4">
+                <div class="table-title mb-2"><i class="bi bi-clock-history me-2" style="color:var(--azul);"></i>Historial de Alertas</div>
+                <div class="table-sub mb-3">Últimas 50 alertas registradas por el agente</div>
+                <div class="table-responsive">
+                    <table id="tablaHistorialAlertas" class="table table-sm w-100 align-middle" style="font-size:0.82rem;">
+                        <thead><tr><th>Fecha</th><th>Severidad</th><th>Categoría</th><th>Título</th></tr></thead>
+                        <tbody id="cuerpoHistorialAlertas"></tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Sugerencias -->
             <div class="table-container mb-4">
                 <div class="table-title mb-2"><i class="bi bi-lightbulb me-2" style="color:#166534;"></i>Sugerencias del Agente</div>
@@ -847,6 +898,7 @@
                 <div id="calidadDatosContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;"></div>
             </div>
 
+            <div class="bio-ciclo-section-title">Configuración del Sistema <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-muted);">— cómo funciona el agente, no información del día a día</span></div>
             <!-- Configuración de Metas -->
             <div class="table-container mb-4" id="seccionConfigMetas">
                 <div class="table-title mb-2"><i class="bi bi-sliders me-2" style="color:var(--azul);"></i>Configuración de Metas y Umbrales</div>
@@ -949,6 +1001,23 @@
                                             <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarBiometria" checked></td>
                                             <td style="color:var(--text-light);font-size:0.75rem;">Junto al Resumen Diario, a la hora "Hasta"</td>
                                         </tr>
+                                        <tr>
+                                            <td>Informe Individual Semanal <span class="btn-help-chart" onclick="ayudaConfig('enviarInformeIndividual')">?</span></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarInformeIndividual"></td>
+                                            <td>
+                                                Cada analista recibe el suyo el
+                                                <select class="form-select form-select-sm" id="cfgInformeIndividualDia" style="width:auto;display:inline-block;">
+                                                    <option value="1">Lunes</option>
+                                                    <option value="2">Martes</option>
+                                                    <option value="3">Miércoles</option>
+                                                    <option value="4">Jueves</option>
+                                                    <option value="5">Viernes</option>
+                                                    <option value="6">Sábado</option>
+                                                    <option value="7">Domingo</option>
+                                                </select>
+                                                a la hora "Hasta" — solo quien tuvo gestiones esa semana
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -989,18 +1058,6 @@
                     <div class="d-flex gap-2 mt-3">
                         <button class="btn-primary-brand" onclick="guardarConfigAgente()" style="border-radius:10px;padding:8px 22px;"><i class="bi bi-check-lg me-1"></i>Guardar Configuración</button>
                     </div>
-                </div>
-            </div>
-
-            <!-- Historial de Alertas -->
-            <div class="table-container mb-4">
-                <div class="table-title mb-2"><i class="bi bi-clock-history me-2" style="color:var(--azul);"></i>Historial de Alertas</div>
-                <div class="table-sub mb-3">Últimas 50 alertas registradas por el agente</div>
-                <div class="table-responsive">
-                    <table id="tablaHistorialAlertas" class="table table-sm w-100 align-middle" style="font-size:0.82rem;">
-                        <thead><tr><th>Fecha</th><th>Severidad</th><th>Categoría</th><th>Título</th></tr></thead>
-                        <tbody id="cuerpoHistorialAlertas"></tbody>
-                    </table>
                 </div>
             </div>
 
