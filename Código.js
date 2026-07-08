@@ -1592,64 +1592,23 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
     // resFinal se lee de estadoGeneral: ese campo se actualiza al final del día para reflejar
     // si la solicitud quedó aprobada, así que consultar "hoy" en pleno día puede mostrar
     // Gestionadas > (Aprobadas+Negadas+Aplazadas) para los casos de hoy que aún no tienen ese cierre.
-    var gestion = { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, aprobadasConLlamada: 0, motivos: {}, tendencia: [] };
+    var gestion = _gestionVacia();
     try {
       var ssHist = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
       var hojaHist = ssHist.getSheetByName(SHEET_NAME_SOLICITUDES);
       if (hojaHist && hojaHist.getLastRow() > 1) {
         var dataH = hojaHist.getDataRange().getDisplayValues();
-        var gesTendMap = {};
-        for (var g = 1; g < dataH.length; g++) {
-          var tipoAsignadoH = String(dataH[g][60] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) { return { "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U" }[c] || c; }).trim();
-          if (tipoAsignadoH !== "DESAPLAZAMIENTO") continue;
-
-          var fechaFinH = String(dataH[g][26] || "").trim();
-          if (!fechaFinH) continue;
-
-          var fechaFinParte = fechaFinH.split(" ")[0];
-          var partes = fechaFinParte.split("/");
-          var fechaDia = partes.length === 3 ? partes[2] + "-" + partes[1] + "-" + partes[0] : fechaFinParte;
+        gestion = _agregarGestionBiometria(dataH, function(fila, fechaDia) {
+          if (!filtroDesde && !filtroHasta) return true;
           var fechaFinNorm = fechaDia.replace(/-/g, '');
-
-          if (filtroDesde || filtroHasta) {
-            if (filtroDesde && fechaFinNorm < filtroDesde) continue;
-            if (filtroHasta && fechaFinNorm > filtroHasta) continue;
-          }
-
-          gestion.total++;
-
-          if (!gesTendMap[fechaDia]) gesTendMap[fechaDia] = { okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0 };
-
-          var resLlamada = String(dataH[g][38] || "").toUpperCase().trim();
-          if (resLlamada === "OK LLAMADA") { gestion.okLlamada++; gesTendMap[fechaDia].okLlamada++; }
-          else if (resLlamada === "NO CONTESTO") { gestion.noContesto++; gesTendMap[fechaDia].noContesto++; }
-
-          var resFinal = String(dataH[g][16] || "").toUpperCase().trim();
-          // aprobadasConLlamada exige AMBAS condiciones en la MISMA fila (mismo cohorte: llamadas
-          // que sí conectaron) — no mezclar con gestion.aprobadas, que cuenta todo aprobado sin
-          // importar si hubo o no contacto telefónico. Ver lección de cohorte-consistencia.
-          if (resLlamada === "OK LLAMADA" && resFinal === "APROBADO") gestion.aprobadasConLlamada++;
-          if (resFinal === "APROBADO") { gestion.aprobadas++; gesTendMap[fechaDia].aprobadas++; }
-          else if (resFinal === "RECHAZADO") { gestion.negadas++; gesTendMap[fechaDia].negadas++; }
-          else if (resFinal === "APLAZADO") {
-            gestion.aplazadas++; gesTendMap[fechaDia].aplazadas++;
-            var motivo = String(dataH[g][28] || "").trim();
-            if (motivo) gestion.motivos[motivo] = (gestion.motivos[motivo] || 0) + 1;
-          }
-        }
-        gestion.tendencia = Object.keys(gesTendMap).sort().map(function(f) {
-          var d = gesTendMap[f];
-          return { fecha: f, okLlamada: d.okLlamada, noContesto: d.noContesto, aprobadas: d.aprobadas, negadas: d.negadas, aplazadas: d.aplazadas };
+          if (filtroDesde && fechaFinNorm < filtroDesde) return false;
+          if (filtroHasta && fechaFinNorm > filtroHasta) return false;
+          return true;
         });
       }
     } catch (e) {
       Logger.log("Aviso: Error leyendo gestión biometría: " + e.message);
     }
-
-    gestion.tasaContacto = gestion.total > 0 ? Math.round((gestion.okLlamada / gestion.total) * 1000) / 10 : 0;
-    // "¿Sirve la llamada?": de las llamadas que SÍ conectaron (OK Llamada), qué % terminó aprobado.
-    // Cohorte-consistente: numerador y denominador salen de la misma fila (mismo grupo de casos).
-    gestion.tasaConversionLlamada = gestion.okLlamada > 0 ? Math.round((gestion.aprobadasConLlamada / gestion.okLlamada) * 1000) / 10 : 0;
 
     return {
       totalConsultadas: totalConsultadas,
@@ -1680,7 +1639,103 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
   }
 }
 
+function _gestionVacia() {
+  return { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, aprobadasConLlamada: 0, motivos: {}, tendencia: [], tasaContacto: 0, tasaConversionLlamada: 0 };
+}
+
+// Motor común del panel "Resultados de Gestión": agrega Historico_Gestiones filtrado por
+// tipoAsignado=DESAPLAZAMIENTO. `incluirFila(fila, fechaDia, fechaFinParte)` decide qué filas
+// cuentan — así el tablero (filtra por rango de fechas) y el buscador por solicitud (filtra por
+// número, sin importar la fecha) comparten exactamente el mismo cálculo de KPIs y tendencia diaria.
+function _agregarGestionBiometria(dataH, incluirFila) {
+  var gestion = _gestionVacia();
+  var gesTendMap = {};
+  for (var g = 1; g < dataH.length; g++) {
+    var tipoAsignadoH = String(dataH[g][60] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) { return { "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U" }[c] || c; }).trim();
+    if (tipoAsignadoH !== "DESAPLAZAMIENTO") continue;
+
+    var fechaFinH = String(dataH[g][26] || "").trim();
+    if (!fechaFinH) continue;
+
+    var fechaFinParte = fechaFinH.split(" ")[0];
+    var partes = fechaFinParte.split("/");
+    var fechaDia = partes.length === 3 ? partes[2] + "-" + partes[1] + "-" + partes[0] : fechaFinParte;
+
+    if (!incluirFila(dataH[g], fechaDia, fechaFinParte)) continue;
+
+    gestion.total++;
+
+    if (!gesTendMap[fechaDia]) gesTendMap[fechaDia] = { okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0 };
+
+    var resLlamada = String(dataH[g][38] || "").toUpperCase().trim();
+    if (resLlamada === "OK LLAMADA") { gestion.okLlamada++; gesTendMap[fechaDia].okLlamada++; }
+    else if (resLlamada === "NO CONTESTO") { gestion.noContesto++; gesTendMap[fechaDia].noContesto++; }
+
+    var resFinal = String(dataH[g][16] || "").toUpperCase().trim();
+    // aprobadasConLlamada exige AMBAS condiciones en la MISMA fila (mismo cohorte: llamadas
+    // que sí conectaron) — no mezclar con gestion.aprobadas, que cuenta todo aprobado sin
+    // importar si hubo o no contacto telefónico. Ver lección de cohorte-consistencia.
+    if (resLlamada === "OK LLAMADA" && resFinal === "APROBADO") gestion.aprobadasConLlamada++;
+    if (resFinal === "APROBADO") { gestion.aprobadas++; gesTendMap[fechaDia].aprobadas++; }
+    else if (resFinal === "RECHAZADO") { gestion.negadas++; gesTendMap[fechaDia].negadas++; }
+    else if (resFinal === "APLAZADO") {
+      gestion.aplazadas++; gesTendMap[fechaDia].aplazadas++;
+      var motivo = String(dataH[g][28] || "").trim();
+      if (motivo) gestion.motivos[motivo] = (gestion.motivos[motivo] || 0) + 1;
+    }
+  }
+  gestion.tendencia = Object.keys(gesTendMap).sort().map(function(f) {
+    var d = gesTendMap[f];
+    return { fecha: f, okLlamada: d.okLlamada, noContesto: d.noContesto, aprobadas: d.aprobadas, negadas: d.negadas, aplazadas: d.aplazadas };
+  });
+
+  gestion.tasaContacto = gestion.total > 0 ? Math.round((gestion.okLlamada / gestion.total) * 1000) / 10 : 0;
+  // "¿Sirve la llamada?": de las llamadas que SÍ conectaron (OK Llamada), qué % terminó aprobado.
+  // Cohorte-consistente: numerador y denominador salen de la misma fila (mismo grupo de casos).
+  gestion.tasaConversionLlamada = gestion.okLlamada > 0 ? Math.round((gestion.aprobadasConLlamada / gestion.okLlamada) * 1000) / 10 : 0;
+
+  return gestion;
+}
+
+// Panel "Resultados de Gestión" filtrado por número de Solicitud / Póliza en vez de por rango de
+// fechas — para que al buscar una solicitud puntual, ese panel refleje SU gestión (no el total del
+// período seleccionado). Misma llave y mismo criterio de match que buscarBiometriaSolicitud().
+function obtenerGestionBiometriaPorSolicitud(query) {
+  var q = String(query || "").trim().toLowerCase();
+  if (!q) return _gestionVacia();
+  try {
+    var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+    var hoja = ss.getSheetByName(SHEET_NAME_SOLICITUDES);
+    if (!hoja || hoja.getLastRow() < 2) return _gestionVacia();
+    var data = hoja.getDataRange().getDisplayValues();
+    return _agregarGestionBiometria(data, function(fila) {
+      var solicitud = String(fila[0] || "").trim().toLowerCase();
+      var poliza = String(fila[1] || "").trim().toLowerCase();
+      return solicitud.indexOf(q) !== -1 || poliza.indexOf(q) !== -1;
+    });
+  } catch (e) {
+    Logger.log("Error en obtenerGestionBiometriaPorSolicitud: " + e.message);
+    return _gestionVacia();
+  }
+}
+
+// Búsqueda unificada por número de Solicitud / Póliza — esa es la llave que enlaza las 3 hojas
+// del ciclo de biometría (ver biometria-dashboard-arquitectura): una solicitud vive SIEMPRE en
+// pendiente_biometria (nunca se borra), vive en "solicitud" SOLO mientras espera analista (se borra
+// al asignarse) y vive en Historico_Gestiones SOLO desde que se asigna en adelante. Por diseño una
+// misma solicitud rara vez aparece en más de una de las 3 a la vez, pero se consultan las 3 con el
+// mismo input para no obligar al usuario a saber en qué etapa está antes de buscar.
 function buscarBiometriaSolicitud(query) {
+  var q = String(query || "").trim().toLowerCase();
+  if (!q) return { broadcast: [], cola: [], gestion: [] };
+  return {
+    broadcast: _buscarBioBroadcast(q),
+    cola: _buscarBioCola(q),
+    gestion: _buscarBioGestion(q)
+  };
+}
+
+function _buscarBioBroadcast(q) {
   try {
     var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
     var hoja = ss.getSheetByName("pendiente_biometria");
@@ -1699,9 +1754,6 @@ function buscarBiometriaSolicitud(query) {
     var cEB = colMap["estado_brodcast"] != null ? colMap["estado_brodcast"] : -1;
     var cNE = colMap["nuevo_estado_sai"] != null ? colMap["nuevo_estado_sai"] : -1;
     var cFS = colMap["fase_seguimiento_biometria"] != null ? colMap["fase_seguimiento_biometria"] : -1;
-
-    var q = String(query || "").trim().toLowerCase();
-    if (!q) return [];
 
     var resultados = [];
     for (var i = 1; i < data.length; i++) {
@@ -1733,7 +1785,84 @@ function buscarBiometriaSolicitud(query) {
 
     return resultados;
   } catch (e) {
-    Logger.log("Error en buscarBiometriaSolicitud: " + e.message);
+    Logger.log("Error en _buscarBioBroadcast: " + e.message);
+    return [];
+  }
+}
+
+// Estado Cola de Asignación: hoja "solicitud" — solo existe mientras la solicitud espera analista
+// (mismo criterio de obtenerDetalleBiometriaPorTarjeta('colaAsignacion'), filtrado a la búsqueda).
+function _buscarBioCola(q) {
+  try {
+    var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+    var hoja = ss.getSheetByName("solicitud");
+    if (!hoja || hoja.getLastRow() < 2) return [];
+
+    var data = hoja.getDataRange().getDisplayValues();
+    var resultados = [];
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][0] || "").trim();
+      var poliza = String(data[i][1] || "").trim();
+      if (!solicitud) continue;
+      if (solicitud.toLowerCase().indexOf(q) === -1 && poliza.toLowerCase().indexOf(q) === -1) continue;
+
+      var estadoGen = String(data[i][16] || "").toUpperCase().replace(/\s+/g, '_').trim();
+      if (estadoGen.indexOf("APROBADO_PENDIENTE_BIOMETRIA") === -1) continue;
+
+      resultados.push({
+        solicitud: solicitud,
+        poliza: poliza,
+        nombreInquilino: String(data[i][4] || "").trim(),
+        fechaConsulta: String(data[i][17] || "").trim(),
+        fechaActualizacionFase: String(data[i][18] || "").trim(),
+        estadoGeneral: estadoGen
+      });
+      if (resultados.length >= 50) break;
+    }
+    return resultados;
+  } catch (e) {
+    Logger.log("Error en _buscarBioCola: " + e.message);
+    return [];
+  }
+}
+
+// Estado Gestión: Historico_Gestiones filtrado por tipoAsignado=DESAPLAZAMIENTO (col 60), NO por
+// clase=BIOMETRIA (ver biometria-dashboard-arquitectura). nombreInquilino usa col 4, igual que en
+// pendiente_biometria y "solicitud" (la fila se mueve tal cual desde "solicitud" al asignarse).
+function _buscarBioGestion(q) {
+  try {
+    var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+    var hoja = ss.getSheetByName(SHEET_NAME_SOLICITUDES);
+    if (!hoja || hoja.getLastRow() < 2) return [];
+
+    var data = hoja.getDataRange().getDisplayValues();
+    var resultados = [];
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][0] || "").trim();
+      var poliza = String(data[i][1] || "").trim();
+      if (!solicitud) continue;
+      if (solicitud.toLowerCase().indexOf(q) === -1 && poliza.toLowerCase().indexOf(q) === -1) continue;
+
+      var tipoAsignado = String(data[i][60] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) { return { "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U" }[c] || c; }).trim();
+      if (tipoAsignado !== "DESAPLAZAMIENTO") continue;
+
+      var minutosGestionRaw = String(data[i][35] || "").trim();
+      var minutosGestionNum = parseFloat(minutosGestionRaw.replace(',', '.'));
+
+      resultados.push({
+        solicitud: solicitud,
+        poliza: poliza,
+        nombreInquilino: String(data[i][4] || "").trim(),
+        fechaAsignacion: String(data[i][24] || "").trim(),
+        nombreAnalista: String(data[i][27] || "").trim(),
+        minutosGestion: isNaN(minutosGestionNum) ? null : minutosGestionNum,
+        estadoGeneral: String(data[i][16] || "").toUpperCase().trim()
+      });
+      if (resultados.length >= 50) break;
+    }
+    return resultados;
+  } catch (e) {
+    Logger.log("Error en _buscarBioGestion: " + e.message);
     return [];
   }
 }

@@ -626,6 +626,9 @@
                 <button class="btn-primary-brand" onclick="ejecutarBusquedaBiometria()" style="border-radius:10px;padding:8px 18px;">
                     <i class="bi bi-search"></i> Buscar
                 </button>
+                <button class="btn-outline-brand" onclick="limpiarBusquedaYFiltrosBiometria()" style="border-radius:10px;padding:8px 18px;font-size:0.8rem;" title="Quita el rango de fechas y la búsqueda, vuelve al período completo">
+                    <i class="bi bi-eraser"></i> Limpiar búsqueda y filtros
+                </button>
                 <div class="d-flex gap-2 ms-auto">
                     <button class="btn-outline-brand" onclick="setBioRangoRapido('hoy')" style="padding:6px 14px;font-size:0.75rem;">Hoy</button>
                     <button class="btn-outline-brand" onclick="setBioRangoRapido('semana')" style="padding:6px 14px;font-size:0.75rem;">Esta semana</button>
@@ -635,16 +638,45 @@
                 </div>
             </div>
 
-            <!-- Resultados búsqueda individual -->
-            <div id="resultadosBioBusqueda" style="display:none;">
+            <!-- Resultados búsqueda individual — 3 tablas, misma llave (número de Solicitud), una por
+                 etapa del ciclo: Broadcast (pendiente_biometria, nunca se borra), Cola de Asignación
+                 (hoja "solicitud", solo mientras espera analista) y Gestión (Historico_Gestiones,
+                 desde que se asigna en adelante). Cada una se muestra solo si tiene resultados. -->
+            <div id="resultadosBioBusquedaBroadcast" style="display:none;">
                 <div class="table-container mb-4">
-                    <div class="table-header"><div><div class="table-title"><i class="bi bi-search me-2" style="color:var(--azul);"></i>Resultados de Búsqueda</div></div>
+                    <div class="table-header"><div><div class="table-title"><i class="bi bi-broadcast me-2" style="color:var(--azul);"></i>Estado Broadcast</div></div>
                         <button class="btn-outline-brand" onclick="limpiarBusquedaBiometria()" style="padding:6px 14px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-x-circle me-1"></i>Cerrar búsqueda</button>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm align-middle" style="font-size:0.82rem;width:100%;">
                             <thead><tr><th style="white-space:nowrap;">Solicitud</th><th>Inquilino</th><th style="white-space:nowrap;">F. Consulta</th><th style="white-space:nowrap;">Broadcast</th><th style="white-space:nowrap;">Fase</th><th style="white-space:nowrap;">Actualización</th><th class="text-center" style="white-space:nowrap;">Dest.</th></tr></thead>
                             <tbody id="cuerpoBioBusqueda"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div id="resultadosBioBusquedaCola" style="display:none;">
+                <div class="table-container mb-4">
+                    <div class="table-header"><div><div class="table-title"><i class="bi bi-hourglass-split me-2" style="color:var(--rojo);"></i>Estado Cola de Asignación</div></div>
+                        <button class="btn-outline-brand" onclick="limpiarBusquedaBiometria()" style="padding:6px 14px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-x-circle me-1"></i>Cerrar búsqueda</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle" style="font-size:0.82rem;width:100%;">
+                            <thead><tr><th style="white-space:nowrap;">Solicitud</th><th>Inquilino</th><th style="white-space:nowrap;">F. Consulta</th><th style="white-space:nowrap;">Actualización</th><th>Estado</th></tr></thead>
+                            <tbody id="cuerpoBioBusquedaCola"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div id="resultadosBioBusquedaGestion" style="display:none;">
+                <div class="table-container mb-4">
+                    <div class="table-header"><div><div class="table-title"><i class="bi bi-telephone me-2" style="color:var(--azul);"></i>Estado Gestión</div></div>
+                        <button class="btn-outline-brand" onclick="limpiarBusquedaBiometria()" style="padding:6px 14px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-x-circle me-1"></i>Cerrar búsqueda</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle" style="font-size:0.82rem;width:100%;">
+                            <thead><tr><th style="white-space:nowrap;">Solicitud</th><th>Inquilino</th><th style="white-space:nowrap;">F. Asignación</th><th>Analista</th><th class="text-center" style="white-space:nowrap;">Min. Gestión</th><th>Estado</th></tr></thead>
+                            <tbody id="cuerpoBioBusquedaGestion"></tbody>
                         </table>
                     </div>
                 </div>
@@ -727,7 +759,7 @@
 
             <!-- Resultados de Gestión -->
             <div id="bioAnclaGestion" class="table-container mb-4" style="border-left:4px solid var(--azul);">
-                <div class="table-title mb-1"><i class="bi bi-telephone me-2" style="color:var(--azul);"></i>Resultados de Gestión<span class="btn-help-chart" onclick="ayudaGrafico('bioGestion')">?</span></div>
+                <div class="table-title mb-1"><i class="bi bi-telephone me-2" style="color:var(--azul);"></i>Resultados de Gestión<span class="btn-help-chart" onclick="ayudaGrafico('bioGestion')">?</span> <span id="bioGestionScope" class="bio-rango-badge" style="display:none;background:var(--rojo);color:#fff;"></span></div>
                 <div class="table-sub mb-3">Resultado de las llamadas y gestión de solicitudes de biometría asignadas a analistas</div>
 
                 <!-- KPIs Gestión -->

@@ -1236,6 +1236,16 @@ var _biometriaCargada = false;
 var chartBioEfectividad = null, chartBioTendencia = null, chartBioTasaTendencia = null;
 var chartBioResLlamada = null, chartBioResFinal = null, chartBioMotivos = null;
 var chartBioLlamadasDia = null, chartBioResultadoDia = null;
+var _ultimoGestionPeriodo = null;
+
+// "Resultados de Gestión" comparte panel entre el total del período y una solicitud puntual —
+// este badge dice cuál de los dos se está mostrando en este momento.
+function _setBioGestionScope(texto) {
+    var el = document.getElementById('bioGestionScope');
+    if (!el) return;
+    if (texto) { el.textContent = texto; el.style.display = 'inline-block'; }
+    else { el.style.display = 'none'; }
+}
 
 function _fmtRangoBio() {
     var desde = document.getElementById('bioFiltroDesde').value || '';
@@ -1269,7 +1279,9 @@ function onDatosBiometriaCargados(d) {
     _biometriaCargada = true;
     document.getElementById('biometriaSpinner').style.display = 'none';
     document.getElementById('biometriaContenido').style.display = 'block';
-    document.getElementById('resultadosBioBusqueda').style.display = 'none';
+    document.getElementById('resultadosBioBusquedaBroadcast').style.display = 'none';
+    document.getElementById('resultadosBioBusquedaCola').style.display = 'none';
+    document.getElementById('resultadosBioBusquedaGestion').style.display = 'none';
     document.getElementById('sinResultadosBio').style.display = 'none';
     _splashCompletarDatosYPanel();
 
@@ -1310,7 +1322,11 @@ function onDatosBiometriaCargados(d) {
     renderBioEfectividad(d.tendencia);
     renderBioTendencia(d.tendencia);
     renderBioTasaTendencia(d.tendencia);
-    if (d.gestion) renderBioGestion(d.gestion);
+    if (d.gestion) {
+        _ultimoGestionPeriodo = d.gestion;
+        renderBioGestion(d.gestion);
+        _setBioGestionScope('');
+    }
 }
 
 function renderBioEfectividad(tend) {
@@ -1474,14 +1490,25 @@ function renderBioGestion(g) {
 function ejecutarBusquedaBiometria() {
     var q = (document.getElementById('buscarBioSolicitud').value || '').trim();
     if (!q) { Swal.fire({ icon: 'warning', title: 'Búsqueda vacía', text: 'Escribe un número de solicitud o póliza' }); return; }
-    document.getElementById('resultadosBioBusqueda').style.display = 'none';
+    ['resultadosBioBusquedaBroadcast', 'resultadosBioBusquedaCola', 'resultadosBioBusquedaGestion'].forEach(function(id) {
+        document.getElementById(id).style.display = 'none';
+    });
     document.getElementById('sinResultadosBio').style.display = 'none';
-    document.getElementById('cuerpoBioBusqueda').innerHTML = '<tr><td colspan="8" class="text-center py-3"><div class="spinner-border spinner-border-sm" role="status" style="color:var(--rojo);"></div> Buscando...</td></tr>';
-    document.getElementById('resultadosBioBusqueda').style.display = 'block';
+    document.getElementById('resultadosBioBusquedaBroadcast').style.display = 'block';
+    document.getElementById('cuerpoBioBusqueda').innerHTML = '<tr><td colspan="7" class="text-center py-3"><div class="spinner-border spinner-border-sm" role="status" style="color:var(--rojo);"></div> Buscando...</td></tr>';
     google.script.run.withSuccessHandler(renderBioResultados).withFailureHandler(function(e) {
-        document.getElementById('resultadosBioBusqueda').style.display = 'none';
+        document.getElementById('resultadosBioBusquedaBroadcast').style.display = 'none';
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
     }).buscarBiometriaSolicitud(q);
+
+    // "Resultados de Gestión" usa la misma llave (Solicitud/Póliza) — se actualiza en paralelo
+    // para reflejar SOLO esta solicitud mientras dure la búsqueda.
+    google.script.run.withSuccessHandler(function(g) {
+        renderBioGestion(g);
+        _setBioGestionScope('Filtrado por búsqueda: "' + q + '"');
+    }).withFailureHandler(function(e) {
+        Logger.log && Logger.log('Error gestión por solicitud: ' + e.message);
+    }).obtenerGestionBiometriaPorSolicitud(q);
 }
 
 function _filaBioTr(r) {
@@ -1512,16 +1539,46 @@ function _filaBioTr(r) {
     return '<tr><td class="fw-bold" style="' + nw + '">' + esc(r.solicitud) + '</td><td>' + esc(r.nombre) + '</td><td style="' + nw + '">' + esc(fConsulta) + '</td><td>' + badgeBrod + '</td><td>' + badgeRes + '</td><td style="' + nw + '">' + esc(fActualiz || '—') + '</td><td class="text-center" style="' + nw + '">' + (r.destinatarios || 0) + '</td></tr>';
 }
 
-function renderBioResultados(detalle) {
-    if (!detalle || detalle.length === 0) {
-        document.getElementById('resultadosBioBusqueda').style.display = 'none';
+function _badgeEstadoGestion(estado) {
+    var e = (estado || '').toUpperCase();
+    if (e === 'APROBADO') return '<span style="background:#d1fae5;color:#059669;padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;"><i class="bi bi-check-circle me-1"></i>Aprobado</span>';
+    if (e === 'RECHAZADO') return '<span style="background:#fde8e8;color:#BD0F14;padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;"><i class="bi bi-x-circle me-1"></i>Rechazado</span>';
+    if (e === 'APLAZADO') return '<span style="background:#fef3c7;color:#d97706;padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;"><i class="bi bi-clock-history me-1"></i>Aplazado</span>';
+    if (e) return '<span style="color:var(--text-muted);font-size:0.7rem;">' + esc(e) + '</span>';
+    return '<span style="color:var(--text-light);font-size:0.7rem;">—</span>';
+}
+
+function _filaBioColaTr(r) {
+    var nw = 'white-space:nowrap;';
+    return '<tr><td class="fw-bold" style="' + nw + '">' + esc(r.solicitud) + '</td><td>' + esc(r.nombreInquilino) + '</td><td style="' + nw + '">' + esc(r.fechaConsulta || '—') + '</td><td style="' + nw + '">' + esc(r.fechaActualizacionFase || '—') + '</td><td>' + _badgeEstadoGestion(r.estadoGeneral) + '</td></tr>';
+}
+
+function _filaBioGestionTr(r) {
+    var nw = 'white-space:nowrap;';
+    return '<tr><td class="fw-bold" style="' + nw + '">' + esc(r.solicitud) + '</td><td>' + esc(r.nombreInquilino) + '</td><td style="' + nw + '">' + esc(r.fechaAsignacion || '—') + '</td><td>' + esc(r.nombreAnalista || '—') + '</td><td class="text-center" style="' + nw + '">' + formatearDuracion(r.minutosGestion) + '</td><td>' + _badgeEstadoGestion(r.estadoGeneral) + '</td></tr>';
+}
+
+function renderBioResultados(resultado) {
+    resultado = resultado || { broadcast: [], cola: [], gestion: [] };
+    var broadcast = resultado.broadcast || [], cola = resultado.cola || [], gestion = resultado.gestion || [];
+
+    if (broadcast.length === 0 && cola.length === 0 && gestion.length === 0) {
+        document.getElementById('resultadosBioBusquedaBroadcast').style.display = 'none';
+        document.getElementById('resultadosBioBusquedaCola').style.display = 'none';
+        document.getElementById('resultadosBioBusquedaGestion').style.display = 'none';
         document.getElementById('sinResultadosBio').style.display = 'block';
         return;
     }
     document.getElementById('sinResultadosBio').style.display = 'none';
-    document.getElementById('resultadosBioBusqueda').style.display = 'block';
-    var tb = document.getElementById('cuerpoBioBusqueda');
-    tb.innerHTML = detalle.map(_filaBioTr).join('');
+
+    document.getElementById('resultadosBioBusquedaBroadcast').style.display = broadcast.length ? 'block' : 'none';
+    document.getElementById('cuerpoBioBusqueda').innerHTML = broadcast.map(_filaBioTr).join('');
+
+    document.getElementById('resultadosBioBusquedaCola').style.display = cola.length ? 'block' : 'none';
+    document.getElementById('cuerpoBioBusquedaCola').innerHTML = cola.map(_filaBioColaTr).join('');
+
+    document.getElementById('resultadosBioBusquedaGestion').style.display = gestion.length ? 'block' : 'none';
+    document.getElementById('cuerpoBioBusquedaGestion').innerHTML = gestion.map(_filaBioGestionTr).join('');
 }
 
 var _BIO_DRILLDOWN_TITULOS = {
@@ -1558,8 +1615,27 @@ function drilldownBio(tipo) {
 
 function limpiarBusquedaBiometria() {
     document.getElementById('buscarBioSolicitud').value = '';
-    document.getElementById('resultadosBioBusqueda').style.display = 'none';
+    document.getElementById('resultadosBioBusquedaBroadcast').style.display = 'none';
+    document.getElementById('resultadosBioBusquedaCola').style.display = 'none';
+    document.getElementById('resultadosBioBusquedaGestion').style.display = 'none';
     document.getElementById('sinResultadosBio').style.display = 'none';
+    if (_ultimoGestionPeriodo) renderBioGestion(_ultimoGestionPeriodo);
+    _setBioGestionScope('');
+}
+
+// Resetea filtros de fecha + búsqueda en un solo botón. Solo pide datos al servidor si el rango
+// de fechas realmente tenía algo que limpiar (Cascada/Ciclo/Tendencia/Cola dependen del rango y
+// no están cacheados en cliente) — si lo único activo era la búsqueda, basta con restaurar
+// "Resultados de Gestión" desde _ultimoGestionPeriodo, sin round-trip al servidor.
+function limpiarBusquedaYFiltrosBiometria() {
+    var habiaFiltroFecha = !!(document.getElementById('bioFiltroDesde').value || document.getElementById('bioFiltroHasta').value);
+    document.getElementById('bioFiltroDesde').value = '';
+    document.getElementById('bioFiltroHasta').value = '';
+    if (habiaFiltroFecha) {
+        cargarDatosBiometria();
+    } else {
+        limpiarBusquedaBiometria();
+    }
 }
 
 // === CONTROL DE ACCESO ===
