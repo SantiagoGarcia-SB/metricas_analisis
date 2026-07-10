@@ -600,9 +600,8 @@
             <div class="mini-nav">
                 <span class="mini-nav-chip" onclick="document.getElementById('bioConversionBanner').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-graph-up-arrow me-1"></i>Conversión</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaEnVivo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-broadcast me-1"></i>En Vivo</span>
-                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaCascada').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-diagram-3 me-1"></i>Cascada</span>
-                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaCiclo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-calendar-check me-1"></i>Ciclo del Período</span>
-                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaTendenciaDia').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-calendar3 me-1"></i>Tendencia por Día</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaCiclo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-activity me-1"></i>Operación</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaTendenciaDia').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-funnel me-1"></i>Cohorte</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaGestion').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-telephone me-1"></i>Gestión</span>
             </div>
 
@@ -686,12 +685,24 @@
             <!-- ══════════════ TABLERO BIOMETRÍA — corporativo, en vivo + ciclo de hoy ══════════════ -->
 
             <!-- Tasa de Conversión: métrica principal -->
-            <div class="bio-conversion-banner bio-conv-bad" id="bioConversionBanner">
-                <div>
-                    <div class="bio-conversion-label"><i class="bi bi-graph-up-arrow me-1"></i>Tasa de Conversión <span class="btn-help-chart" onclick="ayudaGrafico('bioTasaConversion')" style="color:rgba(255,255,255,0.8);">?</span></div>
-                    <div class="bio-conversion-sub">De los WA enviados, % que se aprobó SOLO con el mensaje — sin pasar por un analista</div>
+            <div class="bio-conversion-banner bio-conv-bad" id="bioConversionBanner" style="display:flex;gap:24px;align-items:center;justify-content:space-between;">
+                <div style="flex:1;text-align:center;">
+                    <div class="bio-conversion-label"><i class="bi bi-graph-up-arrow me-1"></i>Tasa Conversión WA</div>
+                    <div class="bio-conversion-sub">De los WA enviados, % que se resolvió solo con el mensaje</div>
+                    <div class="bio-conversion-value" id="bioTasaConversion" style="margin-top:4px;">0%</div>
                 </div>
-                <div class="bio-conversion-value" id="bioTasaConversion">0%</div>
+                <div style="width:1px;align-self:stretch;background:rgba(255,255,255,0.3);"></div>
+                <div style="flex:1;text-align:center;">
+                    <div class="bio-conversion-label"><i class="bi bi-person-check me-1"></i>Tasa Resolución sin WA</div>
+                    <div class="bio-conversion-sub">De las capturadas, % que se resolvió sin necesitar mensaje</div>
+                    <div class="bio-conversion-value" id="bioTasaResolucionSinWA" style="margin-top:4px;">0%</div>
+                </div>
+                <div style="width:1px;align-self:stretch;background:rgba(255,255,255,0.3);"></div>
+                <div style="flex:1;text-align:center;">
+                    <div class="bio-conversion-label"><i class="bi bi-telephone me-1"></i>Conversión Llamada</div>
+                    <div class="bio-conversion-sub">De las llamadas exitosas, % que terminó aprobada</div>
+                    <div class="bio-conversion-value" id="bioTasaConversionLlamada" style="margin-top:4px;">0%</div>
+                </div>
             </div>
 
             <!-- En vivo: no dependen del rango de fechas -->
@@ -713,33 +724,29 @@
                 </div>
             </div>
 
-            <!-- Cascada estricta: mismo grupo que "Consultadas SAI", cierra exacto -->
-            <div id="bioAnclaCascada" class="bio-ciclo-section-title"><i class="bi bi-diagram-3 me-1"></i>Cascada Estricta del Período <span id="bioRangoTexto1" class="bio-rango-badge"></span> — mismo grupo que Consultadas SAI <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionCascada')">?</span></div>
+            <!-- MÉTRICAS DEL PERÍODO — el flujo como lo lee la operación -->
+            <div id="bioAnclaCiclo" class="bio-ciclo-section-title"><i class="bi bi-activity me-1"></i>Métricas del Período <span id="bioRangoTexto1" class="bio-rango-badge"></span> <span id="bioRangoTexto2" class="bio-rango-badge" style="display:none;"></span></div>
+
             <div class="bio-ciclo-row bio-ciclo-row-3">
-                <div class="bio-ciclo-card bio-c-azul" style="cursor:pointer;" onclick="drilldownBio('cascadaSinIniciar')"><div class="bio-ciclo-label"><i class="bi bi-hourglass me-1"></i>Sin Iniciar <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioCascadaSinIniciar')">?</span></div><div class="bio-ciclo-value" id="bioCascadaSinIniciar">0</div><div class="bio-ciclo-sub">Aún no llega su corte</div></div>
-                <div class="bio-ciclo-card bio-c-azul" style="cursor:pointer;" onclick="drilldownBio('cascadaResueltasSinWA')"><div class="bio-ciclo-label"><i class="bi bi-person-check me-1"></i>Resueltas sin WA <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioCascadaResueltasSinWA')">?</span></div><div class="bio-ciclo-value" id="bioCascadaResueltasSinWA">0</div><div class="bio-ciclo-sub">De lo que ENTRÓ en el período, cuánto ya se resolvió solo</div></div>
-                <div class="bio-ciclo-card bio-c-azul" style="cursor:pointer;" onclick="drilldownBio('cascadaEnviadas')"><div class="bio-ciclo-label"><i class="bi bi-whatsapp me-1" style="color:#25D366;"></i>Ya Enviadas <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioCascadaEnviadas')">?</span></div><div class="bio-ciclo-value" id="bioCascadaEnviadas">0</div><div class="bio-ciclo-sub">Del período, ya tienen WA enviado</div></div>
+                <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('cicloConsultadas')"><div class="bio-ciclo-label"><i class="bi bi-search me-1"></i>Consultadas SAI</div><div class="bio-ciclo-value" id="bioMetConsultadas">0</div><div class="bio-ciclo-sub">Solicitudes consultadas en SAI</div></div>
+                <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('cascadaSinIniciar')"><div class="bio-ciclo-label"><i class="bi bi-hourglass me-1"></i>Esperando 4h</div><div class="bio-ciclo-value" id="bioMetSinIniciar">0</div><div class="bio-ciclo-sub">Esperando para enviar WA</div></div>
+                <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('cicloEnviados')"><div class="bio-ciclo-label"><i class="bi bi-whatsapp me-1" style="color:#25D366;"></i>WA Enviados</div><div class="bio-ciclo-value" id="bioMetEnviados">0</div><div class="bio-ciclo-sub">Mensajes ya enviados</div></div>
             </div>
-            <div class="table-sub mb-4" style="margin-top:-10px;">Estas 3 tarjetas son el desglose exacto de "Consultadas SAI" — no se solapan ni dejan casos por fuera. <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionCascada')" style="margin-left:0;">?</span></div>
-
-            <!-- Ciclo del período seleccionado (hoy por defecto) -->
-            <div id="bioAnclaCiclo" class="bio-ciclo-section-title"><i class="bi bi-calendar-check me-1"></i>Ciclo del Período <span id="bioRangoTexto2" class="bio-rango-badge"></span> — actividad real, incluye arrastre de fuera del rango <span class="btn-help-chart" onclick="ayudaGrafico('bioSeccionCiclo')">?</span></div>
-            <div class="bio-ciclo-row bio-ciclo-row-5">
-                <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('cicloConsultadas')"><div class="bio-ciclo-label"><i class="bi bi-search me-1"></i>Consultadas SAI <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioConsultadas')">?</span></div><div class="bio-ciclo-value" id="bioCicloConsultadas">0</div><div class="bio-ciclo-sub">Traídas del API en el período</div></div>
-                <div class="bio-ciclo-card bio-c-azul" style="cursor:pointer;" onclick="drilldownBio('cicloResueltasSinWA')"><div class="bio-ciclo-label"><i class="bi bi-person-check me-1"></i>Resueltas sin WhatsApp <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioActResueltasSinWA')">?</span></div><div class="bio-ciclo-value" id="bioCicloResueltasSinWA">0</div><div class="bio-ciclo-sub">Se resolvieron solas EN el período, sin importar cuándo entraron</div></div>
-                <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('cicloEnviados')"><div class="bio-ciclo-label"><i class="bi bi-whatsapp me-1" style="color:#25D366;"></i>WA Enviados <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioActEnviados')">?</span></div><div class="bio-ciclo-value" id="bioCicloEnviados">0</div><div class="bio-ciclo-sub">Mensajes enviados en el período</div></div>
-                <div class="bio-ciclo-card bio-c-verde" style="cursor:pointer;" onclick="drilldownBio('cicloResueltasConWA')"><div class="bio-ciclo-label"><i class="bi bi-check-circle me-1"></i>Resueltas por WhatsApp <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioActResueltasWA')">?</span></div><div class="bio-ciclo-value" id="bioCicloResueltasConWA">0</div><div class="bio-ciclo-sub">Ya no están pendientes</div></div>
-                <div class="bio-ciclo-card bio-c-rojo" style="cursor:pointer;" onclick="drilldownBio('cicloEscaladas')"><div class="bio-ciclo-label"><i class="bi bi-arrow-up-right-circle me-1"></i>Escaladas a Análisis <span class="btn-help-chart" onclick="event.stopPropagation();ayudaGrafico('bioActEscaladas')">?</span></div><div class="bio-ciclo-value" id="bioCicloEscaladas">0</div><div class="bio-ciclo-sub">Siguen pendientes, van a analista</div></div>
+            <div class="bio-ciclo-row bio-ciclo-row-4" style="margin-top:0.5rem;">
+                <div class="bio-ciclo-card bio-c-verde" style="cursor:pointer;" onclick="drilldownBio('cicloResueltasSinWA')"><div class="bio-ciclo-label"><i class="bi bi-person-check me-1"></i>Resueltas sin WA</div><div class="bio-ciclo-value" id="bioMetResueltasSinWA">0</div><div class="bio-ciclo-sub">Se resolvieron sin enviar mensaje</div></div>
+                <div class="bio-ciclo-card bio-c-verde" style="cursor:pointer;" onclick="drilldownBio('cicloResueltasConWA')"><div class="bio-ciclo-label"><i class="bi bi-check-circle me-1"></i>Resueltas por WA</div><div class="bio-ciclo-value" id="bioMetResueltasConWA">0</div><div class="bio-ciclo-sub">Se resolvieron tras el WA, sin escalar</div></div>
+                <div class="bio-ciclo-card bio-c-rojo" style="cursor:pointer;" onclick="drilldownBio('cicloEscaladas')"><div class="bio-ciclo-label"><i class="bi bi-arrow-up-right-circle me-1"></i>Enviadas a Cola</div><div class="bio-ciclo-value" id="bioMetEscaladas">0</div><div class="bio-ciclo-sub">Escaladas a cola de análisis</div></div>
+                <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('archivadas')"><div class="bio-ciclo-label"><i class="bi bi-archive me-1"></i>Archivadas</div><div class="bio-ciclo-value" id="bioMetArchivadas">0</div><div class="bio-ciclo-sub">Vencidas (&gt;12h sin asignar)</div></div>
             </div>
 
-            <!-- Actividad operativa por día (por fecha real de cada evento) -->
+            <!-- Tendencia por día -->
             <div id="bioAnclaTendenciaDia" class="bio-kpi-section-title mt-4" style="font-size:0.85rem;"><i class="bi bi-calendar3"></i>Tendencia por Día</div>
-            <div class="table-sub mb-3">Evolución diaria de las mismas cifras de "Ciclo del Período" — útil para ver el rango de fechas completo día por día, no solo el total.</div>
+            <div class="table-sub mb-3">Evolución diaria.</div>
 
             <!-- Resultado Broadcast por día -->
             <div class="table-container mb-4" style="margin-top:0;">
                 <div class="table-title mb-2"><i class="bi bi-bar-chart-steps me-2" style="color:var(--azul);"></i>Resultado del Broadcast por Día<span class="btn-help-chart" onclick="ayudaGrafico('bioEfectividad')">?</span></div>
-                <div class="table-sub mb-3">Resuelta por WA (verde) vs Resuelta sin WhatsApp (azul) vs Escalada (naranja)</div>
+                <div class="table-sub mb-3">Resuelta por WA (verde) vs Resuelta sin WhatsApp (azul) vs Asignada / Resuelta en Cola / Archivada / Escalada pendiente</div>
                 <div style="position:relative;height:200px;"><canvas id="chartBioEfectividad"></canvas></div>
             </div>
 

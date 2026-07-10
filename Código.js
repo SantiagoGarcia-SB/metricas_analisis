@@ -1434,7 +1434,7 @@ function obtenerColaAsignacion() {
 }
 
 function obtenerDatosBiometria(fechaDesde, fechaHasta) {
-  var vacio = { totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalProcesadas: 0, totalSinIniciar: 0, faltanRevisar: 0, esperandoCorte: 0, totalEnEspera: 0, totalEscaladas: 0, colaActual: 0, totalResueltas: 0, resueltasConWA: 0, resueltasSinWA: 0, enviadasYResueltas: 0, enviadasYEscaladas: 0, cohorteResueltasSinWA: 0, cohorteEnviadas: 0, tasaEnvio: 0, tasaConversion: 0, tendencia: [], gestion: { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, motivos: {}, tasaContacto: 0 } };
+  var vacio = { totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalProcesadas: 0, totalSinIniciar: 0, faltanRevisar: 0, esperandoCorte: 0, totalEnEspera: 0, totalEscaladas: 0, totalAsignadas: 0, totalResueltasEnCola: 0, totalArchivadas: 0, tasaEfectividadCola: 0, colaActual: 0, totalResueltas: 0, resueltasConWA: 0, resueltasSinWA: 0, enviadasYResueltas: 0, enviadasYEscaladas: 0, cohorteResueltasSinWA: 0, cohorteEnviadas: 0, cohorteEnEspera: 0, cohorteResueltasConWA: 0, cohorteEscaladas: 0, cohorteAsignadas: 0, cohorteResueltasEnCola: 0, cohorteArchivadas: 0, tasaEnvio: 0, tasaConversion: 0, tendencia: [], gestion: { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, motivos: {}, tasaContacto: 0 } };
 
   // Cola de asignación en vivo: viene de la hoja "solicitud" (sin filtro de fecha), no de
   // pendiente_biometria. Es la fuente autoritativa del backlog real, independiente del
@@ -1475,6 +1475,9 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
     //                  para su primer contacto (cicloPrimerContactoBiometria, corre cada hora)
     //   WA_ENVIADO  -> ya tuvo su oportunidad de WhatsApp, espera el corte de escalación (8am/12m)
     //   ESCALADA    -> no completó biometría tras el mensaje, pasa a cola de analista
+    //   ASIGNADA    -> un analista la tomó de la cola
+    //   RESUELTA_EN_COLA -> SAI dejó de reportar pendiente sin que nadie la tomara
+    //   ARCHIVADA   -> se venció en cola >12h sin ser asignada
     //   RESUELTA    -> completó biometría (con o sin haber recibido el mensaje; también la puede
     //                  cerrar la verificación diaria de las 16:00-17:00)
     //
@@ -1486,6 +1489,7 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
     // bien ubicado en el día real de su desenlace, no perdido en el día de la consulta.
     var totalConsultadas = 0, totalEnviados = 0, totalNoEnviados = 0;
     var totalSinIniciar = 0, totalEnEspera = 0, totalEscaladas = 0;
+    var totalAsignadas = 0, totalResueltasEnCola = 0, totalArchivadas = 0;
     var resueltasConWA = 0, resueltasSinWA = 0;
     // Cohorte-consistentes: de las ENVIADAS por fecha de envío (mismo grupo que "WA Enviados"),
     // cuántas están AHORA MISMO en cada estado — sin importar cuándo cambiaron de fase. Esto
@@ -1500,6 +1504,12 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
     // Consultadas = Sin Iniciar + Resueltas sin WA (cohorte) + Enviadas (cohorte) cierre exacto.
     var cohorteResueltasSinWA = 0;
     var cohorteEnviadas = 0;
+    var cohorteEnEspera = 0;
+    var cohorteResueltasConWA = 0;
+    var cohorteEscaladas = 0;
+    var cohorteAsignadas = 0;
+    var cohorteResueltasEnCola = 0;
+    var cohorteArchivadas = 0;
 
     // En vivo, SIN filtro de fecha (igual que Cola de Asignación): cuántas filas siguen con
     // fase_seguimiento_biometria vacía ahora mismo, esperando su primer corte de revisión.
@@ -1531,7 +1541,7 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
     }
     function _bucket(dayKey, campo) {
       if (!dayKey) return;
-      if (!tendenciaMap[dayKey]) tendenciaMap[dayKey] = { consultadas: 0, enviados: 0, resueltasConWA: 0, resueltasSinWA: 0, escaladas: 0, enEspera: 0, sinIniciar: 0, enviadasYResueltas: 0 };
+      if (!tendenciaMap[dayKey]) tendenciaMap[dayKey] = { consultadas: 0, enviados: 0, resueltasConWA: 0, resueltasSinWA: 0, escaladas: 0, asignadas: 0, resueltasEnCola: 0, archivadas: 0, enEspera: 0, sinIniciar: 0, enviadasYResueltas: 0 };
       tendenciaMap[dayKey][campo]++;
     }
 
@@ -1554,16 +1564,23 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
         _bucket(consultaParte, 'consultadas');
         if (fase === "") { totalSinIniciar++; _bucket(consultaParte, 'sinIniciar'); }
         else if (fase === "RESUELTA" && !fueEnviado) { cohorteResueltasSinWA++; }
-        else { cohorteEnviadas++; } // WA_ENVIADO, ESCALADA, o RESUELTA-con-envío — cualquier fase
-        // que no sea "" ni "RESUELTA sin envío" implica que ya se intentó el contacto, sin
-        // importar si estado_brodcast quedó en "ENVIADO" o en otro valor (p.ej. "ERROR").
+        else {
+          cohorteEnviadas++; // Ya pasaron a WA (cualquier fase post-vacía que no sea RESUELTA sin envío)
+          // Desglose de cohorteEnviadas por estado actual:
+          if (fase === "WA_ENVIADO") cohorteEnEspera++;
+          else if (fase === "RESUELTA") cohorteResueltasConWA++;  // RESUELTA + fueEnviado
+          else if (fase === "ESCALADA") cohorteEscaladas++;
+          else if (fase === "ASIGNADA") { cohorteEscaladas++; cohorteAsignadas++; }
+          else if (fase === "RESUELTA_EN_COLA") { cohorteEscaladas++; cohorteResueltasEnCola++; }
+          else if (fase === "ARCHIVADA") { cohorteEscaladas++; cohorteArchivadas++; }
+        }
       }
 
       if (_enRango(_fechaNorm(envioParte))) {
         if (fueEnviado) {
           totalEnviados++; _bucket(envioParte, 'enviados');
           if (fase === "RESUELTA") { enviadasYResueltas++; _bucket(envioParte, 'enviadasYResueltas'); }
-          else if (fase === "ESCALADA") { enviadasYEscaladas++; }
+          else if (fase === "ESCALADA" || fase === "ASIGNADA" || fase === "RESUELTA_EN_COLA" || fase === "ARCHIVADA") { enviadasYEscaladas++; }
         }
         else totalNoEnviados++;
       }
@@ -1571,6 +1588,9 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
       if (_enRango(_fechaNorm(faseParte))) {
         if (fase === "WA_ENVIADO") { totalEnEspera++; _bucket(faseParte, 'enEspera'); }
         else if (fase === "ESCALADA") { totalEscaladas++; _bucket(faseParte, 'escaladas'); }
+        else if (fase === "ASIGNADA") { totalEscaladas++; totalAsignadas++; _bucket(faseParte, 'escaladas'); _bucket(faseParte, 'asignadas'); }
+        else if (fase === "RESUELTA_EN_COLA") { totalEscaladas++; totalResueltasEnCola++; _bucket(faseParte, 'escaladas'); _bucket(faseParte, 'resueltasEnCola'); }
+        else if (fase === "ARCHIVADA") { totalEscaladas++; totalArchivadas++; _bucket(faseParte, 'escaladas'); _bucket(faseParte, 'archivadas'); }
         else if (fase === "RESUELTA") {
           if (fueEnviado) { resueltasConWA++; _bucket(faseParte, 'resueltasConWA'); }
           else { resueltasSinWA++; _bucket(faseParte, 'resueltasSinWA'); }
@@ -1580,7 +1600,7 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
 
     var tendenciaArr = Object.keys(tendenciaMap).sort().map(function(f) {
       var td = tendenciaMap[f];
-      return { fecha: f, consultadas: td.consultadas, enviados: td.enviados, resueltasConWA: td.resueltasConWA, resueltasSinWA: td.resueltasSinWA, escaladas: td.escaladas, enEspera: td.enEspera, sinIniciar: td.sinIniciar, enviadasYResueltas: td.enviadasYResueltas };
+      return { fecha: f, consultadas: td.consultadas, enviados: td.enviados, resueltasConWA: td.resueltasConWA, resueltasSinWA: td.resueltasSinWA, escaladas: td.escaladas, asignadas: td.asignadas, resueltasEnCola: td.resueltasEnCola, archivadas: td.archivadas, enEspera: td.enEspera, sinIniciar: td.sinIniciar, enviadasYResueltas: td.enviadasYResueltas };
     });
 
     // Informativo: de las consultadas en el rango, cuántas ya pasaron por su primer contacto
@@ -1620,6 +1640,10 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
       esperandoCorte: liveEsperandoCorte,
       totalEnEspera: totalEnEspera,
       totalEscaladas: totalEscaladas,
+      totalAsignadas: totalAsignadas,
+      totalResueltasEnCola: totalResueltasEnCola,
+      totalArchivadas: totalArchivadas,
+      tasaEfectividadCola: (totalAsignadas + totalResueltasEnCola + totalArchivadas) > 0 ? Math.round((totalAsignadas / (totalAsignadas + totalResueltasEnCola + totalArchivadas)) * 1000) / 10 : 0,
       colaActual: colaActual,
       totalResueltas: totalResueltas,
       resueltasConWA: resueltasConWA,
@@ -1628,6 +1652,12 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
       enviadasYEscaladas: enviadasYEscaladas,
       cohorteResueltasSinWA: cohorteResueltasSinWA,
       cohorteEnviadas: cohorteEnviadas,
+      cohorteEnEspera: cohorteEnEspera,
+      cohorteResueltasConWA: cohorteResueltasConWA,
+      cohorteEscaladas: cohorteEscaladas,
+      cohorteAsignadas: cohorteAsignadas,
+      cohorteResueltasEnCola: cohorteResueltasEnCola,
+      cohorteArchivadas: cohorteArchivadas,
       tasaEnvio: (totalEnviados + resueltasSinWA) > 0 ? Math.round((totalEnviados / (totalEnviados + resueltasSinWA)) * 1000) / 10 : 0,
       tasaConversion: totalEnviados > 0 ? Math.round((enviadasYResueltas / totalEnviados) * 1000) / 10 : 0,
       tendencia: tendenciaArr,
@@ -1965,7 +1995,13 @@ function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta) {
       } else if (tipo === "cicloResueltasConWA") {
         incluir = _enRangoD(_fechaNormD(envioParte)) && fueEnviado && fase === "RESUELTA";
       } else if (tipo === "cicloEscaladas") {
-        incluir = _enRangoD(_fechaNormD(envioParte)) && fueEnviado && fase === "ESCALADA";
+        incluir = _enRangoD(_fechaNormD(envioParte)) && fueEnviado && (fase === "ESCALADA" || fase === "ASIGNADA" || fase === "RESUELTA_EN_COLA" || fase === "ARCHIVADA");
+      } else if (tipo === "asignadas") {
+        incluir = _enRangoD(_fechaNormD(faseParte)) && fase === "ASIGNADA";
+      } else if (tipo === "resueltasEnCola") {
+        incluir = _enRangoD(_fechaNormD(faseParte)) && fase === "RESUELTA_EN_COLA";
+      } else if (tipo === "archivadas") {
+        incluir = _enRangoD(_fechaNormD(faseParte)) && fase === "ARCHIVADA";
       }
       if (!incluir) continue;
 
@@ -3985,66 +4021,57 @@ function _construirEmailReporteBiometria(bio, fecha) {
 
   // Header
   html += '<tr><td style="background:#253150;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center;">';
-  html += '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:0.5px;">&#129302; Reporte Biometría del Día</h1>';
-  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">Así se movió la biometría hoy — ' + fecha + '</p>';
+  html += '<h1 style="margin:0;font-size:22px;font-weight:800;">&#129302; Reporte Biometría del Día</h1>';
+  html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">' + fecha + '</p>';
   html += '</td></tr>';
 
   // Hero: Tasa de Conversión
   html += '<tr><td style="background:#fff;padding:28px 32px;border-bottom:2px solid #f0f2f5;">';
   html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
   html += '<td style="text-align:center;padding:20px;background:' + convBg + ';border-radius:12px;">';
-  html += '<div style="font-size:12px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Tasa de Conversión — ¿Sirve el WhatsApp?</div>';
+  html += '<div style="font-size:12px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Tasa de Conversión WA</div>';
   html += '<span style="font-size:48px;font-weight:800;color:' + convColor + ';">' + bio.tasaConversion + '%</span>';
-  html += '<div style="font-size:12px;color:#706F6F;margin-top:6px;">De los WA enviados, % que se aprobó SOLO con el mensaje — sin pasar por un analista</div>';
+  html += '<div style="font-size:12px;color:#706F6F;margin-top:6px;">De los WA enviados, % que se resolvió SOLO con el mensaje</div>';
   html += '</td></tr></table>';
   html += '</td></tr>';
 
-  // En vivo: Cola de Asignación + Faltan por Revisar
+  // Narrativa
   html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
-  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#8987; En Vivo (ahora mismo)</h2>';
-  html += '<p style="margin:0 0 16px;font-size:12px;color:#706F6F;border-bottom:2px solid #e8edf6;padding-bottom:10px;">No dependen del día — es el estado actual del ciclo, tomado en el momento de generar este correo</p>';
-  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
-  [
-    { l: "Cola de Asignación", v: bio.colaActual, c: "#d97706", b: "#fffbeb", s: "Esperando analista, ahora mismo" },
-    { l: "Esperando Próximo Corte", v: bio.esperandoCorte, c: "#253150", b: "#f8fafc", s: "Ya tienen WA enviado, esperan el corte de las 8am/12pm" }
-  ].forEach(function(ki) {
-    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:' + ki.b + ';border-radius:10px;border:1px solid #e5e7eb;">';
-    html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
-    html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
-    html += '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' + ki.s + '</div>';
-    html += '</td>';
-  });
-  html += '</tr></table>';
+  html += '<h2 style="margin:0 0 12px;font-size:16px;font-weight:800;color:#253150;">&#128202; Así se movió la biometría hoy</h2>';
+  html += '<p style="margin:0 0 20px;font-size:13px;color:#334155;line-height:1.7;">';
+  html += 'Hoy el sistema consultó <strong>' + bio.totalConsultadas + ' solicitudes</strong> en SAI. ';
+  html += 'De esas, <strong>' + bio.totalSinIniciar + ' están esperando</strong> que se cumplan las 4 horas para enviarles el WhatsApp. ';
+  html += 'Ya <strong>enviamos ' + bio.totalEnviados + ' mensajes</strong> de WhatsApp a clientes pidiéndoles que completen la biometría.';
+  html += '</p>';
+  html += '<p style="margin:0 0 20px;font-size:13px;color:#334155;line-height:1.7;">';
+  html += 'De las capturadas, <strong>' + bio.resueltasSinWA + ' se resolvieron solas</strong> sin necesitar el mensaje de WhatsApp. ';
+  html += 'De las que sí recibieron WA, <strong>' + bio.enviadasYResueltas + ' se resolvieron tras el mensaje</strong> sin necesidad de escalar a un analista (tasa de conversión: ' + bio.tasaConversion + '%).';
+  html += '</p>';
+  html += '<p style="margin:0 0 20px;font-size:13px;color:#334155;line-height:1.7;">';
+  html += 'De esos WhatsApp enviados, <strong>' + bio.esperandoCorte + ' están esperando</strong> el próximo corte (8am/12pm) para revisar si el cliente ya hizo la biometría o si toca escalarlo.';
+  html += '</p>';
+  html += '<p style="margin:0 0 20px;font-size:13px;color:#334155;line-height:1.7;">';
+  html += 'De las que ya pasaron por el corte: <strong>' + bio.totalEscaladas + ' se enviaron a la cola</strong> de análisis. ';
+  html += 'De esas, <strong>' + bio.totalAsignadas + ' las tomó un analista</strong>';
+  if (bio.totalArchivadas > 0) html += ' y <strong>' + bio.totalArchivadas + ' se archivaron</strong> (más de 12h en cola sin ser asignadas)';
+  if (bio.totalResueltasEnCola > 0) html += '. <strong>' + bio.totalResueltasEnCola + ' se resolvieron en cola</strong> sin necesitar analista';
+  html += '.';
+  html += '</p>';
+  html += '<p style="margin:0;font-size:13px;color:#334155;line-height:1.7;">';
+  html += 'Ahora mismo quedan <strong>' + bio.colaActual + ' en cola</strong> esperando analista.';
+  html += '</p>';
   html += '</td></tr>';
 
-  // Cascada Estricta de Hoy: mismo grupo que Consultadas SAI, cierra exacto
+  // Tarjetas resumen
   html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
-  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#128202; Cascada Estricta de Hoy</h2>';
-  html += '<p style="margin:0 0 16px;font-size:12px;color:#706F6F;border-bottom:2px solid #e8edf6;padding-bottom:10px;">De lo que ENTRÓ hoy (mismo grupo que Consultadas SAI, ' + bio.totalConsultadas + '): Sin Iniciar + Resueltas sin WA + Ya Enviadas cierra exacto contra ese total. Si el rango es corto, "Resueltas sin WA" aquí normalmente da bajo o cero — lo de hoy casi nunca alcanza a resolverse el mismo día.</p>';
+  html += '<div style="font-size:14px;font-weight:800;color:#253150;margin-bottom:12px;">Resumen en números</div>';
   html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
   [
-    { l: "Sin Iniciar", v: bio.totalSinIniciar, c: "#706F6F", b: "#f8fafc" },
-    { l: "Resueltas sin WA", v: bio.cohorteResueltasSinWA, c: "#253150", b: "#e8edf6" },
-    { l: "Ya Enviadas", v: bio.cohorteEnviadas, c: "#25D366", b: "#ecfdf5" }
+    { l: "Consultadas", v: bio.totalConsultadas, c: "#253150" },
+    { l: "Esperando 4h", v: bio.totalSinIniciar, c: "#706F6F" },
+    { l: "WA Enviados", v: bio.totalEnviados, c: "#25D366" }
   ].forEach(function(ki) {
-    html += '<td width="33%" style="text-align:center;padding:12px 6px;background:' + ki.b + ';border-radius:10px;border:1px solid #e5e7eb;">';
-    html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
-    html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
-    html += '</td>';
-  });
-  html += '</tr></table>';
-  html += '</td></tr>';
-
-  // Ciclo de Hoy (actividad real, incluye arrastre de días anteriores)
-  html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
-  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#128241; Ciclo de Hoy (actividad real)</h2>';
-  html += '<p style="margin:0 0 16px;font-size:12px;color:#706F6F;border-bottom:2px solid #e8edf6;padding-bottom:10px;">Cuánto pasó HOY en la vida real, sin importar cuándo entró la solicitud — por eso puede incluir casos consultados días atrás que hoy tuvieron su corte. No tiene que coincidir con la Cascada Estricta de arriba, son preguntas distintas.</p>';
-  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
-  [
-    { l: "Resueltas sin WhatsApp", v: bio.resueltasSinWA, c: "#253150", b: "#e8edf6" },
-    { l: "WA Enviados", v: bio.totalEnviados, c: "#25D366", b: "#ecfdf5" }
-  ].forEach(function(ki) {
-    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:' + ki.b + ';border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<td width="33%" style="text-align:center;padding:12px 6px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
     html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
     html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
     html += '</td>';
@@ -4052,10 +4079,23 @@ function _construirEmailReporteBiometria(bio, fecha) {
   html += '</tr></table>';
   html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:8px;"><tr>';
   [
-    { l: "Resueltas por WhatsApp", v: bio.enviadasYResueltas, c: "#059669", b: "#ecfdf5" },
-    { l: "Escaladas a Análisis", v: bio.enviadasYEscaladas, c: "#d97706", b: "#fffbeb" }
+    { l: "Resueltas sin WA", v: bio.resueltasSinWA, c: "#059669" },
+    { l: "Resueltas por WA", v: bio.enviadasYResueltas, c: "#059669" },
+    { l: "Enviadas a Cola", v: bio.totalEscaladas, c: "#BD0F14" },
+    { l: "Archivadas", v: bio.totalArchivadas, c: "#706F6F" }
   ].forEach(function(ki) {
-    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:' + ki.b + ';border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<td width="25%" style="text-align:center;padding:12px 4px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:10px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
+    html += '<div style="font-size:20px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
+    html += '</td>';
+  });
+  html += '</tr></table>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:8px;"><tr>';
+  [
+    { l: "Resueltas en Cola", v: bio.totalResueltasEnCola, c: "#253150" },
+    { l: "Gestionadas", v: bio.totalAsignadas, c: "#059669" }
+  ].forEach(function(ki) {
+    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
     html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
     html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
     html += '</td>';
@@ -4066,23 +4106,14 @@ function _construirEmailReporteBiometria(bio, fecha) {
   // Gestión de Analistas
   if (ges.total > 0) {
     html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
-    html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #e8edf6;padding-bottom:10px;">&#128222; Gestión de Analistas (llamadas)</h2>';
+    html += '<h2 style="margin:0 0 12px;font-size:16px;font-weight:800;color:#253150;">&#128222; Resultados de Gestión</h2>';
+    html += '<p style="margin:0 0 16px;font-size:13px;color:#334155;line-height:1.7;">';
+    html += 'Los analistas gestionaron <strong>' + ges.total + ' casos</strong>. ';
+    html += 'Contactaron a <strong>' + ges.okLlamada + '</strong> (' + ges.tasaContacto + '% tasa de contacto). ';
+    if (ges.noContesto > 0) html += '<strong>' + ges.noContesto + '</strong> no contestaron. ';
+    if (ges.tasaConversionLlamada > 0) html += 'De las llamadas exitosas, <strong>' + ges.tasaConversionLlamada + '%</strong> terminaron aprobadas.';
+    html += '</p>';
     html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
-    [
-      { l: "Gestionadas", v: ges.total, c: "#253150" },
-      { l: "OK Llamada", v: ges.okLlamada, c: "#059669" },
-      { l: "No Contestó", v: ges.noContesto, c: "#d97706" },
-      { l: "Tasa Contacto", v: ges.tasaContacto + "%", c: "#253150" },
-      { l: "¿Sirve la llamada?", v: (ges.tasaConversionLlamada || 0) + "%", c: "#059669" }
-    ].forEach(function(ki) {
-      html += '<td width="20%" style="text-align:center;padding:10px 4px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
-      html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
-      html += '<div style="font-size:20px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
-      html += '</td>';
-    });
-    html += '</tr></table>';
-
-    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:8px;"><tr>';
     [
       { l: "Aprobados", v: ges.aprobadas, c: "#059669", b: "#ecfdf5" },
       { l: "Rechazados", v: ges.negadas, c: "#BD0F14", b: "#fde8e8" },
@@ -4094,7 +4125,6 @@ function _construirEmailReporteBiometria(bio, fecha) {
       html += '</td>';
     });
     html += '</tr></table>';
-
     var motivoKeys = Object.keys(ges.motivos || {});
     if (motivoKeys.length > 0) {
       html += '<div style="font-size:12px;font-weight:700;color:#d97706;margin:14px 0 6px;">Motivos de aplazamiento:</div>';

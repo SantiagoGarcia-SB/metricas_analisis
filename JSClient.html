@@ -1285,39 +1285,39 @@ function onDatosBiometriaCargados(d) {
     document.getElementById('sinResultadosBio').style.display = 'none';
     _splashCompletarDatosYPanel();
 
-    // Texto del rango seleccionado, para dejar claro que estas secciones NO son solo "hoy"
-    // cuando el usuario elige un rango de varios días (Esta semana, Este mes, etc.)
+    // Texto del rango seleccionado
     var _rangoTxt = _fmtRangoBio();
     var _elRango1 = document.getElementById('bioRangoTexto1');
     var _elRango2 = document.getElementById('bioRangoTexto2');
     if (_elRango1) _elRango1.textContent = _rangoTxt;
     if (_elRango2) _elRango2.textContent = _rangoTxt;
 
-    // En vivo — no dependen del rango de fechas
+    // En vivo
     document.getElementById('bioColaAsignacion').textContent = d.colaActual;
     document.getElementById('bioEsperandoCorte').textContent = d.esperandoCorte;
 
-    // Cascada estricta — mismo grupo que Consultadas SAI (todo por fecha_consulta_sai), cierra exacto
-    document.getElementById('bioCascadaSinIniciar').textContent = d.totalSinIniciar;
-    document.getElementById('bioCascadaResueltasSinWA').textContent = d.cohorteResueltasSinWA;
-    document.getElementById('bioCascadaEnviadas').textContent = d.cohorteEnviadas;
-
-    // Ciclo de Hoy — Consultadas (por fecha de consulta) y Resueltas sin WA (por fecha de
-    // actualización de fase, es lo único que tienen) se quedan con su propia fecha real.
-    // Enviados / Resueltas por WA / Escaladas quedan TODAS ancladas a "enviados hoy" (misma
-    // fecha de envío), así la Tasa de Conversión cuenta exactamente la misma historia que
-    // estas tarjetas: de lo enviado hoy, cuánto ya está resuelto y cuánto ya está escalado.
-    document.getElementById('bioCicloConsultadas').textContent = d.totalConsultadas;
-    document.getElementById('bioCicloResueltasSinWA').textContent = d.resueltasSinWA;
-    document.getElementById('bioCicloEnviados').textContent = d.totalEnviados;
-    document.getElementById('bioCicloResueltasConWA').textContent = d.enviadasYResueltas;
-    document.getElementById('bioCicloEscaladas').textContent = d.enviadasYEscaladas;
+    // === MÉTRICAS DEL PERÍODO ===
+    document.getElementById('bioMetConsultadas').textContent = d.totalConsultadas;
+    document.getElementById('bioMetSinIniciar').textContent = d.totalSinIniciar;
+    document.getElementById('bioMetEnviados').textContent = d.totalEnviados;
+    document.getElementById('bioMetResueltasSinWA').textContent = d.resueltasSinWA;
+    document.getElementById('bioMetResueltasConWA').textContent = d.enviadasYResueltas;
+    document.getElementById('bioMetEscaladas').textContent = d.totalEscaladas;
+    document.getElementById('bioMetArchivadas').textContent = d.totalArchivadas;
 
     // Tasa de Conversión = Resueltas por WhatsApp / Enviados, mismo grupo (por fecha de envío)
     document.getElementById('bioTasaConversion').textContent = d.tasaConversion + '%';
     var bannerEl = document.getElementById('bioConversionBanner');
     bannerEl.classList.remove('bio-conv-good', 'bio-conv-bad');
     bannerEl.classList.add(d.tasaConversion >= 50 ? 'bio-conv-good' : 'bio-conv-bad');
+
+    // Tasa Resolución sin WA = Resueltas sin WA / Consultadas
+    var tasaResSinWA = d.totalConsultadas > 0 ? Math.round((d.resueltasSinWA / d.totalConsultadas) * 1000) / 10 : 0;
+    document.getElementById('bioTasaResolucionSinWA').textContent = tasaResSinWA + '%';
+
+    // Tasa Conversión Llamada = de las llamadas exitosas, % aprobadas
+    var ges = d.gestion || {};
+    document.getElementById('bioTasaConversionLlamada').textContent = (ges.tasaConversionLlamada || 0) + '%';
 
     renderBioEfectividad(d.tendencia);
     renderBioTendencia(d.tendencia);
@@ -1340,7 +1340,10 @@ function renderBioEfectividad(tend) {
             datasets: [
                 { label: 'Resuelta por WA', data: tend.map(function(t) { return t.resueltasConWA; }), backgroundColor: '#059669', borderRadius: 2 },
                 { label: 'Resuelta sin WhatsApp', data: tend.map(function(t) { return t.resueltasSinWA; }), backgroundColor: '#3a4d7a', borderRadius: 2 },
-                { label: 'Escalada', data: tend.map(function(t) { return t.escaladas; }), backgroundColor: '#d97706', borderRadius: 2 }
+                { label: 'Asignada', data: tend.map(function(t) { return t.asignadas; }), backgroundColor: '#10b981', borderRadius: 2 },
+                { label: 'Resuelta en Cola', data: tend.map(function(t) { return t.resueltasEnCola; }), backgroundColor: '#3b82f6', borderRadius: 2 },
+                { label: 'Archivada', data: tend.map(function(t) { return t.archivadas; }), backgroundColor: '#6b7280', borderRadius: 2 },
+                { label: 'Escalada (pendiente)', data: tend.map(function(t) { return t.escaladas - (t.asignadas + t.resueltasEnCola + t.archivadas); }), backgroundColor: '#d97706', borderRadius: 2 }
             ]
         },
         options: {
@@ -1591,7 +1594,10 @@ var _BIO_DRILLDOWN_TITULOS = {
     cicloResueltasSinWA: 'Resueltas sin WhatsApp',
     cicloEnviados: 'WA Enviados',
     cicloResueltasConWA: 'Resueltas por WhatsApp',
-    cicloEscaladas: 'Escaladas a Análisis'
+    cicloEscaladas: 'Escaladas a Análisis',
+    asignadas: 'Asignadas (analista las tomó)',
+    resueltasEnCola: 'Resueltas en Cola (sin analista)',
+    archivadas: 'Archivadas (vencidas sin asignar)'
 };
 
 function drilldownBio(tipo) {

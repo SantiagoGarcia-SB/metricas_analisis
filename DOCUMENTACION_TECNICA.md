@@ -63,6 +63,7 @@ La comunicación entre capas se realiza exclusivamente a través de `google.scri
 | `appsscript.json` | **Manifiesto.** Configuración del proyecto: timezone, runtime V8, despliegue como web app ejecutada por el usuario desplegador con acceso de dominio. |
 | `.clasp.json` | **Configuración CLASP.** Vinculación con el script ID de Google para push/pull desde CLI. |
 | `Biometria.js` | **Ciclo de biometrías (captura → WA → escalación → asignación → gestión → verificación final).** Ver [4.7](#47-flujo-de-biometrías-biometriajs). ⚠️ Vive en el proyecto Apps Script desplegado; aún no sincronizado a este repo local vía `clasp pull`. |
+| `FLUJO_BIOMETRIA.md` | **Documentación operativa del flujo de biometrías.** Fases, columnas, reglas de negocio, cascadas matemáticas y fechas de anclaje. Referencia principal para entender las métricas del tab Biometría. |
 
 ### 2.3 Gestión de Datos
 
@@ -224,6 +225,8 @@ Al hacer click en cualquier tarjeta KPI o card de tipo:
 ```
 
 ### 4.7 Flujo de Biometrías (Biometria.js)
+
+> 📄 **Documentación detallada del flujo completo, fases, columnas y reglas de negocio:** ver [`FLUJO_BIOMETRIA.md`](./FLUJO_BIOMETRIA.md)
 
 El ciclo completo de gestión de biometrías vive en `Biometria.js` y corre en 6 etapas encadenadas por triggers (ver [5.1](#51-triggers-de-biometría)):
 
