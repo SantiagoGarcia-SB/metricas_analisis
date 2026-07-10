@@ -4025,14 +4025,22 @@ function _construirEmailReporteBiometria(bio, fecha) {
   html += '<p style="margin:8px 0 0;font-size:14px;opacity:0.9;">' + fecha + '</p>';
   html += '</td></tr>';
 
-  // Hero: Tasa de Conversión
+  // Hero: 3 Tasas
   html += '<tr><td style="background:#fff;padding:28px 32px;border-bottom:2px solid #f0f2f5;">';
-  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
-  html += '<td style="text-align:center;padding:20px;background:' + convBg + ';border-radius:12px;">';
-  html += '<div style="font-size:12px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Tasa de Conversión WA</div>';
-  html += '<span style="font-size:48px;font-weight:800;color:' + convColor + ';">' + bio.tasaConversion + '%</span>';
-  html += '<div style="font-size:12px;color:#706F6F;margin-top:6px;">De los WA enviados, % que se resolvió SOLO con el mensaje</div>';
-  html += '</td></tr></table>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+  var tasaResSinWA = bio.totalConsultadas > 0 ? Math.round((bio.resueltasSinWA / bio.totalConsultadas) * 1000) / 10 : 0;
+  [
+    { l: "Tasa Conversión WA", v: bio.tasaConversion + "%", c: convColor, b: convBg, s: "De los WA enviados, % que se resolvió solo con el mensaje" },
+    { l: "Tasa Resolución sin WA", v: tasaResSinWA + "%", c: "#059669", b: "#ecfdf5", s: "De las capturadas, % que se resolvió sin necesitar mensaje" },
+    { l: "Conversión Llamada", v: (ges.tasaConversionLlamada || 0) + "%", c: "#253150", b: "#f0f4ff", s: "De las llamadas exitosas, % que terminó aprobada" }
+  ].forEach(function(ki) {
+    html += '<td width="33%" style="text-align:center;padding:16px 8px;background:' + ki.b + ';border-radius:10px;">';
+    html += '<div style="font-size:10px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">' + ki.l + '</div>';
+    html += '<div style="font-size:32px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
+    html += '<div style="font-size:10px;color:#706F6F;margin-top:4px;">' + ki.s + '</div>';
+    html += '</td>';
+  });
+  html += '</tr></table>';
   html += '</td></tr>';
 
   // Narrativa
@@ -4087,17 +4095,6 @@ function _construirEmailReporteBiometria(bio, fecha) {
     html += '<td width="25%" style="text-align:center;padding:12px 4px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
     html += '<div style="font-size:10px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
     html += '<div style="font-size:20px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
-    html += '</td>';
-  });
-  html += '</tr></table>';
-  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin-top:8px;"><tr>';
-  [
-    { l: "Resueltas en Cola", v: bio.totalResueltasEnCola, c: "#253150" },
-    { l: "Gestionadas", v: bio.totalAsignadas, c: "#059669" }
-  ].forEach(function(ki) {
-    html += '<td width="50%" style="text-align:center;padding:12px 6px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
-    html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
-    html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
     html += '</td>';
   });
   html += '</tr></table>';
