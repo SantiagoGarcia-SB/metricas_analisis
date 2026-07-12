@@ -1412,7 +1412,6 @@ function renderBioGestion(g) {
     document.getElementById('bioGesOk').textContent = g.okLlamada;
     document.getElementById('bioGesNoContesto').textContent = g.noContesto;
     document.getElementById('bioGesTasaContacto').textContent = g.tasaContacto + '%';
-    document.getElementById('bioGesTasaConversion').textContent = (g.tasaConversionLlamada || 0) + '%';
 
     if (chartBioResLlamada) chartBioResLlamada.destroy();
     var ctx1 = document.getElementById('chartBioResLlamada').getContext('2d');

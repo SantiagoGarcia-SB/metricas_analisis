@@ -601,8 +601,8 @@
                 <span class="mini-nav-chip" onclick="document.getElementById('bioConversionBanner').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-graph-up-arrow me-1"></i>Conversión</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaEnVivo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-broadcast me-1"></i>En Vivo</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaCiclo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-activity me-1"></i>Operación</span>
-                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaTendenciaDia').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-funnel me-1"></i>Cohorte</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaGestion').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-telephone me-1"></i>Gestión</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaTendenciaDia').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-funnel me-1"></i>Cohorte</span>
             </div>
 
             <!-- Filtros Biometría -->
@@ -687,19 +687,19 @@
             <!-- Tasa de Conversión: métrica principal -->
             <div class="bio-conversion-banner bio-conv-bad" id="bioConversionBanner" style="display:flex;gap:24px;align-items:center;justify-content:space-between;">
                 <div style="flex:1;text-align:center;">
-                    <div class="bio-conversion-label"><i class="bi bi-graph-up-arrow me-1"></i>Tasa Conversión WA</div>
-                    <div class="bio-conversion-sub">De los WA enviados, % que se resolvió solo con el mensaje</div>
-                    <div class="bio-conversion-value" id="bioTasaConversion" style="margin-top:4px;">0%</div>
-                </div>
-                <div style="width:1px;align-self:stretch;background:rgba(255,255,255,0.3);"></div>
-                <div style="flex:1;text-align:center;">
                     <div class="bio-conversion-label"><i class="bi bi-person-check me-1"></i>Tasa Resolución sin WA</div>
                     <div class="bio-conversion-sub">De las capturadas, % que se resolvió sin necesitar mensaje</div>
                     <div class="bio-conversion-value" id="bioTasaResolucionSinWA" style="margin-top:4px;">0%</div>
                 </div>
                 <div style="width:1px;align-self:stretch;background:rgba(255,255,255,0.3);"></div>
                 <div style="flex:1;text-align:center;">
-                    <div class="bio-conversion-label"><i class="bi bi-telephone me-1"></i>Conversión Llamada</div>
+                    <div class="bio-conversion-label"><i class="bi bi-graph-up-arrow me-1"></i>Tasa Conversión WA</div>
+                    <div class="bio-conversion-sub">De los WA enviados, % que se resolvió solo con el mensaje</div>
+                    <div class="bio-conversion-value" id="bioTasaConversion" style="margin-top:4px;">0%</div>
+                </div>
+                <div style="width:1px;align-self:stretch;background:rgba(255,255,255,0.3);"></div>
+                <div style="flex:1;text-align:center;">
+                    <div class="bio-conversion-label"><i class="bi bi-telephone me-1"></i>Tasa Conversión Llamada</div>
                     <div class="bio-conversion-sub">De las llamadas exitosas, % que terminó aprobada</div>
                     <div class="bio-conversion-value" id="bioTasaConversionLlamada" style="margin-top:4px;">0%</div>
                 </div>
@@ -739,33 +739,8 @@
                 <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('archivadas')"><div class="bio-ciclo-label"><i class="bi bi-archive me-1"></i>Archivadas</div><div class="bio-ciclo-value" id="bioMetArchivadas">0</div><div class="bio-ciclo-sub">Vencidas (&gt;12h sin asignar)</div></div>
             </div>
 
-            <!-- Tendencia por día -->
-            <div id="bioAnclaTendenciaDia" class="bio-kpi-section-title mt-4" style="font-size:0.85rem;"><i class="bi bi-calendar3"></i>Tendencia por Día</div>
-            <div class="table-sub mb-3">Evolución diaria.</div>
-
-            <!-- Resultado Broadcast por día -->
-            <div class="table-container mb-4" style="margin-top:0;">
-                <div class="table-title mb-2"><i class="bi bi-bar-chart-steps me-2" style="color:var(--azul);"></i>Resultado del Broadcast por Día<span class="btn-help-chart" onclick="ayudaGrafico('bioEfectividad')">?</span></div>
-                <div class="table-sub mb-3">Resuelta por WA (verde) vs Resuelta sin WhatsApp (azul) vs Asignada / Resuelta en Cola / Archivada / Escalada pendiente</div>
-                <div style="position:relative;height:200px;"><canvas id="chartBioEfectividad"></canvas></div>
-            </div>
-
-            <!-- Tendencia -->
-            <div class="table-container mb-4" style="margin-top:0;">
-                <div class="table-title mb-2"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Tendencia Diaria<span class="btn-help-chart" onclick="ayudaGrafico('bioTendencia')">?</span></div>
-                <div class="table-sub mb-3">Consultadas vs Enviados vs Resueltas por WA vs Escaladas, por día</div>
-                <div style="position:relative;height:180px;"><canvas id="chartBioTendencia"></canvas></div>
-            </div>
-
-            <!-- Tasa de conversión en el tiempo -->
-            <div class="table-container mb-4">
-                <div class="table-title mb-2"><i class="bi bi-activity me-2" style="color:#25D366;"></i>Tasa de Conversión en el Tiempo<span class="btn-help-chart" onclick="ayudaGrafico('bioTasaTendencia')">?</span></div>
-                <div class="table-sub mb-3">% de enviados que completaron biometría por el broadcast (por día)</div>
-                <div style="position:relative;height:140px;"><canvas id="chartBioTasaTendencia"></canvas></div>
-            </div>
-
             <!-- Resultados de Gestión -->
-            <div id="bioAnclaGestion" class="table-container mb-4" style="border-left:4px solid var(--azul);">
+            <div id="bioAnclaGestion" class="table-container mb-4" style="margin-top:1rem;border-left:4px solid var(--azul);">
                 <div class="table-title mb-1"><i class="bi bi-telephone me-2" style="color:var(--azul);"></i>Resultados de Gestión<span class="btn-help-chart" onclick="ayudaGrafico('bioGestion')">?</span> <span id="bioGestionScope" class="bio-rango-badge" style="display:none;background:var(--rojo);color:#fff;"></span></div>
                 <div class="table-sub mb-3">Resultado de las llamadas y gestión de solicitudes de biometría asignadas a analistas</div>
 
@@ -775,7 +750,6 @@
                     <div class="bio-kpi-card bio-kpi-success"><div class="bio-kpi-label"><i class="bi bi-telephone-forward me-1"></i>Contactadas</div><div class="bio-kpi-value" id="bioGesOk">0</div><div class="bio-kpi-sub">OK Llamada</div></div>
                     <div class="bio-kpi-card bio-kpi-warning"><div class="bio-kpi-label"><i class="bi bi-telephone-x me-1"></i>Sin Contacto</div><div class="bio-kpi-value" id="bioGesNoContesto">0</div><div class="bio-kpi-sub">No contestó</div></div>
                     <div class="bio-kpi-card"><div class="bio-kpi-label"><i class="bi bi-percent me-1"></i>Tasa Contacto</div><div class="bio-kpi-value" id="bioGesTasaContacto">0%</div></div>
-                    <div class="bio-kpi-card bio-kpi-success"><div class="bio-kpi-label"><i class="bi bi-graph-up-arrow me-1"></i>Tasa Conversión <span class="btn-help-chart" onclick="ayudaGrafico('bioTasaConversionLlamada')">?</span></div><div class="bio-kpi-value" id="bioGesTasaConversion">0%</div><div class="bio-kpi-sub">¿Sirve la llamada?</div></div>
                 </div>
 
                 <!-- Gráficos Gestión -->
@@ -799,6 +773,31 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Tendencia por día -->
+            <div id="bioAnclaTendenciaDia" class="bio-kpi-section-title mt-4" style="font-size:0.85rem;"><i class="bi bi-calendar3"></i>Tendencia por Día</div>
+            <div class="table-sub mb-3">Evolución diaria.</div>
+
+            <!-- Resultado Broadcast por día -->
+            <div class="table-container mb-4" style="margin-top:0;">
+                <div class="table-title mb-2"><i class="bi bi-bar-chart-steps me-2" style="color:var(--azul);"></i>Resultado del Broadcast por Día<span class="btn-help-chart" onclick="ayudaGrafico('bioEfectividad')">?</span></div>
+                <div class="table-sub mb-3">Resuelta por WA (verde) vs Resuelta sin WhatsApp (azul) vs Asignada / Resuelta en Cola / Archivada / Escalada pendiente</div>
+                <div style="position:relative;height:200px;"><canvas id="chartBioEfectividad"></canvas></div>
+            </div>
+
+            <!-- Tendencia -->
+            <div class="table-container mb-4" style="margin-top:0;">
+                <div class="table-title mb-2"><i class="bi bi-graph-up me-2" style="color:var(--azul);"></i>Tendencia Diaria<span class="btn-help-chart" onclick="ayudaGrafico('bioTendencia')">?</span></div>
+                <div class="table-sub mb-3">Consultadas vs Enviados vs Resueltas por WA vs Escaladas, por día</div>
+                <div style="position:relative;height:180px;"><canvas id="chartBioTendencia"></canvas></div>
+            </div>
+
+            <!-- Tasa de conversión en el tiempo -->
+            <div class="table-container mb-4">
+                <div class="table-title mb-2"><i class="bi bi-activity me-2" style="color:#25D366;"></i>Tasa de Conversión en el Tiempo<span class="btn-help-chart" onclick="ayudaGrafico('bioTasaTendencia')">?</span></div>
+                <div class="table-sub mb-3">% de enviados que completaron biometría por el broadcast (por día)</div>
+                <div style="position:relative;height:140px;"><canvas id="chartBioTasaTendencia"></canvas></div>
             </div>
 
             <!-- Evolución diaria de gestión -->
