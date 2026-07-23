@@ -11,6 +11,10 @@
     --gris:        #706F6F;
     --gris-light:  #f1f0f0;
     --gris-dark:   #4a4a4a;
+    --verde:       #059669;
+    --verde-light: #ecfdf5;
+    --amarillo:       #d97706;
+    --amarillo-light: #fffbeb;
     --grad-rojo:   linear-gradient(135deg, #8b0a0e 0%, #BD0F14 55%, #e05555 100%);
     --grad-azul:   linear-gradient(135deg, #161e33 0%, #253150 60%, #3a4d7a 100%);
     --bg-page:     #F4F5F8;
@@ -298,14 +302,6 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
 }
 .tab-panel { animation:fadeIn 0.3s ease; }
 @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
-
-.rendimiento-toggle {
-    padding:6px 14px; border:none; background:transparent;
-    color:var(--text-muted); cursor:pointer; transition:all 0.2s;
-    font-family:'Manrope',sans-serif; font-weight:700; font-size:0.72rem;
-}
-.rendimiento-toggle.active { background:var(--rojo); color:white; }
-.rendimiento-toggle:hover:not(.active) { background:var(--gris-light); }
 
 /* Mini-navegación por anclas — para pestañas largas (Producción, Biometría) donde conviene
    saltar directo a una sección en vez de hacer scroll por todo. Puramente de navegación: no

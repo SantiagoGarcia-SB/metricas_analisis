@@ -200,6 +200,10 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   const hoja = ss.getSheetByName(SHEET_NAME_SOLICITUDES);
   if (!hoja) throw new Error("No se pudo acceder a la hoja de solicitudes.");
 
+  const colsMotivo = _mapaColumnasPorNombre(hoja, ["Motivo de negación", "Motivo de aplazamiento"]);
+  const idxMotivoNeg = colsMotivo["Motivo de negación"];
+  const idxMotivoApl = colsMotivo["Motivo de aplazamiento"];
+
   const data = hoja.getDataRange().getDisplayValues();
   const desde = parseFechaDDMMYYYY(fechaDesde);
   const hasta = parseFechaDDMMYYYY(fechaHasta);
@@ -326,7 +330,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
     }
 
     if (!analistaMap[nombre]) {
-      analistaMap[nombre] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, diasInfo: {}, horasSlot: {} };
+      analistaMap[nombre] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, diasInfo: {}, horasSlot: {}, motivosNegacion: {}, motivosAplazamiento: {}, decisionPorDia: {} };
     }
     const a = analistaMap[nombre];
     a.total++;
@@ -343,9 +347,14 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
       if (!isNaN(hSlot)) a.horasSlot[hSlot] = (a.horasSlot[hSlot] || 0) + 1;
     }
 
-    if (estado.includes("APROB") && !estado.includes("PENDIENTE")) a.aprobadas++;
-    else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) a.negadas++;
-    else if (estado.includes("APLAZ")) a.aplazadas++;
+    // Decisión por día (independiente de horaFin, que solo alimenta ritmo/horasSlot arriba) —
+    // alimenta el gráfico de tendencia de %Negación/%Aplazamiento en el tiempo.
+    if (!a.decisionPorDia[fechaGestionStr]) a.decisionPorDia[fechaGestionStr] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0 };
+    a.decisionPorDia[fechaGestionStr].total++;
+
+    if (estado.includes("APROB") && !estado.includes("PENDIENTE")) { a.aprobadas++; a.decisionPorDia[fechaGestionStr].aprobadas++; }
+    else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) { a.negadas++; a.decisionPorDia[fechaGestionStr].negadas++; if (idxMotivoNeg >= 0) _tallyMotivo(a.motivosNegacion, fila[idxMotivoNeg]); }
+    else if (estado.includes("APLAZ")) { a.aplazadas++; a.decisionPorDia[fechaGestionStr].aplazadas++; if (idxMotivoApl >= 0) _tallyMotivo(a.motivosAplazamiento, fila[idxMotivoApl]); }
 
     if (!isNaN(tiempoGestion) && tiempoGestion >= 0) { a.sumaTiempo += tiempoGestion; a.countTiempo++; }
     if (!isNaN(tiempoResolucion) && tiempoResolucion > 0) { a.sumaTiempoResolucion += tiempoResolucion; a.countTiempoResolucion++; }
@@ -448,7 +457,7 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
             else slaMap[fechaParte].fueraSLA++;
           }
           if (!analistaMap[nombreR]) {
-            analistaMap[nombreR] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, diasInfo: {}, horasSlot: {} };
+            analistaMap[nombreR] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, diasInfo: {}, horasSlot: {}, motivosNegacion: {}, motivosAplazamiento: {}, decisionPorDia: {} };
           }
           const aR = analistaMap[nombreR];
           aR.total++;
@@ -463,9 +472,13 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
             const hSlotR = parseInt(horaFinR.split(':')[0], 10);
             if (!isNaN(hSlotR)) aR.horasSlot[hSlotR] = (aR.horasSlot[hSlotR] || 0) + 1;
           }
-          if (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) aR.aprobadas++;
-          else if (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) aR.negadas++;
-          else if (estadoR.includes("APLAZ")) aR.aplazadas++;
+
+          if (!aR.decisionPorDia[fechaParte]) aR.decisionPorDia[fechaParte] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0 };
+          aR.decisionPorDia[fechaParte].total++;
+
+          if (estadoR.includes("APROB") && !estadoR.includes("PENDIENTE")) { aR.aprobadas++; aR.decisionPorDia[fechaParte].aprobadas++; }
+          else if (estadoR.includes("NEGAD") || estadoR.includes("RECHAZ")) { aR.negadas++; aR.decisionPorDia[fechaParte].negadas++; }
+          else if (estadoR.includes("APLAZ")) { aR.aplazadas++; aR.decisionPorDia[fechaParte].aplazadas++; }
           if (!isNaN(tiempoGestionReest) && tiempoGestionReest >= 0) { aR.sumaTiempo += tiempoGestionReest; aR.countTiempo++; }
           if (!isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 0) { aR.sumaTiempoResolucion += tiempoResolucionReestHoras; aR.countTiempoResolucion++; }
           if (!isNaN(tiempoResolucionReestHoras) && tiempoResolucionReestHoras > 2) aR.fueraSLA++;
@@ -699,6 +712,25 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
         aprobadas: a.aprobadas,
         negadas: a.negadas,
         aplazadas: a.aplazadas,
+        pctAprobacion: a.total > 0 ? Math.round((a.aprobadas / a.total) * 1000) / 10 : 0,
+        pctNegacion: a.total > 0 ? Math.round((a.negadas / a.total) * 1000) / 10 : 0,
+        pctAplazamiento: a.total > 0 ? Math.round((a.aplazadas / a.total) * 1000) / 10 : 0,
+        motivosNegacion: a.motivosNegacion,
+        motivosAplazamiento: a.motivosAplazamiento,
+        motivoPrincipal: _motivoPrincipalCombinado(a.motivosNegacion, a.motivosAplazamiento),
+        tendenciaDiaria: Object.keys(a.decisionPorDia || {}).sort((f1, f2) => parseFechaDDMMYYYY(f1) - parseFechaDDMMYYYY(f2)).map(f => {
+          const d = a.decisionPorDia[f];
+          return {
+            fecha: f,
+            total: d.total,
+            aprobadas: d.aprobadas,
+            negadas: d.negadas,
+            aplazadas: d.aplazadas,
+            pctAprobacion: d.total > 0 ? Math.round((d.aprobadas / d.total) * 1000) / 10 : 0,
+            pctNegacion: d.total > 0 ? Math.round((d.negadas / d.total) * 1000) / 10 : 0,
+            pctAplazamiento: d.total > 0 ? Math.round((d.aplazadas / d.total) * 1000) / 10 : 0
+          };
+        }),
         tiempoPromedio: a.countTiempo > 0 ? Math.round((a.sumaTiempo / a.countTiempo) * 10) / 10 : 0,
         tiempoPromedioGeneral: a.countTiempoResolucion > 0 ? Number((a.sumaTiempoResolucion / a.countTiempoResolucion).toFixed(2)) : 0,
         promedioPorHora: (function() {
@@ -805,6 +837,55 @@ function obtenerDatosMetricas(fechaDesde, fechaHasta) {
   };
 }
 
+// --- Motivos de negación/aplazamiento por analista ---
+// Compartido por obtenerDatosMetricas, obtenerRendimientoPorDia y el Agente Coordinador,
+// para que los tres cuenten exactamente igual (misma columna, mismo criterio).
+//
+// Los encabezados se resuelven por NOMBRE, no por índice fijo: "Motivo de negación" nunca
+// se había leído en ningún lado del código antes de esto, así que no hay un número de columna
+// ya probado en producción al que apostar. Resolverlo por header evita romper silenciosamente
+// si alguien reordena columnas en la hoja más adelante.
+function _mapaColumnasPorNombre(hoja, nombres) {
+  var headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getDisplayValues()[0];
+  var norm = function(s) { return String(s || "").toLowerCase().replace(/\s+/g, ""); };
+  var mapa = {};
+  nombres.forEach(function(nombreBuscado) {
+    var clave = norm(nombreBuscado);
+    mapa[nombreBuscado] = -1;
+    for (var i = 0; i < headers.length; i++) {
+      if (norm(headers[i]) === clave) { mapa[nombreBuscado] = i; break; }
+    }
+  });
+  return mapa;
+}
+
+function _tallyMotivo(mapaMotivos, motivo) {
+  var m = String(motivo || "").trim();
+  if (!m) return;
+  mapaMotivos[m] = (mapaMotivos[m] || 0) + 1;
+}
+
+function _motivoPrincipal(mapaMotivos) {
+  var claves = Object.keys(mapaMotivos || {});
+  if (claves.length === 0) return null;
+  var top = claves[0];
+  claves.forEach(function(k) { if (mapaMotivos[k] > mapaMotivos[top]) top = k; });
+  return { motivo: top, count: mapaMotivos[top] };
+}
+
+// De los dos motivos (negación/aplazamiento) cuál mostrar como "motivo principal" de la fila:
+// el de mayor conteo entre ambos; empata a favor de negación por ser la señal más seria.
+function _motivoPrincipalCombinado(motivosNegacion, motivosAplazamiento) {
+  var topNeg = _motivoPrincipal(motivosNegacion);
+  var topApl = _motivoPrincipal(motivosAplazamiento);
+  if (!topNeg && !topApl) return null;
+  if (!topNeg) return { tipo: "aplazamiento", motivo: topApl.motivo, count: topApl.count };
+  if (!topApl) return { tipo: "negacion", motivo: topNeg.motivo, count: topNeg.count };
+  return topNeg.count >= topApl.count
+    ? { tipo: "negacion", motivo: topNeg.motivo, count: topNeg.count }
+    : { tipo: "aplazamiento", motivo: topApl.motivo, count: topApl.count };
+}
+
 /**
  * Obtiene métricas de rendimiento individual por analista para una fecha específica.
  */
@@ -821,6 +902,9 @@ function obtenerRendimientoPorDia(fechaFiltro) {
   const hoja = ss.getSheetByName(SHEET_NAME_SOLICITUDES);
   const data = hoja.getDataRange().getDisplayValues();
   const analistaMap = {};
+  const colsMotivo = _mapaColumnasPorNombre(hoja, ["Motivo de negación", "Motivo de aplazamiento"]);
+  const idxMotivoNeg = colsMotivo["Motivo de negación"];
+  const idxMotivoApl = colsMotivo["Motivo de aplazamiento"];
 
   for (let i = 1; i < data.length; i++) {
     const fechaFinRawR = String(data[i][26] || "").trim();
@@ -838,15 +922,15 @@ function obtenerRendimientoPorDia(fechaFiltro) {
     const horaFin = fechaFinCompleta.split(' ')[1] || "";
 
     if (!analistaMap[clave]) {
-      analistaMap[clave] = { nombre: nombre, correo: correo, total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, primera: "", ultima: "", count: 0, horasSlot: {} };
+      analistaMap[clave] = { nombre: nombre, correo: correo, total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, primera: "", ultima: "", count: 0, horasSlot: {}, motivosNegacion: {}, motivosAplazamiento: {} };
     }
     const a = analistaMap[clave];
     a.total++;
     a.count++;
 
     if (estado.includes("APROB") && !estado.includes("PENDIENTE")) a.aprobadas++;
-    else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) a.negadas++;
-    else if (estado.includes("APLAZ")) a.aplazadas++;
+    else if (estado.includes("NEGAD") || estado.includes("RECHAZ")) { a.negadas++; if (idxMotivoNeg >= 0) _tallyMotivo(a.motivosNegacion, data[i][idxMotivoNeg]); }
+    else if (estado.includes("APLAZ")) { a.aplazadas++; if (idxMotivoApl >= 0) _tallyMotivo(a.motivosAplazamiento, data[i][idxMotivoApl]); }
 
     const tiempoGestion = parseFloat(tiempoGestionRaw.replace(',', '.'));
     if (!isNaN(tiempoGestion) && tiempoGestion >= 0) { a.sumaTiempo += tiempoGestion; a.countTiempo++; }
@@ -887,7 +971,7 @@ function obtenerRendimientoPorDia(fechaFiltro) {
           const horaFinR = fechaFinStr.split(' ')[1] || "";
 
           if (!analistaMap[claveR]) {
-            analistaMap[claveR] = { nombre: nombreR, correo: correoR, total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, primera: "", ultima: "", count: 0, horasSlot: {} };
+            analistaMap[claveR] = { nombre: nombreR, correo: correoR, total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaTiempo: 0, countTiempo: 0, sumaTiempoResolucion: 0, countTiempoResolucion: 0, fueraSLA: 0, primera: "", ultima: "", count: 0, horasSlot: {}, motivosNegacion: {}, motivosAplazamiento: {} };
           }
           const aR = analistaMap[claveR];
           aR.total++;
@@ -961,6 +1045,12 @@ function obtenerRendimientoPorDia(fechaFiltro) {
       aprobadas: a.aprobadas,
       negadas: a.negadas,
       aplazadas: a.aplazadas,
+      pctAprobacion: a.total > 0 ? Math.round((a.aprobadas / a.total) * 1000) / 10 : 0,
+      pctNegacion: a.total > 0 ? Math.round((a.negadas / a.total) * 1000) / 10 : 0,
+      pctAplazamiento: a.total > 0 ? Math.round((a.aplazadas / a.total) * 1000) / 10 : 0,
+      motivosNegacion: a.motivosNegacion,
+      motivosAplazamiento: a.motivosAplazamiento,
+      motivoPrincipal: _motivoPrincipalCombinado(a.motivosNegacion, a.motivosAplazamiento),
       tiempoPromedio: a.countTiempo > 0 ? Math.round((a.sumaTiempo / a.countTiempo) * 10) / 10 : 0,
       tiempoPromedioGeneral: a.countTiempoResolucion > 0 ? Number((a.sumaTiempoResolucion / a.countTiempoResolucion).toFixed(2)) : 0,
       promedioPorHora: ritmoEfec,
@@ -2056,6 +2146,7 @@ var DEFAULT_AGENT_CONFIG = {
     maxTiempoColaMin: 45,
     maxBacklog: 15,
     maxTasaNegacionPct: 25,
+    maxTasaAplazamientoPct: 30,
     umbralMinutosPausa: 90
   },
   umbrales: {
@@ -2157,6 +2248,12 @@ function agente_obtenerConfig() {
       if (parsed.notificaciones.enviarInformeIndividual === undefined) parsed.notificaciones.enviarInformeIndividual = false;
       if (parsed.notificaciones.informeIndividualDiaISO === undefined) parsed.notificaciones.informeIndividualDiaISO = 5;
       if (parsed.metas && parsed.metas.umbralMinutosPausa === undefined) parsed.metas.umbralMinutosPausa = 90;
+      // maxTasaNegacionPct existía en el código desde antes pero nunca tuvo backfill — una config
+      // guardada previa a su creación quedaría con el valor en undefined y la alerta de negación
+      // nunca dispararía (comparar contra undefined siempre da false). Se corrige de una vez junto
+      // con la meta nueva de aplazamiento.
+      if (parsed.metas && parsed.metas.maxTasaNegacionPct === undefined) parsed.metas.maxTasaNegacionPct = 25;
+      if (parsed.metas && parsed.metas.maxTasaAplazamientoPct === undefined) parsed.metas.maxTasaAplazamientoPct = 30;
       return parsed;
     } catch (e) {}
   }
@@ -2185,6 +2282,16 @@ function agente_guardarConfig(configObj) {
   return { success: true, config: current };
 }
 
+// Umbrales que la pestaña Analistas necesita para resaltar filas (tasa de negación/aplazamiento
+// alta), sin tener que cargar toda la config del Agente Coordinador solo para leer dos números.
+function agente_obtenerMetasDecision() {
+  var metas = agente_obtenerConfig().metas;
+  return {
+    maxTasaNegacionPct: metas.maxTasaNegacionPct,
+    maxTasaAplazamientoPct: metas.maxTasaAplazamientoPct
+  };
+}
+
 // --- LECTURA DE DATOS PARA EL AGENTE ---
 
 function _agente_leerDatosHoy() {
@@ -2202,6 +2309,9 @@ function _agente_leerDatosRango(fechaDesdeStr, fechaHastaStr) {
   var hoja = ss.getSheetByName(SHEET_NAME_SOLICITUDES);
   var data = hoja.getDataRange().getDisplayValues();
   var scoreMap = cargarDiccionarioScore();
+  var colsMotivo = _mapaColumnasPorNombre(hoja, ["Motivo de negación", "Motivo de aplazamiento"]);
+  var idxMotivoNeg = colsMotivo["Motivo de negación"];
+  var idxMotivoApl = colsMotivo["Motivo de aplazamiento"];
 
   var registros = [];
   var backlogDetalle = [];
@@ -2251,6 +2361,8 @@ function _agente_leerDatosRango(fechaDesdeStr, fechaHastaStr) {
       correo: correo,
       estado: estadoLabel,
       sucursal: sucursal,
+      motivoNegacion: (estadoLabel === "RECHAZADO" && idxMotivoNeg >= 0) ? String(fila[idxMotivoNeg] || "").trim() : "",
+      motivoAplazamiento: (estadoLabel === "APLAZADO" && idxMotivoApl >= 0) ? String(fila[idxMotivoApl] || "").trim() : "",
       tGestion: !isNaN(tGestionRaw) && tGestionRaw >= 0 ? tGestionRaw : null,
       tResolucion: !isNaN(tResolucionRaw) ? tResolucionRaw / 60 : null,
       tCola: !isNaN(tColaRaw) && tColaRaw >= 0 ? tColaRaw : null,
@@ -2850,6 +2962,22 @@ function _detectarOutliers(valores, numStdDev) {
 function _calcularHealthScore(registros, config, historicos, alertas, backlogDetalle, analistasActivos, cuposMap) {
   var components = {};
 
+  var ahora = new Date();
+  var horaActual = parseInt(Utilities.formatDate(ahora, TIMEZONE, "HH"), 10);
+  var minActual = parseInt(Utilities.formatDate(ahora, TIMEZONE, "mm"), 10);
+
+  // Ventana en la que "cero gestiones" ya es una señal real y no simplemente "todavía es temprano"
+  // — mismo criterio (8am-5pm, con 1h de gracia al abrir) que usa _alerta_inactividadAnalistas,
+  // para que el Health Score y esa alerta nunca se contradigan sobre cuándo empezar a preocuparse.
+  var horasTranscurridasReales = horaActual - 8;
+  var ventanaEvaluable = horaActual >= 9 && horaActual < 17;
+  // "Sin actividad" honesto: cero registros Y ya pasó tiempo suficiente para esperar actividad.
+  // Antes, cada componente sin denominador (0 SLA medibles, 0 tiempos, 0 cupos) caía en un
+  // fallback de "100 = perfecto" — así que un día completamente parado (0 gestionadas) podía
+  // salir con Health Score "Bien" simplemente porque no había datos con qué calcular nada. Ver
+  // conversación: KPIs del día en 0 pero Salud Operativa en 80/B.
+  var sinActividad = registros.length === 0 && ventanaEvaluable;
+
   // 1. SLA Cumplimiento (25%)
   var dentroSLA = 0, totalSLA = 0;
   registros.forEach(function(r) {
@@ -2858,15 +2986,12 @@ function _calcularHealthScore(registros, config, historicos, alertas, backlogDet
       if (r.tResolucion <= 2) dentroSLA++;
     }
   });
-  var pctSLA = totalSLA > 0 ? (dentroSLA / totalSLA) * 100 : 100;
+  var pctSLA = totalSLA > 0 ? (dentroSLA / totalSLA) * 100 : (sinActividad ? 0 : 100);
   var scoreSLA = Math.min(100, (pctSLA / config.metas.slaPct) * 100);
   components.slaCumplimiento = { value: Math.round(scoreSLA), weight: 25 };
 
   // 2. Productividad (20%) — basada en cupos reales
-  var ahora = new Date();
-  var horaActual = parseInt(Utilities.formatDate(ahora, TIMEZONE, "HH"), 10);
-  var minActual = parseInt(Utilities.formatDate(ahora, TIMEZONE, "mm"), 10);
-  var horasT = horaActual >= 17 ? 9 : Math.max(1, (horaActual - 8) + minActual / 60);
+  var horasT = horaActual >= 17 ? 9 : Math.max(1, horasTranscurridasReales + minActual / 60);
   var totalCupos = 0;
   Object.keys(cuposMap || {}).forEach(function(k) { totalCupos += (cuposMap[k].total || 0); });
   var esperado;
@@ -2882,25 +3007,42 @@ function _calcularHealthScore(registros, config, historicos, alertas, backlogDet
   // 3. Tiempo Gestión (15%)
   var sumaG = 0, cG = 0;
   registros.forEach(function(r) { if (r.tGestion !== null) { sumaG += r.tGestion; cG++; } });
-  var avgG = cG > 0 ? sumaG / cG : 0;
   var metaG = config.metas.maxTiempoGestionMin;
-  var scoreG = avgG <= metaG ? 100 : Math.max(0, 100 - ((avgG - metaG) / metaG * 100));
+  var scoreG;
+  if (cG > 0) {
+    var avgG = sumaG / cG;
+    scoreG = avgG <= metaG ? 100 : Math.max(0, 100 - ((avgG - metaG) / metaG * 100));
+  } else {
+    scoreG = sinActividad ? 0 : 100;
+  }
   components.tiempoGestion = { value: Math.round(scoreG), weight: 15 };
 
-  // 4. Backlog Salud (15%)
+  // 4. Backlog Salud (15%) — cálculo directo (no depende de un fallback de "sin datos"), se deja igual.
   var totalBack = backlogDetalle.length;
   var rojos = backlogDetalle.filter(function(b) { return b.alertaSLA === "rojo"; }).length;
   var metaBack = Math.max(1, config.metas.maxBacklog);
   var scoreBack = Math.max(0, 100 - (totalBack / metaBack * 50) - (totalBack > 0 ? (rojos / totalBack * 50) : 0));
   components.backlogSalud = { value: Math.round(Math.min(100, scoreBack)), weight: 15 };
 
-  // 5. Actividad del equipo (25%) — basada en cupos: cuántos analistas con cupo han gestionado
+  // 5. Actividad del equipo (25%) — basada en cupos: cuántos analistas con cupo han gestionado.
+  // Si no hay cupos cargados (hoja historico_cupos vacía/atrasada), NO se puede asumir "100%
+  // activos" a ciegas — se cae a verificar directamente sobre los analistas marcados ACTIVO
+  // ahora mismo (mismo universo que ya usa _alerta_inactividadAnalistas). Solo si tampoco hay
+  // ese dato se usa el fallback neutral de antes.
   var gestionesPorCorreo = {};
   registros.forEach(function(r) { if (r.correo) gestionesPorCorreo[r.correo] = true; });
   var totalConCupo = Object.keys(cuposMap || {}).length;
-  var conCupoYGestion = 0;
-  Object.keys(cuposMap || {}).forEach(function(correo) { if (gestionesPorCorreo[correo]) conCupoYGestion++; });
-  var scoreInact = totalConCupo > 0 ? (conCupoYGestion / totalConCupo) * 100 : 100;
+  var scoreInact;
+  if (totalConCupo > 0) {
+    var conCupoYGestion = 0;
+    Object.keys(cuposMap || {}).forEach(function(correo) { if (gestionesPorCorreo[correo]) conCupoYGestion++; });
+    scoreInact = (conCupoYGestion / totalConCupo) * 100;
+  } else if ((analistasActivos || []).length > 0) {
+    var conGestionDeActivos = analistasActivos.filter(function(a) { return gestionesPorCorreo[a.correo]; }).length;
+    scoreInact = (conGestionDeActivos / analistasActivos.length) * 100;
+  } else {
+    scoreInact = sinActividad ? 0 : 100;
+  }
   components.inactividad = { value: Math.round(scoreInact), weight: 25 };
 
   // Score final
@@ -3061,14 +3203,14 @@ function agente_ejecutarDiagnostico() {
   var prodPorCorreo = {};
   regs.forEach(function(r) {
     if (!r.correo) return;
-    if (!prodPorCorreo[r.correo]) prodPorCorreo[r.correo] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaG: 0, cG: 0, sumaR: 0, cR: 0, sumaCola: 0, cCola: 0, fueraSLA: 0, nombre: r.analista, tipos: {} };
+    if (!prodPorCorreo[r.correo]) prodPorCorreo[r.correo] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0, sumaG: 0, cG: 0, sumaR: 0, cR: 0, sumaCola: 0, cCola: 0, fueraSLA: 0, nombre: r.analista, tipos: {}, motivosNegacion: {}, motivosAplazamiento: {} };
     var p = prodPorCorreo[r.correo];
     p.total++;
     var tipoR = r.tipo || "Otro";
     p.tipos[tipoR] = (p.tipos[tipoR] || 0) + 1;
     if (r.estado === "APROBADO") p.aprobadas++;
-    if (r.estado === "RECHAZADO") p.negadas++;
-    if (r.estado === "APLAZADO") p.aplazadas++;
+    if (r.estado === "RECHAZADO") { p.negadas++; _tallyMotivo(p.motivosNegacion, r.motivoNegacion); }
+    if (r.estado === "APLAZADO") { p.aplazadas++; _tallyMotivo(p.motivosAplazamiento, r.motivoAplazamiento); }
     if (r.tGestion !== null) { p.sumaG += r.tGestion; p.cG++; }
     if (r.tResolucion !== null && r.tResolucion > 0) { p.sumaR += r.tResolucion; p.cR++; if (r.tResolucion > 2) p.fueraSLA++; }
     if (r.tCola !== null && r.tCola >= 0) { p.sumaCola += r.tCola; p.cCola++; }
@@ -3183,11 +3325,34 @@ function agente_ejecutarDiagnostico() {
     if (prod.negadas > 0 && prod.total >= 3) {
       var pctNeg = Math.round(prod.negadas / prod.total * 100);
       if (pctNeg > config.metas.maxTasaNegacionPct) {
+        var topMotivoNeg = _motivoPrincipal(prod.motivosNegacion);
+        var puntoNeg = "Tasa de negación del " + pctNeg + "% (" + prod.negadas + " de " + prod.total + "). Supera la meta de " + config.metas.maxTasaNegacionPct + "%.";
+        if (topMotivoNeg) puntoNeg += " Motivo más frecuente: \"" + topMotivoNeg.motivo + "\" (" + topMotivoNeg.count + " caso" + (topMotivoNeg.count === 1 ? "" : "s") + ").";
+        var datosNeg = [{ label: "Tasa negación", valor: pctNeg + "%", meta: "Meta: <" + config.metas.maxTasaNegacionPct + "%" }];
+        if (topMotivoNeg) datosNeg.push({ label: "Motivo principal", valor: topMotivoNeg.motivo, meta: topMotivoNeg.count + " caso" + (topMotivoNeg.count === 1 ? "" : "s") });
         motivos.push({
           tipo: "negacion",
-          datos: [{ label: "Tasa negación", valor: pctNeg + "%", meta: "Meta: <" + config.metas.maxTasaNegacionPct + "%" }],
-          punto: "Tasa de negación del " + pctNeg + "% (" + prod.negadas + " de " + prod.total + "). Supera la meta de " + config.metas.maxTasaNegacionPct + "%.",
+          datos: datosNeg,
+          punto: puntoNeg,
           sugerencia: "Revisar criterios de análisis y calidad de los expedientes que recibe."
+        });
+      }
+    }
+
+    // Tasa de aplazamiento alta — misma lógica que negación, meta propia (maxTasaAplazamientoPct)
+    if (prod.aplazadas > 0 && prod.total >= 3) {
+      var pctApl = Math.round(prod.aplazadas / prod.total * 100);
+      if (pctApl > config.metas.maxTasaAplazamientoPct) {
+        var topMotivoApl = _motivoPrincipal(prod.motivosAplazamiento);
+        var puntoApl = "Tasa de aplazamiento del " + pctApl + "% (" + prod.aplazadas + " de " + prod.total + "). Supera la meta de " + config.metas.maxTasaAplazamientoPct + "%.";
+        if (topMotivoApl) puntoApl += " Motivo más frecuente: \"" + topMotivoApl.motivo + "\" (" + topMotivoApl.count + " caso" + (topMotivoApl.count === 1 ? "" : "s") + ").";
+        var datosApl = [{ label: "Tasa aplazamiento", valor: pctApl + "%", meta: "Meta: <" + config.metas.maxTasaAplazamientoPct + "%" }];
+        if (topMotivoApl) datosApl.push({ label: "Motivo principal", valor: topMotivoApl.motivo, meta: topMotivoApl.count + " caso" + (topMotivoApl.count === 1 ? "" : "s") });
+        motivos.push({
+          tipo: "aplazamiento",
+          datos: datosApl,
+          punto: puntoApl,
+          sugerencia: "Revisar qué información falta con más frecuencia y si se puede solicitar de forma proactiva al radicar."
         });
       }
     }

@@ -15,7 +15,15 @@ var chartNegacionSucursal=null, chartTendenciaSLA=null, chartHeatmapHora=null, c
 var chartTiempoGestion=null, chartTiempoResolucion=null, chartTiempoCola=null, chartTiemposSolicitud=null, chartDispersion=null;
 var chartVolumenInmob=null, chartComparativaTiempos=null;
 var chartVolumenSucursal=null, chartTiemposSucursal=null;
-var _tiemposDetalleData=[], _porAnalistaCompleto=null, _modoRendimiento='dia';
+var chartTendenciaDecision=null, chartMotivosNegacion=null, chartMotivosAplazamiento=null;
+var chartComparativaAnalistas=null;
+var _tiemposDetalleData=[], _porAnalistaCompleto=null;
+// Umbrales de negación/aplazamiento para resaltar filas en "Rendimiento Individual" — se
+// pre-cargan con los defaults del Agente Coordinador y se actualizan en cuanto responde el
+// fetch real, para que la tabla nunca tenga que esperar a un round-trip para pintarse.
+var _metasDecision = { maxTasaNegacionPct: 25, maxTasaAplazamientoPct: 30 };
+var _motivosAnalistaData = {};
+window._detalleHorasData = window._detalleHorasData || {};
 var _segmentacionData={}, _datosCompletos=null;
 var _debouncePolizaTimer=null;
 var _debounceSolicitudTimer=null;
@@ -104,6 +112,10 @@ window.onload = function() {
         }
     }).getEmailUsuario();
 
+    google.script.run.withSuccessHandler(function(m) {
+        if (m) _metasDecision = m;
+    }).agente_obtenerMetasDecision();
+
     google.script.run.withSuccessHandler(function(permiso) {
         if (permiso.rol === 'sin_acceso') {
             _splashError('Tu cuenta no tiene permisos para ver este tablero.');
@@ -122,8 +134,6 @@ function _initFechasYCargar() {
     var h=new Date(), yyyy=h.getFullYear(), mm=String(h.getMonth()+1).padStart(2,'0'), dd=String(h.getDate()).padStart(2,'0');
     document.getElementById('filtroFechaSeguimiento').value=yyyy+'-'+mm+'-'+dd;
     document.getElementById('filtroFechaSeguimiento').max=yyyy+'-'+mm+'-'+dd;
-    document.getElementById('filtroFechaRendimiento').value=yyyy+'-'+mm+'-'+dd;
-    document.getElementById('filtroFechaRendimiento').max=yyyy+'-'+mm+'-'+dd;
     setRangoRapido('hoy');
 }
 
@@ -200,7 +210,8 @@ function onDatosCargados(datos){
     poblarFiltrosGenerales(datos.tiemposDetalle);
     mostrarAvisoReestudios(datos.reestudiosDisponibles);
     aplicarFiltroSegmentoGlobal();
-    cargarRendimientoPorDia();
+    document.getElementById('rendimientoSubtitulo').textContent = 'Rango ' + _fmtRangoPrincipal();
+    renderTablaAnalistas(datos.porAnalista);
     cargarAsesoresActivosPrimerResultado();
     cargarColaAsignacion();
 }
@@ -382,7 +393,9 @@ var _ayudaTextos={
     tiemposPorTipo:{t:'Comparativa Tiempos por Tipo',d:'Promedio de tiempo de gestión para cada tipo de estudio. Identifica qué tipos de solicitudes requieren más tiempo de análisis.'},
     tiemposRespuesta:{t:'Tiempos de Respuesta',d:'Evolución diaria del promedio de T. Gestión (minutos) y T. General (horas). Se puede filtrar por sucursal y tipo. Ideal para detectar días con demoras atípicas.'},
     dispersion:{t:'Rapidez y Productividad',d:'Gráfico de dispersión: eje X = volumen de solicitudes, eje Y = tiempo promedio de gestión. Verde = alto volumen + rápido (ideal). Rojo = bajo volumen + lento (revisar). Permite evaluar eficiencia individual.'},
-    rendimientoIndividual:{t:'Rendimiento Individual',d:'Tabla de métricas por analista para el día o rango seleccionado. Cada columna aporta una dimensión de análisis:<br><br><b>Total / Aprob. / Neg. / Aplaz.</b> — volumen gestionado y distribución de resultados. Una tasa alta de negaciones puede reflejar criterio restrictivo o baja calidad en los expedientes recibidos.<br><br><b>T. Gestión</b> — tiempo promedio desde la asignación hasta el cierre. Mide la velocidad real de trabajo del analista una vez tiene la solicitud en mano.<br><br><b>T. General</b> — tiempo desde la radicación hasta el cierre. Si es muy superior al T. Gestión, la solicitud esperó mucho en cola antes de ser asignada.<br><br><b>Ritmo/h</b> — solicitudes por hora calculadas entre la primera y la última gestión del día. Refleja la velocidad cuando el analista está activo. Un valor alto indica trabajo ágil en el tramo productivo.<br><br><b>Prod/h</b> — solicitudes totales divididas entre las horas de turno transcurridas. Si es notablemente menor que el Ritmo/h, el analista tuvo períodos prolongados sin gestionar.<br><br><b>Fuera SLA</b> — solicitudes con T. General mayor a 2 horas. Un número alto en un analista puede indicar casos complejos o tiempos de espera elevados previos a la asignación.<br><br>El botón <i class="bi bi-bar-chart-steps"></i> muestra la distribución de gestiones hora a hora.'},
+    comparativaAnalistas:{t:'Comparativa de Analistas',d:'Una barra por analista, siempre sumando 100%: verde = % Aprobación, rojo = % Negación, ámbar = % Aplazamiento. Ordenadas de mayor a menor % de negación, para que los casos que más llaman la atención queden arriba. Muestra a todos los analistas del rango a la vez — el selector de la sección de abajo (Tendencia y Motivos) es para aislar a uno puntual, este gráfico no se filtra por ese selector.'},
+    tendenciaMotivos:{t:'Tendencia y Motivos de Decisión',d:'El selector "Analista" controla los tres gráficos a la vez. Con "Todo el equipo" ves el agregado; al elegir un analista, los tres se filtran solo a sus casos.<br><br><b>Línea de tendencia</b> — %Aprobación, %Negación y %Aplazamiento por día. Útil para ver si una tasa se está moviendo con el tiempo, no solo cuánto vale hoy.<br><br><b>Top motivos</b> — de todos los casos negados/aplazados en el rango, cuáles razones específicas se repiten más. Responde "por qué" está subiendo la tasa, no solo "cuánto".'},
+    rendimientoIndividual:{t:'Rendimiento Individual',d:'Tabla de métricas por analista para el rango de fechas seleccionado arriba (mismo filtro que el resto de la pestaña). Cada columna aporta una dimensión de análisis:<br><br><b>Total / % Aprob. / % Neg. / % Aplaz.</b> — volumen gestionado y distribución de resultados. Una tasa alta de negaciones puede reflejar criterio restrictivo o baja calidad en los expedientes recibidos.<br><br><b>T. Gestión</b> — tiempo promedio desde la asignación hasta el cierre. Mide la velocidad real de trabajo del analista una vez tiene la solicitud en mano.<br><br><b>T. General</b> — tiempo desde la radicación hasta el cierre. Si es muy superior al T. Gestión, la solicitud esperó mucho en cola antes de ser asignada.<br><br><b>Ritmo/h</b> — solicitudes por hora calculadas entre la primera y la última gestión del día. Refleja la velocidad cuando el analista está activo. Un valor alto indica trabajo ágil en el tramo productivo.<br><br><b>Prod/h</b> — solicitudes totales divididas entre las horas de turno transcurridas. Si es notablemente menor que el Ritmo/h, el analista tuvo períodos prolongados sin gestionar.<br><br><b>Fuera SLA</b> — solicitudes con T. General mayor a 2 horas. Un número alto en un analista puede indicar casos complejos o tiempos de espera elevados previos a la asignación.<br><br>El botón <i class="bi bi-bar-chart-steps"></i> muestra la distribución de gestiones hora a hora.'},
     bioTasaConversion:{t:'Tasa de Conversión',d:'% de los WhatsApp enviados que el cliente resolvió solo, sin necesitar un analista.'},
     bioEscaladas:{t:'Cola de Asignación',d:'Solicitudes esperando que un analista las tome, en este momento.'},
     bioEsperandoCorte:{t:'Esperando Próximo Corte',d:'Ya se les envió el WhatsApp. Esperan el corte de las 8am o 12pm para saber si se resolvieron o hay que escalarlas.'},
@@ -645,6 +658,9 @@ function renderizarConDatos(datos, tiemposFiltrados, backlogFiltrado){
     renderVolumenSucursal(tiemposFiltrados);
     renderTiemposSucursal(tiemposFiltrados);
     _porAnalistaCompleto=datos.porAnalista;
+    _poblarSelectorAnalistaTendencia(datos.porAnalista);
+    renderTendenciaYMotivos();
+    renderComparativaAnalistas(datos.porAnalista);
 
     // Segmentación gráficos específicos
     var seg=document.getElementById('filtroSegmento').value;
@@ -705,7 +721,7 @@ function renderChartProduccion(pd){if(chartProduccion)chartProduccion.destroy();
 
 function renderChartEstados(dist){if(chartEstados)chartEstados.destroy();var ctx=document.getElementById('chartEstados').getContext('2d');chartEstados=new Chart(ctx,{type:'doughnut',data:{labels:['Aprobado','Rechazado','Aplazado'],datasets:[{data:[dist.aprobadas,dist.negadas,dist.aplazadas],backgroundColor:['#253150','#BD0F14','#706F6F'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:12},formatter:function(v,c){var t=c.dataset.data.reduce(function(a,b){return a+b;},0);if(t===0||v===0)return'';return v+' ('+Math.round(v/t*100)+'%)';}}}}});}
 
-function renderChartAnalistas(pa){if(chartAnalistas)chartAnalistas.destroy();if(!pa||pa.length===0)return;var ctx=document.getElementById('chartAnalistas').getContext('2d');var top=pa.slice(0,10);chartAnalistas=new Chart(ctx,{type:'bar',data:{labels:top.map(function(a){return a.nombre;}),datasets:[{label:'Solicitudes',data:top.map(function(a){return a.total;}),backgroundColor:'#BD0F14',borderRadius:6}]},options:{responsive:true,indexAxis:'y',plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:11},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
+function renderChartAnalistas(pa){if(chartAnalistas)chartAnalistas.destroy();if(!pa||pa.length===0)return;var ctx=document.getElementById('chartAnalistas').getContext('2d');var top=pa.slice(0,10);chartAnalistas=new Chart(ctx,{type:'bar',data:{labels:top.map(function(a){return a.nombre;}),datasets:[{label:'Solicitudes',data:top.map(function(a){return a.total;}),backgroundColor:'#BD0F14',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:11},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
 
 function renderChartSLA(sd){if(chartSLA)chartSLA.destroy();if(!sd||sd.length===0)return;var ctx=document.getElementById('chartSLA').getContext('2d');chartSLA=new Chart(ctx,{type:'bar',data:{labels:sd.map(function(d){return d.fecha;}),datasets:[{label:'Dentro SLA',data:sd.map(function(d){return d.dentroSLA;}),backgroundColor:'#253150',borderRadius:4},{label:'Fuera SLA',data:sd.map(function(d){return d.fueraSLA;}),backgroundColor:'#BD0F14',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:10},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}}}}}); }
 
@@ -736,6 +752,7 @@ function renderTiemposPorTipo(td){
     data:{labels:tipos,datasets:[{label:'T. Gestión promedio',data:pr,backgroundColor:col,borderRadius:5}]},
     options:{
       responsive:true,
+      maintainAspectRatio:false,
       scales:{y:{beginAtZero:true,ticks:{callback:function(v){return _fmtTick(v);}}}},
       plugins:{
         datalabels:{
@@ -830,7 +847,40 @@ function renderComparativaTiempos(d){
 }
 
 // === VOLUMEN POR SUCURSAL ===
-function renderVolumenSucursal(td){if(chartVolumenSucursal)chartVolumenSucursal.destroy();if(!td||td.length===0)return;var sucMap={};td.forEach(function(r){if(!sucMap[r.sucursal])sucMap[r.sucursal]=0;sucMap[r.sucursal]++;});var lista=Object.keys(sucMap).map(function(s){return{sucursal:s,count:sucMap[s]};}).sort(function(a,b){return b.count-a.count;});var ctx=document.getElementById('chartVolumenSucursal').getContext('2d');chartVolumenSucursal=new Chart(ctx,{type:'bar',data:{labels:lista.map(function(x){return x.sucursal;}),datasets:[{label:'Solicitudes',data:lista.map(function(x){return x.count;}),backgroundColor:'#253150',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:11},anchor:'center',align:'center',formatter:function(v){return v>0?v:'';}},legend:{display:false}},scales:{y:{beginAtZero:true}}}});}
+// Mismo patrón que renderVolumenInmob (barra horizontal, alto dinámico, etiquetas envueltas) —
+// antes era una barra vertical de alto fijo con todas las sucursales sin recorte, que se
+// amontonaba con más de ~6-7 sucursales.
+function renderVolumenSucursal(td){
+    if(chartVolumenSucursal)chartVolumenSucursal.destroy();
+    if(!td||td.length===0)return;
+    var sucMap={};
+    td.forEach(function(r){if(!sucMap[r.sucursal])sucMap[r.sucursal]=0;sucMap[r.sucursal]++;});
+    var lista=Object.keys(sucMap).map(function(s){return{sucursal:s,count:sucMap[s]};}).sort(function(a,b){return b.count-a.count;});
+    var h=Math.max(220,lista.length*46+60)+'px';
+    var wrap=document.getElementById('wrapVolumenSucursal');wrap.style.height=h;
+    var canvas=document.getElementById('chartVolumenSucursal');canvas.style.height=h;
+    var ctx=canvas.getContext('2d');
+    chartVolumenSucursal=new Chart(ctx,{
+        type:'bar',
+        data:{
+            labels:lista.map(function(x){return wrapLabel(x.sucursal,20);}),
+            datasets:[{label:'Solicitudes',data:lista.map(function(x){return x.count;}),backgroundColor:'#253150',borderRadius:6,barThickness:22}]
+        },
+        options:{
+            responsive:true,maintainAspectRatio:false,indexAxis:'y',
+            layout:{padding:{left:10,right:30}},
+            plugins:{
+                datalabels:{color:'#253150',font:{weight:'bold',size:12},anchor:'end',align:'end',formatter:function(v){return v>0?v:'';}},
+                legend:{display:false},
+                tooltip:{callbacks:{title:function(t){return lista[t[0].dataIndex].sucursal;}}}
+            },
+            scales:{
+                x:{beginAtZero:true,grid:{color:'rgba(0,0,0,0.04)'}},
+                y:{ticks:{font:{size:11,weight:'600'},autoSkip:false}}
+            }
+        }
+    });
+}
 
 function renderTiemposSucursal(td){
   if(chartTiemposSucursal)chartTiemposSucursal.destroy();
@@ -875,10 +925,10 @@ function renderBacklogSemaforo(det){var tb=document.getElementById('cuerpoBacklo
 // === TIEMPOS RESPUESTA ===
 function inicializarFiltrosTiempos(td){_tiemposDetalleData=td;var s={};td.forEach(function(r){s[r.sucursal]=true;});var sel=document.getElementById('filtroTiempoSucursal');sel.innerHTML='<option value="todas">Todas</option>';Object.keys(s).sort().forEach(function(x){sel.innerHTML+='<option value="'+esc(x)+'">'+esc(x)+'</option>';});renderTiemposRespuesta();}
 function limpiarFiltrosTiempos(){document.getElementById('filtroTiempoSucursal').value='todas';document.getElementById('filtroTiempoTipo').value='todos';renderTiemposRespuesta();}
-function renderTiemposRespuesta(){var sf=document.getElementById('filtroTiempoSucursal').value,tf=document.getElementById('filtroTiempoTipo').value;var f=_tiemposDetalleData.filter(function(r){if(sf!=='todas'&&r.sucursal!==sf)return false;if(tf!=='todos'&&r.tipo!==tf)return false;return true;});var pf={};f.forEach(function(r){if(!pf[r.fecha])pf[r.fecha]={sG:0,cG:0,sR:0,cR:0,sC:0,cC:0};if(r.tGestion!==null){pf[r.fecha].sG+=r.tGestion;pf[r.fecha].cG++;}if(r.tResolucion!==null){pf[r.fecha].sR+=r.tResolucion;pf[r.fecha].cR++;}if(r.tCola!==null&&r.tCola!==undefined){pf[r.fecha].sC+=r.tCola;pf[r.fecha].cC++;}});var fe=Object.keys(pf).sort(function(a,b){var pa=a.split('/'),pb=b.split('/');return new Date(pa[2],pa[1]-1,pa[0])-new Date(pb[2],pb[1]-1,pb[0]);});var pG=fe.map(function(x){return pf[x].cG>0?Math.round(pf[x].sG/pf[x].cG*10)/10:0;});var pR=fe.map(function(x){return pf[x].cR>0?Number((pf[x].sR/pf[x].cR).toFixed(2)):0;});var pC=fe.map(function(x){return pf[x].cC>0?Math.round(pf[x].sC/pf[x].cC*10)/10:0;});if(chartTiempoGestion)chartTiempoGestion.destroy();var c1=document.getElementById('chartTiempoGestion').getContext('2d');chartTiempoGestion=new Chart(c1,{type:'bar',data:{labels:fe,datasets:[{label:'T. Gestión',data:pG,backgroundColor:'#253150',borderRadius:5}]},options:{responsive:true,scales:{y:{ticks:{callback:function(v){return _fmtTick(v);}}}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?_fmtTick(v):''}},tooltip:{callbacks:{label:function(t){return 'T. Gestión: '+fmtMin(t.raw);}}}}}});if(chartTiempoResolucion)chartTiempoResolucion.destroy();var c2=document.getElementById('chartTiempoResolucion').getContext('2d');chartTiempoResolucion=new Chart(c2,{type:'bar',data:{labels:fe,datasets:[{label:'T. General',data:pR,backgroundColor:'#BD0F14',borderRadius:5}]},options:{responsive:true,scales:{y:{ticks:{callback:function(v){return _fmtTick(v*60);}}}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?_fmtTick(v*60):''}},tooltip:{callbacks:{label:function(t){return 'T. General: '+fmtHrs(t.raw);}}}}}});if(chartTiempoCola)chartTiempoCola.destroy();var c3=document.getElementById('chartTiempoCola').getContext('2d');chartTiempoCola=new Chart(c3,{type:'bar',data:{labels:fe,datasets:[{label:'T. Cola',data:pC,backgroundColor:'#1D7D3F',borderRadius:5}]},options:{responsive:true,scales:{y:{ticks:{callback:function(v){return _fmtTick(v);}}}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?_fmtTick(v):''}},tooltip:{callbacks:{label:function(t){return 'T. Cola: '+fmtMin(t.raw);}}}}}});}
+function renderTiemposRespuesta(){var sf=document.getElementById('filtroTiempoSucursal').value,tf=document.getElementById('filtroTiempoTipo').value;var f=_tiemposDetalleData.filter(function(r){if(sf!=='todas'&&r.sucursal!==sf)return false;if(tf!=='todos'&&r.tipo!==tf)return false;return true;});var pf={};f.forEach(function(r){if(!pf[r.fecha])pf[r.fecha]={sG:0,cG:0,sR:0,cR:0,sC:0,cC:0};if(r.tGestion!==null){pf[r.fecha].sG+=r.tGestion;pf[r.fecha].cG++;}if(r.tResolucion!==null){pf[r.fecha].sR+=r.tResolucion;pf[r.fecha].cR++;}if(r.tCola!==null&&r.tCola!==undefined){pf[r.fecha].sC+=r.tCola;pf[r.fecha].cC++;}});var fe=Object.keys(pf).sort(function(a,b){var pa=a.split('/'),pb=b.split('/');return new Date(pa[2],pa[1]-1,pa[0])-new Date(pb[2],pb[1]-1,pb[0]);});var pG=fe.map(function(x){return pf[x].cG>0?Math.round(pf[x].sG/pf[x].cG*10)/10:0;});var pR=fe.map(function(x){return pf[x].cR>0?Number((pf[x].sR/pf[x].cR).toFixed(2)):0;});var pC=fe.map(function(x){return pf[x].cC>0?Math.round(pf[x].sC/pf[x].cC*10)/10:0;});if(chartTiempoGestion)chartTiempoGestion.destroy();var c1=document.getElementById('chartTiempoGestion').getContext('2d');chartTiempoGestion=new Chart(c1,{type:'bar',data:{labels:fe,datasets:[{label:'T. Gestión',data:pG,backgroundColor:'#253150',borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{ticks:{callback:function(v){return _fmtTick(v);}}}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?_fmtTick(v):''}},tooltip:{callbacks:{label:function(t){return 'T. Gestión: '+fmtMin(t.raw);}}}}}});if(chartTiempoResolucion)chartTiempoResolucion.destroy();var c2=document.getElementById('chartTiempoResolucion').getContext('2d');chartTiempoResolucion=new Chart(c2,{type:'bar',data:{labels:fe,datasets:[{label:'T. General',data:pR,backgroundColor:'#BD0F14',borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{ticks:{callback:function(v){return _fmtTick(v*60);}}}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?_fmtTick(v*60):''}},tooltip:{callbacks:{label:function(t){return 'T. General: '+fmtHrs(t.raw);}}}}}});if(chartTiempoCola)chartTiempoCola.destroy();var c3=document.getElementById('chartTiempoCola').getContext('2d');chartTiempoCola=new Chart(c3,{type:'bar',data:{labels:fe,datasets:[{label:'T. Cola',data:pC,backgroundColor:'#1D7D3F',borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{ticks:{callback:function(v){return _fmtTick(v);}}}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:9},anchor:'center',align:'center',formatter:function(v){return v>0?_fmtTick(v):''}},tooltip:{callbacks:{label:function(t){return 'T. Cola: '+fmtMin(t.raw);}}}}}});}
 
 // === BÚSQUEDA SOLICITUD ===
-function buscarTiemposPorSolicitud(){var si=(document.getElementById('buscarSolicitudId').value||'').trim(),fi=document.getElementById('buscarSolicitudFecha').value||'';if(!si&&!fi){Swal.fire({icon:'warning',title:'Búsqueda vacía'});return;}var fb='';if(fi){var p=fi.split('-');fb=p[2]+'/'+p[1]+'/'+p[0];}var res=_tiemposDetalleData.filter(function(r){return(!si||r.solicitud&&r.solicitud.indexOf(si)>=0)&&(!fb||r.fecha===fb);});if(res.length===0){document.getElementById('resultadosBusquedaSolicitud').style.display='none';document.getElementById('sinResultadosSolicitud').style.display='block';return;}document.getElementById('sinResultadosSolicitud').style.display='none';document.getElementById('resultadosBusquedaSolicitud').style.display='block';var lim=res.slice(0,50);var html='';lim.forEach(function(r){html+='<tr><td class="fw-bold">'+esc(r.solicitud||'—')+'</td><td>'+esc(r.fecha)+'</td><td>'+esc(r.analista||'—')+'</td><td>'+esc(r.sucursal)+'</td><td><span class="badge-pill badge-esp-digital">'+esc(r.tipo)+'</span></td><td>'+(r.tGestion!==null?formatearDuracion(r.tGestion):'—')+'</td><td>'+(r.tResolucion!==null?formatearTiempoGeneral(r.tResolucion):'—')+'</td></tr>';});document.getElementById('cuerpoTiemposSolicitud').innerHTML=html;if(chartTiemposSolicitud)chartTiemposSolicitud.destroy();var ctx=document.getElementById('chartTiemposSolicitud').getContext('2d');chartTiemposSolicitud=new Chart(ctx,{type:'bar',data:{labels:lim.map(function(r){return(r.solicitud||'?');}),datasets:[{label:'Gestión(min)',data:lim.map(function(r){return r.tGestion||0;}),backgroundColor:'#253150',borderRadius:4},{label:'General(min)',data:lim.map(function(r){return r.tResolucion?r.tResolucion*60:0;}),backgroundColor:'#BD0F14',borderRadius:4}]},options:{responsive:true,scales:{y:{beginAtZero:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:8},anchor:'center',align:'center',formatter:function(v){return v>0?fmtMin(v):'';}}}}});}
+function buscarTiemposPorSolicitud(){var si=(document.getElementById('buscarSolicitudId').value||'').trim(),fi=document.getElementById('buscarSolicitudFecha').value||'';if(!si&&!fi){Swal.fire({icon:'warning',title:'Búsqueda vacía'});return;}var fb='';if(fi){var p=fi.split('-');fb=p[2]+'/'+p[1]+'/'+p[0];}var res=_tiemposDetalleData.filter(function(r){return(!si||r.solicitud&&r.solicitud.indexOf(si)>=0)&&(!fb||r.fecha===fb);});if(res.length===0){document.getElementById('resultadosBusquedaSolicitud').style.display='none';document.getElementById('sinResultadosSolicitud').style.display='block';return;}document.getElementById('sinResultadosSolicitud').style.display='none';document.getElementById('resultadosBusquedaSolicitud').style.display='block';var lim=res.slice(0,50);var html='';lim.forEach(function(r){html+='<tr><td class="fw-bold">'+esc(r.solicitud||'—')+'</td><td>'+esc(r.fecha)+'</td><td>'+esc(r.analista||'—')+'</td><td>'+esc(r.sucursal)+'</td><td><span class="badge-pill badge-esp-digital">'+esc(r.tipo)+'</span></td><td>'+(r.tGestion!==null?formatearDuracion(r.tGestion):'—')+'</td><td>'+(r.tResolucion!==null?formatearTiempoGeneral(r.tResolucion):'—')+'</td></tr>';});document.getElementById('cuerpoTiemposSolicitud').innerHTML=html;if(chartTiemposSolicitud)chartTiemposSolicitud.destroy();var ctx=document.getElementById('chartTiemposSolicitud').getContext('2d');chartTiemposSolicitud=new Chart(ctx,{type:'bar',data:{labels:lim.map(function(r){return(r.solicitud||'?');}),datasets:[{label:'Gestión(min)',data:lim.map(function(r){return r.tGestion||0;}),backgroundColor:'#253150',borderRadius:4},{label:'General(min)',data:lim.map(function(r){return r.tResolucion?r.tResolucion*60:0;}),backgroundColor:'#BD0F14',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}},plugins:{datalabels:{color:'#fff',font:{weight:'bold',size:8},anchor:'center',align:'center',formatter:function(v){return v>0?fmtMin(v):'';}}}}});}
 function limpiarBusquedaSolicitud(){document.getElementById('buscarSolicitudId').value='';document.getElementById('buscarSolicitudFecha').value='';document.getElementById('resultadosBusquedaSolicitud').style.display='none';document.getElementById('sinResultadosSolicitud').style.display='none';if(chartTiemposSolicitud){chartTiemposSolicitud.destroy();chartTiemposSolicitud=null;}}
 
 // === DISPERSIÓN ===
@@ -910,6 +960,7 @@ function renderChartDispersion(pa){
     }]},
     options:{
       responsive:true,
+      maintainAspectRatio:false,
       scales:{
         x:{title:{display:true,text:'Solicitudes gestionadas'},beginAtZero:true,ticks:{stepSize:1,precision:0}},
         y:{title:{display:true,text:'T. Gestión promedio'},beginAtZero:true,ticks:{callback:function(v){return _fmtTick(v);}}}
@@ -930,15 +981,198 @@ function renderChartDispersion(pa){
   });
 }
 
+// === COMPARATIVA DE ANALISTAS (Aprob/Neg/Aplaz, siempre los 100%) ===
+// A diferencia de renderTendenciaYMotivos, esta vista no se filtra por el selector de analista:
+// la idea explícita de operación es ver a TODOS lado a lado, no de a uno.
+function renderComparativaAnalistas(pa) {
+    if (chartComparativaAnalistas) { chartComparativaAnalistas.destroy(); chartComparativaAnalistas = null; }
+    var inner = document.getElementById('comparativaAnalistasInner');
+    var lista = (pa || []).filter(function(a) { return a.total > 0; }).slice().sort(function(a, b) { return b.pctNegacion - a.pctNegacion; });
+
+    if (lista.length === 0) {
+        inner.style.height = '80px';
+        var ctxE = document.getElementById('chartComparativaAnalistas').getContext('2d');
+        ctxE.clearRect(0, 0, ctxE.canvas.width, ctxE.canvas.height);
+        ctxE.font = '13px Manrope'; ctxE.fillStyle = '#706F6F'; ctxE.textAlign = 'center';
+        ctxE.fillText('Sin datos en este rango', ctxE.canvas.width / 2, 40);
+        return;
+    }
+
+    // Chart.js dibuja el índice 0 arriba en barras horizontales apiladas — como ya viene ordenado
+    // de mayor a menor % de negación, queda arriba quien más preocupa.
+    inner.style.height = Math.max(120, lista.length * 34 + 40) + 'px';
+    var ctx = document.getElementById('chartComparativaAnalistas').getContext('2d');
+    chartComparativaAnalistas = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: lista.map(function(a) { return a.nombre; }),
+            datasets: [
+                { label: '% Aprobación', data: lista.map(function(a) { return a.pctAprobacion; }), backgroundColor: '#059669', stack: 'pct' },
+                { label: '% Negación', data: lista.map(function(a) { return a.pctNegacion; }), backgroundColor: '#BD0F14', stack: 'pct' },
+                { label: '% Aplazamiento', data: lista.map(function(a) { return a.pctAplazamiento; }), backgroundColor: '#d97706', stack: 'pct' }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+            scales: {
+                x: { stacked: true, min: 0, max: 100, ticks: { callback: function(v) { return v + '%'; } } },
+                y: { stacked: true }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+                datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, formatter: function(v) { return v >= 8 ? Math.round(v) + '%' : ''; } },
+                tooltip: { callbacks: { label: function(c) { return c.dataset.label + ': ' + c.raw + '%'; } } }
+            }
+        }
+    });
+}
+
+// === TENDENCIA Y MOTIVOS DE DECISIÓN ===
+// Un solo selector de analista controla los tres gráficos (tendencia + 2 top-motivos), para
+// poder pasar de "¿está subiendo la tasa del equipo?" a "¿por qué la sube esta persona?" sin
+// cambiar de pantalla. "Todo el equipo" agrega los mismos datos por analista que ya trae
+// _porAnalistaCompleto — no hay una llamada al servidor aparte para esta vista.
+function _poblarSelectorAnalistaTendencia(pa) {
+    var sel = document.getElementById('selectorAnalistaTendencia');
+    if (!sel) return;
+    var actual = sel.value;
+    var nombres = (pa || []).map(function(a) { return a.nombre; }).sort();
+    sel.innerHTML = '<option value="">Todo el equipo</option>' + nombres.map(function(n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+    if (nombres.indexOf(actual) !== -1) sel.value = actual;
+}
+
+function renderTendenciaYMotivos() {
+    var pa = _porAnalistaCompleto || [];
+    var sel = document.getElementById('selectorAnalistaTendencia');
+    var elegido = sel ? sel.value : '';
+    var subset = elegido ? pa.filter(function(a) { return a.nombre === elegido; }) : pa;
+
+    // --- Tendencia diaria: suma de aprobadas/negadas/aplazadas/total del subconjunto, por fecha ---
+    var porFecha = {};
+    subset.forEach(function(a) {
+        (a.tendenciaDiaria || []).forEach(function(t) {
+            if (!porFecha[t.fecha]) porFecha[t.fecha] = { total: 0, aprobadas: 0, negadas: 0, aplazadas: 0 };
+            porFecha[t.fecha].total += t.total;
+            porFecha[t.fecha].aprobadas += t.aprobadas;
+            porFecha[t.fecha].negadas += t.negadas;
+            porFecha[t.fecha].aplazadas += t.aplazadas;
+        });
+    });
+    var fechas = Object.keys(porFecha).sort(function(x, y) { var px = x.split('/'), py = y.split('/'); return new Date(px[2], px[1] - 1, px[0]) - new Date(py[2], py[1] - 1, py[0]); });
+    var pctAprob = fechas.map(function(f) { var d = porFecha[f]; return d.total > 0 ? Math.round(d.aprobadas / d.total * 1000) / 10 : 0; });
+    var pctNeg = fechas.map(function(f) { var d = porFecha[f]; return d.total > 0 ? Math.round(d.negadas / d.total * 1000) / 10 : 0; });
+    var pctApl = fechas.map(function(f) { var d = porFecha[f]; return d.total > 0 ? Math.round(d.aplazadas / d.total * 1000) / 10 : 0; });
+
+    if (chartTendenciaDecision) chartTendenciaDecision.destroy();
+    if (fechas.length > 0) {
+        var ctxT = document.getElementById('chartTendenciaDecision').getContext('2d');
+        chartTendenciaDecision = new Chart(ctxT, {
+            type: 'line',
+            data: {
+                labels: fechas,
+                datasets: [
+                    { label: '% Aprobación', data: pctAprob, borderColor: '#059669', backgroundColor: '#059669', borderWidth: 2, pointRadius: 3, tension: 0.15 },
+                    { label: '% Negación', data: pctNeg, borderColor: '#BD0F14', backgroundColor: '#BD0F14', borderWidth: 2, pointRadius: 3, tension: 0.15 },
+                    { label: '% Aplazamiento', data: pctApl, borderColor: '#d97706', backgroundColor: '#d97706', borderWidth: 2, pointRadius: 3, tension: 0.15 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return v + '%'; } } } },
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: { callbacks: { label: function(c) { return c.dataset.label + ': ' + c.raw + '%'; } } } }
+            }
+        });
+    } else {
+        var ctxEmpty = document.getElementById('chartTendenciaDecision').getContext('2d');
+        ctxEmpty.clearRect(0, 0, ctxEmpty.canvas.width, ctxEmpty.canvas.height);
+        ctxEmpty.font = '13px Manrope'; ctxEmpty.fillStyle = '#706F6F'; ctxEmpty.textAlign = 'center';
+        ctxEmpty.fillText('Sin datos en este rango', ctxEmpty.canvas.width / 2, 100);
+    }
+
+    // --- Top motivos: se suman los mapas de motivos de cada analista del subconjunto ---
+    var motNeg = {}, motApl = {};
+    subset.forEach(function(a) {
+        Object.keys(a.motivosNegacion || {}).forEach(function(k) { motNeg[k] = (motNeg[k] || 0) + a.motivosNegacion[k]; });
+        Object.keys(a.motivosAplazamiento || {}).forEach(function(k) { motApl[k] = (motApl[k] || 0) + a.motivosAplazamiento[k]; });
+    });
+    _renderTopMotivosChart('chartMotivosNegacion', motNeg, '#BD0F14');
+    _renderTopMotivosChart('chartMotivosAplazamiento', motApl, '#d97706');
+}
+
+function _renderTopMotivosChart(canvasId, mapaMotivos, color) {
+    if (canvasId === 'chartMotivosNegacion' && chartMotivosNegacion) chartMotivosNegacion.destroy();
+    if (canvasId === 'chartMotivosAplazamiento' && chartMotivosAplazamiento) chartMotivosAplazamiento.destroy();
+
+    var top = Object.keys(mapaMotivos).map(function(k) { return { motivo: k, count: mapaMotivos[k] }; })
+        .sort(function(x, y) { return y.count - x.count; }).slice(0, 8).reverse();
+
+    var ctx = document.getElementById(canvasId).getContext('2d');
+    if (top.length === 0) {
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.font = '12px Manrope'; ctx.fillStyle = '#706F6F'; ctx.textAlign = 'center';
+        ctx.fillText('Sin casos en este rango', ctx.canvas.width / 2, 100);
+        return;
+    }
+
+    var chart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: top.map(function(t) { return t.motivo.length > 60 ? t.motivo.slice(0, 58) + '…' : t.motivo; }), datasets: [{ data: top.map(function(t) { return t.count; }), backgroundColor: color, borderRadius: 4 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+            scales: { x: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } } },
+            plugins: {
+                legend: { display: false },
+                datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, anchor: 'center', align: 'center', formatter: function(v) { return v; } },
+                tooltip: { callbacks: { title: function(t) { return top[t[0].dataIndex].motivo; } } }
+            }
+        }
+    });
+    if (canvasId === 'chartMotivosNegacion') chartMotivosNegacion = chart; else chartMotivosAplazamiento = chart;
+}
+
 // === RENDIMIENTO ANALISTAS ===
-function renderTablaAnalistas(pa){if($.fn.DataTable.isDataTable('#tablaMetricasAnalistas'))$('#tablaMetricasAnalistas').DataTable().destroy();var html='',dh={};pa.forEach(function(a){var ck=a.fueraSLA>0?'table-danger':'',nk=a.nombre.replace(/'/g,"\\'");dh[a.nombre]=a.detalleHoras;html+='<tr><td class="fw-bold">'+esc(a.nombre)+'</td><td class="text-center">'+a.total+'</td><td class="text-center" style="color:#253150;font-weight:700;">'+a.aprobadas+'</td><td class="text-center" style="color:#BD0F14;font-weight:700;">'+a.negadas+'</td><td class="text-center" style="color:#706F6F;font-weight:700;">'+a.aplazadas+'</td><td class="text-center">'+formatearDuracion(a.tiempoPromedio)+'</td><td class="text-center">'+formatearTiempoGeneral(a.tiempoPromedioGeneral)+'</td><td class="text-center" style="font-weight:700;">'+(a.promedioPorHora>0?a.promedioPorHora:'—')+'</td><td class="text-center" style="font-weight:700;">'+(a.prodRealPorHora>0?a.prodRealPorHora:'—')+'</td><td class="text-center"><button class="btn-action" onclick="verDetalleHoras(\''+nk+'\')"><i class="bi bi-bar-chart-steps"></i></button></td><td class="text-center '+ck+'">'+a.fueraSLA+'</td></tr>';});window._detalleHorasData=dh;document.getElementById('cuerpoMetricasAnalistas').innerHTML=html;$('#tablaMetricasAnalistas').DataTable({language:{url:'//cdn.datatables.net/plug-ins/1.13.5/i18n/es-ES.json'},pageLength:5});}
-var _porAnalistaCompleto=null,_modoRendimiento='dia';
-function setModoRendimiento(m){_modoRendimiento=m;document.getElementById('btnModoDia').classList.toggle('active',m==='dia');document.getElementById('btnModoRango').classList.toggle('active',m==='rango');document.getElementById('controlesDia').style.display=m==='dia'?'flex':'none';document.getElementById('controlesRango').style.display=m==='rango'?'flex':'none';if(m==='dia')cargarRendimientoPorDia();else limpiarFiltroRendimiento();}
-function navegarDiaRendimiento(o){var inp=document.getElementById('filtroFechaRendimiento');var f=new Date(inp.value+'T12:00:00');f.setDate(f.getDate()+o);if(f>new Date())return;inp.value=fmtDI(f);cargarRendimientoPorDia();}
-function irAHoyRendimiento(){document.getElementById('filtroFechaRendimiento').value=fmtDI(new Date());cargarRendimientoPorDia();}
-function cargarRendimientoPorDia(){var f=document.getElementById('filtroFechaRendimiento').value;if(!f)return;var p=f.split('-');document.getElementById('rendimientoSubtitulo').textContent='Mostrando: '+p[2]+'/'+p[1]+'/'+p[0];if($.fn.DataTable.isDataTable('#tablaMetricasAnalistas'))$('#tablaMetricasAnalistas').DataTable().destroy();document.getElementById('cuerpoMetricasAnalistas').innerHTML='<tr><td colspan="11" class="text-center py-3"><div class="spinner-border spinner-border-sm" style="color:var(--rojo);"></div></td></tr>';google.script.run.withSuccessHandler(renderTablaAnalistasDia).withFailureHandler(function(e){document.getElementById('cuerpoMetricasAnalistas').innerHTML='<tr><td colspan="11" class="text-center text-danger">'+e.message+'</td></tr>';}).obtenerRendimientoPorDia(f);}
-function renderTablaAnalistasDia(pa){if($.fn.DataTable.isDataTable('#tablaMetricasAnalistas'))$('#tablaMetricasAnalistas').DataTable().destroy();var html='',dh={};pa.forEach(function(a){var ck=a.fueraSLA>0?'table-danger':'',nk=a.nombre.replace(/'/g,"\\'");dh[a.nombre]=a.detalleHoras;html+='<tr><td class="fw-bold">'+esc(a.nombre)+'</td><td class="text-center">'+a.total+'</td><td class="text-center" style="color:#253150;font-weight:700;">'+a.aprobadas+'</td><td class="text-center" style="color:#BD0F14;font-weight:700;">'+a.negadas+'</td><td class="text-center" style="color:#706F6F;font-weight:700;">'+a.aplazadas+'</td><td class="text-center">'+formatearDuracion(a.tiempoPromedio)+'</td><td class="text-center">'+formatearTiempoGeneral(a.tiempoPromedioGeneral)+'</td><td class="text-center" style="font-weight:700;">'+(a.promedioPorHora>0?a.promedioPorHora:'—')+'</td><td class="text-center" style="font-weight:700;">'+(a.prodRealPorHora>0?a.prodRealPorHora:'—')+'</td><td class="text-center"><button class="btn-action" onclick="verDetalleHoras(\''+nk+'\')"><i class="bi bi-bar-chart-steps"></i></button></td><td class="text-center '+ck+'">'+a.fueraSLA+'</td></tr>';});window._detalleHorasData=Object.assign(window._detalleHorasData||{},dh);if(pa.length===0){document.getElementById('cuerpoMetricasAnalistas').innerHTML='<tr><td colspan="11" class="text-center py-3" style="color:var(--gris);">Sin registros</td></tr>';}else{document.getElementById('cuerpoMetricasAnalistas').innerHTML=html;$('#tablaMetricasAnalistas').DataTable({language:{url:'//cdn.datatables.net/plug-ins/1.13.5/i18n/es-ES.json'},pageLength:5});}}
-function limpiarFiltroRendimiento(){if(_porAnalistaCompleto){var d=document.getElementById('metricaDesde').value,h=document.getElementById('metricaHasta').value;document.getElementById('rendimientoSubtitulo').textContent='Rango completo';renderTablaAnalistas(_porAnalistaCompleto);}}
+// Fila compartida entre el modo "Día" y "Rango" de Rendimiento Individual — ambos backends
+// (obtenerRendimientoPorDia / obtenerDatosMetricas) devuelven exactamente la misma forma de
+// objeto por analista, así que una sola plantilla de fila evita que los dos modos se desincronicen.
+function _filaAnalistaTr(a) {
+    var ck = a.fueraSLA > 0 ? 'table-danger' : '';
+    var nk = a.nombre.replace(/'/g, "\\'");
+    window._detalleHorasData[a.nombre] = a.detalleHoras;
+
+    var motivosNeg = a.motivosNegacion || {};
+    var motivosApl = a.motivosAplazamiento || {};
+    _motivosAnalistaData[a.nombre] = { negacion: motivosNeg, aplazamiento: motivosApl };
+    var tieneMotivos = Object.keys(motivosNeg).length > 0 || Object.keys(motivosApl).length > 0;
+
+    var negStyle = a.pctNegacion > _metasDecision.maxTasaNegacionPct ? 'color:#BD0F14;font-weight:800;background:#fde8e8;' : 'color:#BD0F14;font-weight:700;';
+    var aplStyle = a.pctAplazamiento > _metasDecision.maxTasaAplazamientoPct ? 'color:#d97706;font-weight:800;background:#fffbeb;' : 'color:#706F6F;font-weight:700;';
+
+    var motivoTxt = '<span style="color:var(--text-light);">—</span>';
+    if (a.motivoPrincipal) {
+        var esNeg = a.motivoPrincipal.tipo === 'negacion';
+        motivoTxt = '<span style="font-size:0.68rem;font-weight:800;color:' + (esNeg ? '#BD0F14' : '#d97706') + ';text-transform:uppercase;">' + (esNeg ? 'Neg.' : 'Aplaz.') + '</span> ' + esc(a.motivoPrincipal.motivo) + ' <span style="color:var(--text-light);">(' + a.motivoPrincipal.count + ')</span>';
+    }
+
+    var btnMotivos = tieneMotivos
+        ? '<button class="btn-action" onclick="verMotivosAnalista(\'' + nk + '\')"><i class="bi bi-chat-square-text"></i></button>'
+        : '<span style="color:var(--text-light);">—</span>';
+
+    return '<tr><td class="fw-bold">' + esc(a.nombre) + '</td>' +
+        '<td class="text-center">' + a.total + '</td>' +
+        '<td class="text-center" data-order="' + a.pctAprobacion + '" style="color:#253150;font-weight:700;">' + a.pctAprobacion + '%</td>' +
+        '<td class="text-center" data-order="' + a.pctNegacion + '" style="' + negStyle + '">' + a.pctNegacion + '%</td>' +
+        '<td class="text-center" data-order="' + a.pctAplazamiento + '" style="' + aplStyle + '">' + a.pctAplazamiento + '%</td>' +
+        '<td style="font-size:0.78rem;">' + motivoTxt + '</td>' +
+        '<td class="text-center">' + formatearDuracion(a.tiempoPromedio) + '</td>' +
+        '<td class="text-center">' + formatearTiempoGeneral(a.tiempoPromedioGeneral) + '</td>' +
+        '<td class="text-center" style="font-weight:700;">' + (a.promedioPorHora > 0 ? a.promedioPorHora : '—') + '</td>' +
+        '<td class="text-center" style="font-weight:700;">' + (a.prodRealPorHora > 0 ? a.prodRealPorHora : '—') + '</td>' +
+        '<td class="text-center"><button class="btn-action" onclick="verDetalleHoras(\'' + nk + '\')"><i class="bi bi-bar-chart-steps"></i></button></td>' +
+        '<td class="text-center">' + btnMotivos + '</td>' +
+        '<td class="text-center ' + ck + '">' + a.fueraSLA + '</td></tr>';
+}
+
+function renderTablaAnalistas(pa){if($.fn.DataTable.isDataTable('#tablaMetricasAnalistas'))$('#tablaMetricasAnalistas').DataTable().destroy();var html='';pa.forEach(function(a){html+=_filaAnalistaTr(a);});document.getElementById('cuerpoMetricasAnalistas').innerHTML=html;$('#tablaMetricasAnalistas').DataTable({language:{url:'//cdn.datatables.net/plug-ins/1.13.5/i18n/es-ES.json'},pageLength:5,order:[[3,'desc']]});}
 
 // === SEGUIMIENTO ===
 function cargarAsesoresActivosPrimerResultado(){var f=document.getElementById('filtroFechaSeguimiento').value;google.script.run.withSuccessHandler(renderAsesoresPR).withFailureHandler(function(e){console.error(e);}).admin_obtenerAsesoresActivosPrimerResultado(f);}
@@ -947,6 +1181,34 @@ function renderAsesoresPR(r){if($.fn.DataTable.isDataTable('#tablaAsesoresPrimer
 // === MODALES ===
 function verDetalleAnalista(c){Swal.fire({title:'Cargando...',didOpen:function(){Swal.showLoading();}});google.script.run.withSuccessHandler(function(res){Swal.close();var html='<div style="text-align:left;font-family:Manrope,sans-serif;"><div style="font-weight:800;font-size:1rem;color:#253150;margin-bottom:12px;">'+esc(res.nombre)+' · '+esc(res.fecha)+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;"><div style="background:#e8edf6;border-radius:14px;padding:14px;text-align:center;"><div style="font-size:0.7rem;font-weight:700;">Gestionadas</div><div style="font-size:1.8rem;font-weight:800;color:#253150;">'+res.gestionadas.length+'</div></div><div style="background:#fde8e8;border-radius:14px;padding:14px;text-align:center;"><div style="font-size:0.7rem;font-weight:700;color:#BD0F14;">Pendientes</div><div style="font-size:1.8rem;font-weight:800;color:#BD0F14;">'+res.pendientes.length+'</div></div></div>';if(res.gestionadas.length>0){html+='<div style="max-height:250px;overflow:auto;border:1px solid #e5e7eb;border-radius:12px;"><table style="width:100%;border-collapse:collapse;font-size:0.72rem;"><thead><tr style="background:#f4f5f8;"><th style="padding:8px;">ID</th><th style="padding:8px;">Tipo</th><th style="padding:8px;">Estado</th><th style="padding:8px;">T.Gestión</th></tr></thead><tbody>';res.gestionadas.forEach(function(g){html+='<tr style="border-top:1px solid #f1f5f9;"><td style="padding:6px 8px;">'+esc(g.id)+'</td><td style="padding:6px 8px;">'+esc(g.tipo||'—')+'</td><td style="padding:6px 8px;">'+esc(g.estado)+'</td><td style="padding:6px 8px;">'+(g.duracion?formatearDuracion(parseFloat(g.duracion)):'—')+'</td></tr>';});html+='</tbody></table></div>';}html+='</div>';Swal.fire({html:html,width:700,showCloseButton:true,showConfirmButton:false});}).admin_obtenerDetallePorAnalista(c,document.getElementById('filtroFechaSeguimiento').value);}
 function verDetalleHoras(n){var d=(window._detalleHorasData||{})[n];if(!d){Swal.fire({icon:'info',title:'Sin datos'});return;}var html='<div style="font-family:Manrope;"><div style="font-weight:800;margin-bottom:12px;">'+esc(n)+'</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">';for(var h=6;h<=21;h++){var c=d[h]||0;var bg=c===0?'#f4f5f8':c<=2?'#e8edf6':c<=5?'#253150':'#BD0F14';var tc=c<=2?'#253150':'#fff';html+='<div style="background:'+bg+';color:'+tc+';border-radius:10px;padding:10px 8px;text-align:center;border:1px solid #e5e7eb;"><div style="font-size:0.65rem;font-weight:700;opacity:0.7;">'+h+':00</div><div style="font-size:1.4rem;font-weight:800;">'+c+'</div></div>';}html+='</div></div>';Swal.fire({html:html,width:520,showCloseButton:true,showConfirmButton:false});}
+
+// Desglose completo de motivos de negación/aplazamiento de un analista — la fila de la tabla
+// solo muestra el principal; este modal trae todos, ordenados de mayor a menor conteo.
+function _listaMotivosHtml(mapaMotivos, color) {
+    var claves = Object.keys(mapaMotivos || {}).sort(function(a, b) { return mapaMotivos[b] - mapaMotivos[a]; });
+    if (claves.length === 0) return '<div style="font-size:0.8rem;color:var(--text-light);padding:6px 0;">Sin casos</div>';
+    var total = claves.reduce(function(s, k) { return s + mapaMotivos[k]; }, 0);
+    return claves.map(function(k) {
+        var pct = Math.round(mapaMotivos[k] / total * 100);
+        return '<div style="margin-bottom:8px;">' +
+            '<div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:3px;"><span>' + esc(k) + '</span><strong>' + mapaMotivos[k] + '</strong></div>' +
+            '<div style="background:#f1f0f0;border-radius:6px;height:6px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:' + color + ';"></div></div>' +
+            '</div>';
+    }).join('');
+}
+
+function verMotivosAnalista(n) {
+    var d = _motivosAnalistaData[n];
+    if (!d) { Swal.fire({ icon: 'info', title: 'Sin motivos registrados' }); return; }
+    var html = '<div style="font-family:Manrope;text-align:left;">' +
+        '<div style="font-weight:800;margin-bottom:14px;">' + esc(n) + '</div>' +
+        '<div style="font-size:0.72rem;font-weight:800;color:#BD0F14;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Motivos de negación</div>' +
+        _listaMotivosHtml(d.negacion, '#BD0F14') +
+        '<div style="font-size:0.72rem;font-weight:800;color:#d97706;text-transform:uppercase;letter-spacing:0.4px;margin:16px 0 8px;">Motivos de aplazamiento</div>' +
+        _listaMotivosHtml(d.aplazamiento, '#d97706') +
+        '</div>';
+    Swal.fire({ html: html, width: 460, showCloseButton: true, showConfirmButton: false });
+}
 // ============================================================================
 // DESCARGA EXCEL CONSOLIDADO
 // ============================================================================
@@ -1470,6 +1732,7 @@ function renderBioGestion(g) {
     if (chartBioMotivos) chartBioMotivos.destroy();
     var motivoLabels = Object.keys(g.motivos || {});
     var motivoValues = motivoLabels.map(function(k) { return g.motivos[k]; });
+    document.getElementById('chartBioMotivosInner').style.height = Math.max(200, motivoLabels.length * 46 + 40) + 'px';
     var ctx3 = document.getElementById('chartBioMotivos').getContext('2d');
     if (motivoLabels.length === 0) {
         chartBioMotivos = new Chart(ctx3, { type: 'bar', data: { labels: ['Sin aplazamientos'], datasets: [{ data: [0], backgroundColor: '#e5e7eb' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false } } } });
@@ -2050,7 +2313,7 @@ function renderSeguimientoPersonas(personas) {
             html += '<div style="background:' + bgCol + ';border-radius:10px;padding:12px 14px;">';
             html += '<div style="font-size:0.68rem;font-weight:700;color:' + borderCol + ';text-transform:uppercase;margin-bottom:8px;"><i class="bi bi-clipboard-data me-1"></i>Hallazgos y Sugerencias</div>';
             p.hallazgos.forEach(function(h, idx) {
-                var tipoIcon = h.tipo === 'productividad' ? 'bi-graph-down' : h.tipo === 'tiempos' ? 'bi-clock-history' : h.tipo === 'sla' ? 'bi-shield-exclamation' : h.tipo === 'negacion' ? 'bi-x-circle' : 'bi-info-circle';
+                var tipoIcon = h.tipo === 'productividad' ? 'bi-graph-down' : h.tipo === 'tiempos' ? 'bi-clock-history' : h.tipo === 'sla' ? 'bi-shield-exclamation' : h.tipo === 'negacion' ? 'bi-x-circle' : h.tipo === 'aplazamiento' ? 'bi-hourglass-split' : 'bi-info-circle';
                 html += '<div style="margin-bottom:' + (idx < p.hallazgos.length - 1 ? '10px' : '0') + ';">';
                 html += '<div style="font-size:0.78rem;color:var(--text-main);font-weight:600;line-height:1.4;"><i class="bi ' + tipoIcon + ' me-1" style="color:' + borderCol + ';"></i>' + esc(h.detalle) + '</div>';
                 if (h.sugerencia) html += '<div style="font-size:0.72rem;color:#059669;margin-top:3px;padding-left:20px;"><i class="bi bi-lightbulb me-1"></i>' + esc(h.sugerencia) + '</div>';
@@ -2127,6 +2390,8 @@ function renderConfigAgente(config) {
     document.getElementById('cfgMaxGeneral').value = config.metas.maxTiempoGeneralHoras || 2;
     document.getElementById('cfgMaxCola').value = config.metas.maxTiempoColaMin || 45;
     document.getElementById('cfgMaxBacklog').value = config.metas.maxBacklog || 15;
+    document.getElementById('cfgMaxNegacion').value = config.metas.maxTasaNegacionPct || 25;
+    document.getElementById('cfgMaxAplazamiento').value = config.metas.maxTasaAplazamientoPct || 30;
     document.getElementById('cfgDesviacion').value = config.umbrales.desviacionHistoricaPct || 20;
     document.getElementById('cfgUmbralPausa').value = config.metas.umbralMinutosPausa || 90;
     document.getElementById('cfgEnviarCriticas').checked = config.notificaciones.enviarAlertasCriticas !== false;
@@ -2170,6 +2435,8 @@ function guardarConfigAgente() {
             maxTiempoGeneralHoras: parseFloat(document.getElementById('cfgMaxGeneral').value) || 2,
             maxTiempoColaMin: parseInt(document.getElementById('cfgMaxCola').value) || 45,
             maxBacklog: parseInt(document.getElementById('cfgMaxBacklog').value) || 15,
+            maxTasaNegacionPct: parseInt(document.getElementById('cfgMaxNegacion').value) || 25,
+            maxTasaAplazamientoPct: parseInt(document.getElementById('cfgMaxAplazamiento').value) || 30,
             umbralMinutosPausa: parseInt(document.getElementById('cfgUmbralPausa').value) || 90
         },
         umbrales: {
@@ -2461,7 +2728,8 @@ var _ayudaConfigTextos = {
     maxGeneral: { t: 'Máx. Tiempo General (horas)', d: 'Tiempo máximo promedio aceptable (en horas) desde la radicación de la solicitud hasta su cierre final. Incluye tiempo de cola + tiempo de gestión. Es el indicador principal de SLA. Si supera este valor, se genera una alerta crítica.' },
     maxCola: { t: 'Máx. Tiempo de Cola (minutos)', d: 'Tiempo máximo promedio aceptable (en minutos) desde que la solicitud se radica hasta que se asigna a un analista. Un valor alto indica que las solicitudes están esperando demasiado antes de ser atendidas. Útil para detectar problemas de asignación.' },
     maxBacklog: { t: 'Máx. Backlog', d: 'Cantidad máxima aceptable de solicitudes en espera (asignadas pero no cerradas). Si el backlog supera este número, el agente alerta. Un backlog alto puede indicar que faltan analistas o que hay solicitudes estancadas.' },
-    maxNegacion: { t: 'Máx. Tasa de Negación %', d: 'Porcentaje máximo aceptable de solicitudes negadas/rechazadas respecto al total gestionado. Si una sucursal o el global supera este umbral, se genera una alerta. Tasas altas pueden indicar problemas de documentación o criterios muy restrictivos.' },
+    maxNegacion: { t: 'Máx. Tasa de Negación %', d: 'Porcentaje máximo aceptable de solicitudes negadas/rechazadas respecto al total gestionado. Se evalúa por analista (mínimo 3 gestiones): si alguien supera este umbral, aparece en "Analistas que Requieren Seguimiento" con el motivo de negación más frecuente entre sus casos. Ejemplo: 25 significa que negar más del 25% de sus solicitudes dispara la alerta.' },
+    maxAplazamiento: { t: 'Máx. Tasa de Aplazamiento %', d: 'Igual que la tasa de negación, pero para solicitudes aplazadas. Porcentaje máximo aceptable por analista (mínimo 3 gestiones) antes de aparecer en "Analistas que Requieren Seguimiento", junto con el motivo de aplazamiento más frecuente entre sus casos. Tasas altas suelen indicar que falta información de forma recurrente al radicar.' },
     minEquipo: { t: 'Mín. Solicitudes/día del equipo', d: 'Cantidad mínima total de solicitudes que todo el equipo debe gestionar en un día. Sirve como meta global. Se usa en el cálculo del Health Score de productividad. Si el equipo produce menos que este valor, se refleja en el score.' },
     desviacion: { t: 'Desviación Histórica % umbral', d: 'Porcentaje de desviación permitido respecto al promedio histórico de 30 días. Si una métrica actual se desvía más de este porcentaje (hacia peor), el agente genera una alerta informativa. Ejemplo: 20 significa que si el tiempo de gestión sube más del 20% respecto al promedio, se alerta.' },
     umbralPausa: { t: 'Umbral de pausas (minutos)', d: 'Minutos acumulados en estados no productivos (BREAK, ALMUERZO, INCAPACIDAD, etc. — cualquier estado distinto de ACTIVO en Historico_Estados) a partir de los cuales el correo "Foto del Momento" resalta a ese analista con una advertencia. Ejemplo: 90 significa que si alguien acumula más de 1h30 en pausas hoy, se marca en rojo en su tarjeta.' },

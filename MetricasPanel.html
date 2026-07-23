@@ -100,18 +100,18 @@
     <!-- Filtros de fecha + Segmento -->
     <div id="barraFiltrosFecha" class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);display:none;">
         <div class="d-flex align-items-center gap-2">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Desde</label>
+            <label for="metricaDesde" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Desde</label>
             <input type="date" id="metricaDesde" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
         </div>
         <div class="d-flex align-items-center gap-2">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Hasta</label>
+            <label for="metricaHasta" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Hasta</label>
             <input type="date" id="metricaHasta" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
         </div>
         <button class="btn-primary-brand" onclick="aplicarFiltroFechas()" style="border-radius:10px;padding:8px 18px;">
             <i class="bi bi-funnel"></i> Aplicar Rango
         </button>
         <div class="d-flex align-items-center gap-2">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Segmento</label>
+            <label for="filtroSegmento" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Segmento</label>
             <select id="filtroSegmento" class="form-select" onchange="filtrarSegmentacion()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
                 <option value="todos">Todos los Segmentos</option>
             </select>
@@ -128,21 +128,21 @@
     <!-- Filtros adicionales generales -->
     <div id="barraFiltrosGenerales" class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);display:none;">
         <div class="d-flex align-items-center gap-2">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Solicitud</label>
+            <label for="filtroSolicitud" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Solicitud</label>
             <input type="text" id="filtroSolicitud" class="form-control" placeholder="Buscar solicitud..." oninput="debounceFiltroSolicitud()" style="width:140px;padding:6px 12px !important;font-size:0.8rem;border-radius:8px;">
         </div>
         <div class="d-flex align-items-center gap-2">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Póliza</label>
+            <label for="filtroPoliza" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Póliza</label>
             <input type="text" id="filtroPoliza" class="form-control" placeholder="Buscar póliza..." oninput="debounceFiltroPoliza()" style="width:130px;padding:6px 12px !important;font-size:0.8rem;border-radius:8px;">
         </div>
         <div class="d-flex align-items-center gap-2">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Sucursal</label>
+            <label for="filtroSucursalGlobal" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Sucursal</label>
             <select id="filtroSucursalGlobal" class="form-select" onchange="aplicarFiltrosGenerales()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
                 <option value="todas">Todas</option>
             </select>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Tipo</label>
+            <label for="filtroTipoGlobal" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Tipo</label>
             <select id="filtroTipoGlobal" class="form-select" onchange="aplicarFiltrosGenerales()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
                 <option value="todos">Todos</option>
                 <option value="Digital">Digital</option>
@@ -153,7 +153,7 @@
             </select>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Estado</label>
+            <label for="filtroEstadoGlobal" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Estado</label>
             <select id="filtroEstadoGlobal" class="form-select" onchange="aplicarFiltrosGenerales()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
                 <option value="todos">Todos</option>
                 <option value="APROBADO">Aprobado</option>
@@ -162,7 +162,7 @@
             </select>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Analista</label>
+            <label for="filtroAnalistaGlobal" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Analista</label>
             <select id="filtroAnalistaGlobal" class="form-select" onchange="aplicarFiltrosGenerales()" style="width:auto;padding:6px 12px;font-size:0.8rem;border-radius:8px;">
                 <option value="todos">Todos</option>
             </select>
@@ -184,6 +184,14 @@
         <!-- TAB: Resumen General -->
         <div id="tab-resumen" class="tab-panel">
 
+        <div class="mini-nav">
+            <span class="mini-nav-chip" onclick="document.getElementById('resumenAnclaRadicado').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-inbox me-1"></i>Radicado</span>
+            <span class="mini-nav-chip" onclick="document.getElementById('resumenAnclaCola').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-cloud-arrow-down me-1"></i>La Cola</span>
+            <span class="mini-nav-chip" onclick="document.getElementById('resumenAnclaAsignado').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-hourglass-split me-1"></i>Asignado en Proceso</span>
+            <span class="mini-nav-chip" onclick="document.getElementById('resumenAnclaGestionado').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-check2-circle me-1"></i>Gestionado</span>
+            <span class="mini-nav-chip" onclick="document.getElementById('resumenAnclaGraficos').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-pie-chart me-1"></i>Gráficos</span>
+        </div>
+
         <!-- Salud Operativa condensada — la respuesta a "¿qué hago hoy?" del Agente Coordinador,
              traída al frente en vez de dejarla solo en la última pestaña. Oculto hasta que carga
              para no mostrar un grado F de mentira mientras llega el diagnóstico real. -->
@@ -204,7 +212,7 @@
 
         <!-- Radicado del Período (cohorte: fecha de radicación / resultado en solicitudes pendientes) -->
         <!-- Macro → micro: hero con el total, barra proporcional del desglose, y tarjetas de detalle con el % ya pegado al número -->
-        <div class="bio-ciclo-section-title">Radicado del Período <span class="bio-rango-badge" id="metricaRangoTexto1">(hoy)</span></div>
+        <div class="bio-ciclo-section-title" id="resumenAnclaRadicado">Radicado del Período <span class="bio-rango-badge" id="metricaRangoTexto1">(hoy)</span></div>
         <div class="metric-hero-card metric-hero-azul" onclick="drilldownKPI('radicadas')">
             <div>
                 <div class="metric-hero-label">Total Radicadas</div>
@@ -236,7 +244,7 @@
         </div>
 
         <!-- La Cola (Sin Asignar) — en vivo, no depende del rango de fechas -->
-        <div class="bio-ciclo-section-title"><i class="bi bi-cloud-arrow-down me-1"></i>La Cola <span class="bio-rango-badge">en vivo</span></div>
+        <div class="bio-ciclo-section-title" id="resumenAnclaCola"><i class="bi bi-cloud-arrow-down me-1"></i>La Cola <span class="bio-rango-badge">en vivo</span></div>
         <div class="metric-hero-card metric-hero-rojo">
             <div>
                 <div class="metric-hero-label">Sin Asignar</div>
@@ -252,7 +260,7 @@
             <div class="metric-split-seg" id="segColaInduccion" style="background:var(--azul-mid);width:0%;"></div>
             <div class="metric-split-seg" id="segColaDigital" style="background:#3a4d7a;width:0%;"></div>
             <div class="metric-split-seg" id="segColaBiometriaFallida" style="background:#d97706;width:0%;"></div>
-            <div class="metric-split-seg" id="segColaNuevaUar" style="background:#706F6F;width:0%;"></div>
+            <div class="metric-split-seg" id="segColaNuevaUar" style="background:var(--gris);width:0%;"></div>
             <div class="metric-split-seg" id="segColaDeudorUar" style="background:#9ca3af;width:0%;"></div>
             <div class="metric-split-seg" id="segColaReestudios" style="background:#059669;width:0%;"></div>
         </div>
@@ -278,9 +286,9 @@
                 <span class="metric-detail-pct" id="colaBiometriaFallidaPct" style="color:#d97706;">0%</span>
             </div>
             <div class="metric-detail-card">
-                <span class="metric-detail-dot" style="background:#706F6F;"></span>
+                <span class="metric-detail-dot" style="background:var(--gris);"></span>
                 <div class="metric-detail-text"><span class="metric-detail-label">Nueva UAR</span><span class="metric-detail-value" id="colaNuevaUarVal">0</span></div>
-                <span class="metric-detail-pct" id="colaNuevaUarPct" style="color:#706F6F;">0%</span>
+                <span class="metric-detail-pct" id="colaNuevaUarPct" style="color:var(--gris);">0%</span>
             </div>
             <div class="metric-detail-card">
                 <span class="metric-detail-dot" style="background:#9ca3af;"></span>
@@ -295,7 +303,7 @@
         </div>
 
         <!-- Asignado en Proceso (sin resultado aún) — en vivo, el analista ya lo tomó pero no lo ha cerrado -->
-        <div class="bio-ciclo-section-title"><i class="bi bi-hourglass-split me-1"></i>Asignado en Proceso <span class="bio-rango-badge">en vivo</span></div>
+        <div class="bio-ciclo-section-title" id="resumenAnclaAsignado"><i class="bi bi-hourglass-split me-1"></i>Asignado en Proceso <span class="bio-rango-badge">en vivo</span></div>
         <div class="table-container mb-4" id="seccionBacklogSemaforo" style="margin-top:0;padding:0;overflow:hidden;">
             <div style="background:var(--rojo);padding:16px 24px;display:flex;align-items:center;gap:16px;">
                 <div style="background:rgba(255,255,255,0.2);border-radius:14px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;"><i class="bi bi-inbox" style="font-size:1.5rem;color:#fff;"></i></div>
@@ -353,7 +361,7 @@
         </div>
 
         <!-- Gestionado del Período (cohorte: fecha fin gestión) -->
-        <div class="bio-ciclo-section-title">Gestionado del Período <span class="bio-rango-badge" id="metricaRangoTexto2">(hoy)</span></div>
+        <div class="bio-ciclo-section-title" id="resumenAnclaGestionado">Gestionado del Período <span class="bio-rango-badge" id="metricaRangoTexto2">(hoy)</span></div>
         <div class="metric-hero-card metric-hero-rojo" onclick="drilldownKPI('total')">
             <div>
                 <div class="metric-hero-label">Total Gestionadas</div>
@@ -364,7 +372,7 @@
         <div class="metric-split-bar">
             <div class="metric-split-seg" id="segAprobadas" style="background:#059669;width:0%;"></div>
             <div class="metric-split-seg" id="segNegadas" style="background:var(--rojo);width:0%;"></div>
-            <div class="metric-split-seg" id="segAplazadas" style="background:#706F6F;width:0%;"></div>
+            <div class="metric-split-seg" id="segAplazadas" style="background:var(--gris);width:0%;"></div>
         </div>
         <div class="metrics-row-detail" style="grid-template-columns:repeat(3,1fr);">
             <div class="metric-detail-card" onclick="drilldownKPI('aprobacion')">
@@ -384,12 +392,12 @@
                 <span class="metric-detail-pct" id="kpiNegacion" style="color:var(--rojo);">0%</span>
             </div>
             <div class="metric-detail-card" onclick="drilldownKPI('aplazamiento')">
-                <span class="metric-detail-dot" style="background:#706F6F;"></span>
+                <span class="metric-detail-dot" style="background:var(--gris);"></span>
                 <div class="metric-detail-text">
                     <span class="metric-detail-label">Aplazadas</span>
                     <span class="metric-detail-value" id="kpiAplazadasCant">0</span>
                 </div>
-                <span class="metric-detail-pct" id="kpiAplazamiento" style="color:#706F6F;">0%</span>
+                <span class="metric-detail-pct" id="kpiAplazamiento" style="color:var(--gris);">0%</span>
             </div>
         </div>
         <div class="metrics-row mb-4" style="grid-template-columns:repeat(3,1fr);">
@@ -411,7 +419,7 @@
         </div>
 
         <!-- Estado y SLA de lo gestionado -->
-        <div class="row g-4 mb-4">
+        <div class="row g-4 mb-4" id="resumenAnclaGraficos">
             <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-pie-chart me-2" style="color:var(--azul);"></i>Distribución por Estado<span class="btn-help-chart" onclick="ayudaGrafico('estados')">?</span></div><div style="position:relative;height:220px;"><canvas id="chartEstados"></canvas></div></div></div>
             <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-shield-check me-2" style="color:var(--azul);"></i>Cumplimiento SLA<span class="btn-help-chart" onclick="ayudaGrafico('sla')">?</span></div><div style="position:relative;height:220px;"><canvas id="chartSLA"></canvas></div></div></div>
         </div>
@@ -438,7 +446,7 @@
             <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoGeneral')"><div class="tipo-icon" style="background:var(--azul);"><i class="bi bi-stack"></i></div><div class="tipo-info"><span class="tipo-label">General</span><span class="tipo-value" id="kpiTipoGeneral">0</span></div><span class="tipo-prom">~<span id="kpiTipoGeneralProm">0</span>/día</span></div>
             <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoDigital')"><div class="tipo-icon" style="background:#253150;"><i class="bi bi-laptop"></i></div><div class="tipo-info"><span class="tipo-label">Digital</span><span class="tipo-value" id="kpiTipoDigital">0</span></div><span class="tipo-prom">~<span id="kpiTipoDigitalProm">0</span>/día</span></div>
             <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoUAR')"><div class="tipo-icon" style="background:#BD0F14;"><i class="bi bi-envelope-paper"></i></div><div class="tipo-info"><span class="tipo-label">UAR</span><span class="tipo-value" id="kpiTipoUAR">0</span></div><span class="tipo-prom">~<span id="kpiTipoUARProm">0</span>/día</span></div>
-            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoReestudio')"><div class="tipo-icon" style="background:#706F6F;"><i class="bi bi-arrow-repeat"></i></div><div class="tipo-info"><span class="tipo-label">Reestudio</span><span class="tipo-value" id="kpiTipoReestudio">0</span></div><span class="tipo-prom">~<span id="kpiTipoReestudioProm">0</span>/día</span></div>
+            <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoReestudio')"><div class="tipo-icon" style="background:var(--gris);"><i class="bi bi-arrow-repeat"></i></div><div class="tipo-info"><span class="tipo-label">Reestudio</span><span class="tipo-value" id="kpiTipoReestudio">0</span></div><span class="tipo-prom">~<span id="kpiTipoReestudioProm">0</span>/día</span></div>
             <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoBiometria')"><div class="tipo-icon" style="background:#3a4d7a;"><i class="bi bi-fingerprint"></i></div><div class="tipo-info"><span class="tipo-label">Biometría</span><span class="tipo-value" id="kpiTipoBiometria">0</span></div><span class="tipo-prom">~<span id="kpiTipoBiometriaProm">0</span>/día</span></div>
             <div class="tipo-card" style="cursor:pointer;" onclick="drilldownKPI('tipoInduccion')"><div class="tipo-icon" style="background:#8b0a0e;"><i class="bi bi-person-badge"></i></div><div class="tipo-info"><span class="tipo-label">Inducción</span><span class="tipo-value" id="kpiTipoInduccion">0</span></div><span class="tipo-prom">~<span id="kpiTipoInduccionProm">0</span>/día</span></div>
         </div>
@@ -471,7 +479,7 @@
                 <div class="table-container" style="margin-top:0;">
                     <div class="table-title mb-2"><i class="bi bi-geo-alt me-2" style="color:var(--azul);"></i>Volumen por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('volumenSucursal')">?</span></div>
                     <div class="table-sub mb-3">Total de solicitudes por sucursal</div>
-                    <div id="wrapVolumenSucursal" style="position:relative;width:100%;height:220px;">
+                    <div id="wrapVolumenSucursal" style="position:relative;width:100%;overflow-x:auto;">
                         <canvas id="chartVolumenSucursal"></canvas>
                     </div>
                 </div>
@@ -490,15 +498,15 @@
                 <button class="btn-outline-brand" onclick="limpiarFiltrosTiempos()" style="padding:5px 12px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-x-circle me-1"></i>Quitar filtros</button>
             </div>
             <div class="row g-3">
-                <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-clock-history me-1"></i>T. General Promedio</div><canvas id="chartTiempoResolucion" height="180"></canvas></div></div>
-                <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-hourglass-split me-1"></i>T. Cola Promedio</div><canvas id="chartTiempoCola" height="180"></canvas></div></div>
-                <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-stopwatch me-1"></i>T. Gestión Promedio</div><canvas id="chartTiempoGestion" height="180"></canvas></div></div>
+                <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-clock-history me-1"></i>T. General Promedio</div><div style="position:relative;height:180px;"><canvas id="chartTiempoResolucion"></canvas></div></div></div>
+                <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-hourglass-split me-1"></i>T. Cola Promedio</div><div style="position:relative;height:180px;"><canvas id="chartTiempoCola"></canvas></div></div></div>
+                <div class="col-lg-4"><div style="background:var(--bg-page);border-radius:12px;padding:14px;"><div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-stopwatch me-1"></i>T. Gestión Promedio</div><div style="position:relative;height:180px;"><canvas id="chartTiempoGestion"></canvas></div></div></div>
             </div>
         </div>
 
         <!-- Comparativas de Tiempos -->
         <div class="row g-4 mb-4">
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('tiemposPorTipo')">?</span></div><div class="table-sub mb-3">Promedio de tiempo de gestión por tipo</div><canvas id="chartTiemposPorTipo" height="140"></canvas></div></div>
+            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Tipo<span class="btn-help-chart" onclick="ayudaGrafico('tiemposPorTipo')">?</span></div><div class="table-sub mb-3">Promedio de tiempo de gestión por tipo</div><div style="position:relative;height:220px;"><canvas id="chartTiemposPorTipo"></canvas></div></div></div>
             <div class="col-lg-6">
                 <div class="table-container" style="margin-top:0;">
                     <div class="table-title mb-2"><i class="bi bi-clock me-2" style="color:var(--azul);"></i>Comparativa de Tiempos por Inmobiliaria<span class="btn-help-chart" onclick="ayudaGrafico('comparativaTiempos')">?</span></div>
@@ -510,11 +518,11 @@
             </div>
         </div>
         <div class="row g-4 mb-4">
-            <div class="col-lg-6">
+            <div class="col-lg-12">
                 <div class="table-container" style="margin-top:0;">
                     <div class="table-title mb-2"><i class="bi bi-bar-chart me-2" style="color:var(--azul);"></i>Comparativa Tiempos por Sucursal<span class="btn-help-chart" onclick="ayudaGrafico('tiemposSucursal')">?</span></div>
                     <div class="table-sub mb-3">T. Gestión vs T. General promedio por sucursal</div>
-                    <div id="wrapTiemposSucursal" style="position:relative;width:100%;height:220px;">
+                    <div id="wrapTiemposSucursal" style="position:relative;width:100%;height:300px;">
                         <canvas id="chartTiemposSucursal"></canvas>
                     </div>
                 </div>
@@ -531,7 +539,7 @@
                 <button class="btn-outline-brand" onclick="limpiarBusquedaSolicitud()" style="padding:6px 14px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-x-circle me-1"></i>Limpiar</button>
             </div>
             <div id="resultadosBusquedaSolicitud" style="display:none;">
-                <canvas id="chartTiemposSolicitud" height="120"></canvas>
+                <div style="position:relative;height:180px;"><canvas id="chartTiemposSolicitud"></canvas></div>
                 <div class="table-responsive mt-3"><table class="table w-100 align-middle"><thead><tr><th>Solicitud</th><th>Fecha</th><th>Analista</th><th>Sucursal</th><th>Tipo</th><th>T. Gestión</th><th>T. General</th></tr></thead><tbody id="cuerpoTiemposSolicitud"></tbody></table></div>
             </div>
             <div id="sinResultadosSolicitud" style="display:none;text-align:center;padding:20px;"><i class="bi bi-info-circle" style="font-size:2rem;color:var(--text-light);"></i><p style="font-size:0.85rem;color:var(--text-muted);margin-top:8px;">Sin resultados.</p></div>
@@ -540,37 +548,61 @@
 
         <!-- TAB: Analistas -->
         <div id="tab-analistas" class="tab-panel" style="display:none;">
-        <!-- Productividad y Rendimiento Global -->
+        <!-- Productividad y Rendimiento Global — cada gráfico en su propia fila: ambos dependen
+             de etiquetas de texto (nombres) que necesitan ancho completo para no recortarse. -->
         <div class="row g-4 mb-4">
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-people me-2" style="color:var(--azul);"></i>Productividad por Analista<span class="btn-help-chart" onclick="ayudaGrafico('analistas')">?</span></div><canvas id="chartAnalistas" height="220"></canvas></div></div>
-            <div class="col-lg-6"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-bullseye me-2" style="color:var(--rojo);"></i>Rapidez y Productividad<span class="btn-help-chart" onclick="ayudaGrafico('dispersion')">?</span></div><div class="table-sub mb-3">Volumen vs tiempo promedio por analista</div><canvas id="chartDispersion" height="220"></canvas></div></div>
+            <div class="col-lg-12"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-people me-2" style="color:var(--azul);"></i>Productividad por Analista<span class="btn-help-chart" onclick="ayudaGrafico('analistas')">?</span></div><div style="position:relative;height:340px;"><canvas id="chartAnalistas"></canvas></div></div></div>
+        </div>
+        <div class="row g-4 mb-4">
+            <div class="col-lg-12"><div class="table-container" style="margin-top:0;"><div class="table-title mb-3"><i class="bi bi-bullseye me-2" style="color:var(--rojo);"></i>Rapidez y Productividad<span class="btn-help-chart" onclick="ayudaGrafico('dispersion')">?</span></div><div class="table-sub mb-3">Volumen vs tiempo promedio por analista</div><div style="position:relative;height:380px;"><canvas id="chartDispersion"></canvas></div></div></div>
         </div>
 
         <!-- Rendimiento Individual -->
         <div class="table-container">
             <div class="table-header" style="flex-wrap:wrap;gap:12px;">
-                <div><div class="table-title">Rendimiento Individual<span class="btn-help-chart" onclick="ayudaGrafico('rendimientoIndividual')">?</span></div><div class="table-sub" id="rendimientoSubtitulo">Mostrando datos del día seleccionado</div></div>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <div style="display:inline-flex;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;font-size:0.72rem;font-weight:700;">
-                        <button id="btnModoDia" class="rendimiento-toggle active" onclick="setModoRendimiento('dia')"><i class="bi bi-calendar-day me-1"></i>Día</button>
-                        <button id="btnModoRango" class="rendimiento-toggle" onclick="setModoRendimiento('rango')"><i class="bi bi-calendar-range me-1"></i>Rango</button>
-                    </div>
-                    <div id="controlesDia" class="d-flex align-items-center gap-1">
-                        <button class="btn-nav-fecha" onclick="navegarDiaRendimiento(-1)"><i class="bi bi-chevron-left"></i></button>
-                        <input type="date" id="filtroFechaRendimiento" class="form-control" onchange="cargarRendimientoPorDia()" style="width:150px;padding:6px 10px !important;font-size:0.78rem;border-radius:9px !important;">
-                        <button class="btn-nav-fecha" onclick="navegarDiaRendimiento(1)"><i class="bi bi-chevron-right"></i></button>
-                        <button class="btn-nav-fecha" onclick="irAHoyRendimiento()" style="font-size:0.65rem;padding:4px 8px;width:auto;"><i class="bi bi-calendar-check me-1"></i>Hoy</button>
-                    </div>
-                    <div id="controlesRango" class="d-flex align-items-center gap-1" style="display:none;">
-                        <button class="btn-nav-fecha" onclick="limpiarFiltroRendimiento()" style="font-size:0.65rem;padding:4px 10px;width:auto;"><i class="bi bi-arrow-repeat me-1"></i>Cargar rango global</button>
-                    </div>
-                </div>
+                <div><div class="table-title">Rendimiento Individual<span class="btn-help-chart" onclick="ayudaGrafico('rendimientoIndividual')">?</span></div><div class="table-sub" id="rendimientoSubtitulo">Sigue el rango de fechas seleccionado arriba</div></div>
             </div>
             <div class="table-responsive">
                 <table id="tablaMetricasAnalistas" class="table table-sm w-100 align-middle" style="font-size:0.82rem;">
-                    <thead><tr><th style="min-width:140px;">Analista</th><th class="text-center">Total</th><th class="text-center">Aprob.</th><th class="text-center">Neg.</th><th class="text-center">Aplaz.</th><th class="text-center">T. Gestión</th><th class="text-center">T. General</th><th class="text-center">Ritmo/h</th><th class="text-center">Prod/h</th><th class="text-center">Detalle</th><th class="text-center">Fuera SLA</th></tr></thead>
+                    <thead><tr><th style="min-width:140px;">Analista</th><th class="text-center">Total</th><th class="text-center">% Aprob.</th><th class="text-center">% Neg.</th><th class="text-center">% Aplaz.</th><th style="min-width:150px;">Motivo principal</th><th class="text-center">T. Gestión</th><th class="text-center">T. General</th><th class="text-center">Ritmo/h</th><th class="text-center">Prod/h</th><th class="text-center">Detalle</th><th class="text-center">Motivos</th><th class="text-center">Fuera SLA</th></tr></thead>
                     <tbody id="cuerpoMetricasAnalistas"></tbody>
                 </table>
+            </div>
+        </div>
+        <!-- Comparativa de Analistas -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-12">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-header">
+                        <div><div class="table-title"><i class="bi bi-bar-chart-steps me-2" style="color:var(--rojo);"></i>Comparativa de Analistas: Aprobación vs Negación vs Aplazamiento<span class="btn-help-chart" onclick="ayudaGrafico('comparativaAnalistas')">?</span></div><div class="table-sub">Cada barra suma 100% — ordenado de mayor a menor % de negación</div></div>
+                    </div>
+                    <div style="max-height:520px;overflow-y:auto;">
+                        <div style="position:relative;" id="comparativaAnalistasInner"><canvas id="chartComparativaAnalistas"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Tendencia y Motivos de Decisión -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-12">
+                <div class="table-container" style="margin-top:0;">
+                    <div class="table-header" style="flex-wrap:wrap;gap:12px;">
+                        <div><div class="table-title"><i class="bi bi-graph-up me-2" style="color:var(--rojo);"></i>Tendencia y Motivos de Decisión<span class="btn-help-chart" onclick="ayudaGrafico('tendenciaMotivos')">?</span></div><div class="table-sub">Evolución de %Negación/%Aplazamiento y sus motivos — todo el equipo o un analista puntual</div></div>
+                        <div class="d-flex align-items-center gap-2">
+                            <label for="selectorAnalistaTendencia" class="form-label mb-0" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Analista:</label>
+                            <select id="selectorAnalistaTendencia" class="form-control" style="width:220px;padding:6px 10px !important;font-size:0.78rem;border-radius:9px !important;" onchange="renderTendenciaYMotivos()"><option value="">Todo el equipo</option></select>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-lg-12"><div style="position:relative;height:340px;"><canvas id="chartTendenciaDecision"></canvas></div></div>
+                    </div>
+                    <div class="row g-3 mt-1">
+                        <div class="col-lg-12"><div class="table-sub mb-2 fw-bold" style="color:var(--rojo);">Top motivos de negación</div><div style="position:relative;height:320px;"><canvas id="chartMotivosNegacion"></canvas></div></div>
+                    </div>
+                    <div class="row g-3 mt-1">
+                        <div class="col-lg-12"><div class="table-sub mb-2 fw-bold" style="color:#d97706;">Top motivos de aplazamiento</div><div style="position:relative;height:320px;"><canvas id="chartMotivosAplazamiento"></canvas></div></div>
+                    </div>
+                </div>
             </div>
         </div>
         <!-- Seguimiento -->
@@ -608,18 +640,18 @@
             <!-- Filtros Biometría -->
             <div class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border" style="border-color:var(--border);">
                 <div class="d-flex align-items-center gap-2">
-                    <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Desde</label>
+                    <label for="bioFiltroDesde" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Desde</label>
                     <input type="date" id="bioFiltroDesde" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Hasta</label>
+                    <label for="bioFiltroHasta" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Hasta</label>
                     <input type="date" id="bioFiltroHasta" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
                 </div>
                 <button class="btn-primary-brand" onclick="cargarDatosBiometria()" style="border-radius:10px;padding:8px 18px;">
                     <i class="bi bi-funnel"></i> Aplicar
                 </button>
                 <div class="d-flex align-items-center gap-2">
-                    <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Solicitud / Póliza</label>
+                    <label for="buscarBioSolicitud" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Solicitud / Póliza</label>
                     <input type="text" id="buscarBioSolicitud" class="form-control" placeholder="Ej: 12194143..." style="width:160px;padding:6px 12px !important;font-size:0.8rem;border-radius:8px;">
                 </div>
                 <button class="btn-primary-brand" onclick="ejecutarBusquedaBiometria()" style="border-radius:10px;padding:8px 18px;">
@@ -756,24 +788,29 @@
                     <div class="bio-kpi-card"><div class="bio-kpi-label"><i class="bi bi-percent me-1"></i>Tasa Contacto</div><div class="bio-kpi-value" id="bioGesTasaContacto">0%</div></div>
                 </div>
 
-                <!-- Gráficos Gestión -->
+                <!-- Gráficos Gestión — ResLlamada/ResFinal son doughnuts de pocas categorías fijas
+                     (ok a media anchura); Motivos tiene texto variable por motivo, necesita ancho
+                     completo y alto dinámico según cuántos motivos distintos haya (mismo criterio
+                     que Top Motivos en la pestaña Analistas). -->
                 <div class="row g-4">
-                    <div class="col-lg-4">
+                    <div class="col-lg-6">
                         <div style="background:var(--bg-page);border-radius:12px;padding:14px;">
                             <div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-telephone me-1"></i>Resultado Llamada <span class="btn-help-chart" onclick="ayudaGrafico('bioResLlamada')">?</span></div>
                             <div style="position:relative;height:200px;"><canvas id="chartBioResLlamada"></canvas></div>
                         </div>
                     </div>
-                    <div class="col-lg-4">
+                    <div class="col-lg-6">
                         <div style="background:var(--bg-page);border-radius:12px;padding:14px;">
                             <div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-clipboard-check me-1"></i>Resultado Final <span class="btn-help-chart" onclick="ayudaGrafico('bioResFinal')">?</span></div>
                             <div style="position:relative;height:200px;"><canvas id="chartBioResFinal"></canvas></div>
                         </div>
                     </div>
-                    <div class="col-lg-4">
+                </div>
+                <div class="row g-4 mt-1">
+                    <div class="col-lg-12">
                         <div style="background:var(--bg-page);border-radius:12px;padding:14px;">
                             <div style="font-size:0.75rem;font-weight:800;color:var(--azul);margin-bottom:8px;"><i class="bi bi-list-check me-1"></i>Motivos de Aplazamiento <span class="btn-help-chart" onclick="ayudaGrafico('bioMotivos')">?</span></div>
-                            <div style="position:relative;height:200px;"><canvas id="chartBioMotivos"></canvas></div>
+                            <div style="position:relative;" id="chartBioMotivosInner"><canvas id="chartBioMotivos"></canvas></div>
                         </div>
                     </div>
                 </div>
@@ -833,7 +870,16 @@
             </div>
             <div id="agenteContenido" style="display:none;">
 
-            <div class="bio-ciclo-section-title" style="margin-top:0;">Estado y Decisiones <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-muted);">— lo que hay que saber y con quién hablar hoy</span></div>
+            <div class="mini-nav">
+                <span class="mini-nav-chip" onclick="document.getElementById('agenteAnclaEstado').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-speedometer2 me-1"></i>Estado y Decisiones</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('agenteAnclaHistorial').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-clock-history me-1"></i>Historial</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('agenteAnclaSugerencias').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-lightbulb me-1"></i>Sugerencias</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('agenteAnclaSeguimiento').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-person-exclamation me-1"></i>Seguimiento</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('agenteAnclaCalidad').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-database-check me-1"></i>Calidad de Datos</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('agenteAnclaConfig').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-sliders me-1"></i>Configuración</span>
+            </div>
+
+            <div class="bio-ciclo-section-title" id="agenteAnclaEstado" style="margin-top:0;">Estado y Decisiones <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-muted);">— lo que hay que saber y con quién hablar hoy</span></div>
             <!-- Health Score + Quick Actions -->
             <div class="row g-4 mb-4">
                 <div class="col-lg-4">
@@ -909,7 +955,7 @@
 
             <!-- Historial de Alertas — junto a Alertas Activas: mismo tema (ahora vs. en el tiempo) -->
             <div class="table-container mb-4">
-                <div class="table-title mb-2"><i class="bi bi-clock-history me-2" style="color:var(--azul);"></i>Historial de Alertas</div>
+                <div class="table-title mb-2" id="agenteAnclaHistorial"><i class="bi bi-clock-history me-2" style="color:var(--azul);"></i>Historial de Alertas</div>
                 <div class="table-sub mb-3">Últimas 50 alertas registradas por el agente</div>
                 <div class="table-responsive">
                     <table id="tablaHistorialAlertas" class="table table-sm w-100 align-middle" style="font-size:0.82rem;">
@@ -921,26 +967,26 @@
 
             <!-- Sugerencias -->
             <div class="table-container mb-4">
-                <div class="table-title mb-2"><i class="bi bi-lightbulb me-2" style="color:#166534;"></i>Sugerencias del Agente</div>
+                <div class="table-title mb-2" id="agenteAnclaSugerencias"><i class="bi bi-lightbulb me-2" style="color:#166534;"></i>Sugerencias del Agente</div>
                 <div class="table-sub mb-3">Acciones recomendadas basadas en el diagnóstico actual</div>
                 <div id="sugerenciasAgente"></div>
             </div>
 
             <!-- Seguimiento de Personas -->
             <div class="table-container mb-4">
-                <div class="table-title mb-2"><i class="bi bi-person-exclamation me-2" style="color:var(--rojo);"></i>Analistas que Requieren Seguimiento <span class="btn-help-chart" onclick="ayudaConfig('seguimiento')">?</span></div>
+                <div class="table-title mb-2" id="agenteAnclaSeguimiento"><i class="bi bi-person-exclamation me-2" style="color:var(--rojo);"></i>Analistas que Requieren Seguimiento <span class="btn-help-chart" onclick="ayudaConfig('seguimiento')">?</span></div>
                 <div class="table-sub mb-3">Personas con las que debes conversar hoy, con datos de sustento para la conversación</div>
                 <div id="seguimientoPersonasContainer"></div>
             </div>
 
             <!-- Calidad de Datos -->
             <div class="table-container mb-4">
-                <div class="table-title mb-2"><i class="bi bi-database-check me-2" style="color:var(--azul);"></i>Reporte de Calidad de Datos <span class="btn-help-chart" onclick="ayudaConfig('calidadDatos')">?</span></div>
+                <div class="table-title mb-2" id="agenteAnclaCalidad"><i class="bi bi-database-check me-2" style="color:var(--azul);"></i>Reporte de Calidad de Datos <span class="btn-help-chart" onclick="ayudaConfig('calidadDatos')">?</span></div>
                 <div class="table-sub mb-3">Verifica que los datos de las hojas estén completos y sin valores extraños. Click en cada tarjeta para ver el detalle.</div>
                 <div id="calidadDatosContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;"></div>
             </div>
 
-            <div class="bio-ciclo-section-title">Configuración del Sistema <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-muted);">— cómo funciona el agente, no información del día a día</span></div>
+            <div class="bio-ciclo-section-title" id="agenteAnclaConfig">Configuración del Sistema <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-muted);">— cómo funciona el agente, no información del día a día</span></div>
             <!-- Configuración de Metas -->
             <div class="table-container mb-4" id="seccionConfigMetas">
                 <div class="table-title mb-2"><i class="bi bi-sliders me-2" style="color:var(--azul);"></i>Configuración de Metas y Umbrales</div>
@@ -948,31 +994,39 @@
                 <div class="agent-config-form">
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="form-label">SLA % meta <span class="btn-help-chart" onclick="ayudaConfig('slaPct')">?</span></label>
+                            <label class="form-label" for="cfgSlaPct">SLA % meta <span class="btn-help-chart" onclick="ayudaConfig('slaPct')">?</span></label>
                             <input type="number" class="form-control" id="cfgSlaPct" min="0" max="100">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Máx. T. Gestión (min) <span class="btn-help-chart" onclick="ayudaConfig('maxGestion')">?</span></label>
+                            <label class="form-label" for="cfgMaxGestion">Máx. T. Gestión (min) <span class="btn-help-chart" onclick="ayudaConfig('maxGestion')">?</span></label>
                             <input type="number" class="form-control" id="cfgMaxGestion" min="1">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Máx. T. General (horas) <span class="btn-help-chart" onclick="ayudaConfig('maxGeneral')">?</span></label>
+                            <label class="form-label" for="cfgMaxGeneral">Máx. T. General (horas) <span class="btn-help-chart" onclick="ayudaConfig('maxGeneral')">?</span></label>
                             <input type="number" class="form-control" id="cfgMaxGeneral" min="0.5" step="0.5">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Máx. T. Cola (min) <span class="btn-help-chart" onclick="ayudaConfig('maxCola')">?</span></label>
+                            <label class="form-label" for="cfgMaxCola">Máx. T. Cola (min) <span class="btn-help-chart" onclick="ayudaConfig('maxCola')">?</span></label>
                             <input type="number" class="form-control" id="cfgMaxCola" min="1">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Máx. Backlog <span class="btn-help-chart" onclick="ayudaConfig('maxBacklog')">?</span></label>
+                            <label class="form-label" for="cfgMaxBacklog">Máx. Backlog <span class="btn-help-chart" onclick="ayudaConfig('maxBacklog')">?</span></label>
                             <input type="number" class="form-control" id="cfgMaxBacklog" min="1">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Desviación histórica % <span class="btn-help-chart" onclick="ayudaConfig('desviacion')">?</span></label>
+                            <label class="form-label" for="cfgMaxNegacion">Máx. Tasa Negación % <span class="btn-help-chart" onclick="ayudaConfig('maxNegacion')">?</span></label>
+                            <input type="number" class="form-control" id="cfgMaxNegacion" min="1" max="100">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="cfgMaxAplazamiento">Máx. Tasa Aplazamiento % <span class="btn-help-chart" onclick="ayudaConfig('maxAplazamiento')">?</span></label>
+                            <input type="number" class="form-control" id="cfgMaxAplazamiento" min="1" max="100">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="cfgDesviacion">Desviación histórica % <span class="btn-help-chart" onclick="ayudaConfig('desviacion')">?</span></label>
                             <input type="number" class="form-control" id="cfgDesviacion" min="5" max="100">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Umbral pausas (min) <span class="btn-help-chart" onclick="ayudaConfig('umbralPausa')">?</span></label>
+                            <label class="form-label" for="cfgUmbralPausa">Umbral pausas (min) <span class="btn-help-chart" onclick="ayudaConfig('umbralPausa')">?</span></label>
                             <input type="number" class="form-control" id="cfgUmbralPausa" min="10">
                         </div>
                         <div class="col-md-6 d-flex align-items-center">
@@ -988,12 +1042,12 @@
                                     <tbody>
                                         <tr>
                                             <td>Inicio de Operación <span class="btn-help-chart" onclick="ayudaConfig('enviarInicio')">?</span></td>
-                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarInicio" checked></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarInicio" aria-label="Activar Inicio de Operación" checked></td>
                                             <td style="color:var(--text-light);font-size:0.75rem;">Una vez, a la hora "Desde" del día</td>
                                         </tr>
                                         <tr>
                                             <td>Chequeo de Conexión <span class="btn-help-chart" onclick="ayudaConfig('enviarChequeoConexion')">?</span></td>
-                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarChequeoConexion" checked></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarChequeoConexion" aria-label="Activar Chequeo de Conexión" checked></td>
                                             <td>
                                                 <select class="form-select form-select-sm" id="cfgChequeoConexionOffset" style="width:auto;display:inline-block;">
                                                     <option value="15">15 min después de "Desde"</option>
@@ -1006,7 +1060,7 @@
                                         </tr>
                                         <tr>
                                             <td>Alertas Críticas <span class="btn-help-chart" onclick="ayudaConfig('enviarCriticas')">?</span></td>
-                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarCriticas" checked></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarCriticas" aria-label="Activar Alertas Críticas" checked></td>
                                             <td>
                                                 <select class="form-select form-select-sm" id="cfgAlertasCriticasFrecuencia" style="width:auto;display:inline-block;">
                                                     <option value="0.5">Cada 30 min</option>
@@ -1020,7 +1074,7 @@
                                         </tr>
                                         <tr>
                                             <td>Foto del Momento <span class="btn-help-chart" onclick="ayudaConfig('enviarFotoMomento')">?</span></td>
-                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarFotoMomento" checked></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarFotoMomento" aria-label="Activar Foto del Momento" checked></td>
                                             <td>
                                                 <select class="form-select form-select-sm" id="cfgFotoMomentoFrecuencia" style="width:auto;display:inline-block;">
                                                     <option value="0.5">Cada 30 min</option>
@@ -1035,17 +1089,17 @@
                                         </tr>
                                         <tr>
                                             <td>Resumen Diario <span class="btn-help-chart" onclick="ayudaConfig('enviarResumen')">?</span></td>
-                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarResumen" checked></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarResumen" aria-label="Activar Resumen Diario" checked></td>
                                             <td style="color:var(--text-light);font-size:0.75rem;">Una vez, a la hora "Hasta" del día</td>
                                         </tr>
                                         <tr>
                                             <td>Reporte Biometría <span class="btn-help-chart" onclick="ayudaConfig('enviarBiometria')">?</span></td>
-                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarBiometria" checked></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarBiometria" aria-label="Activar Reporte de Biometría" checked></td>
                                             <td style="color:var(--text-light);font-size:0.75rem;">Junto al Resumen Diario, a la hora "Hasta"</td>
                                         </tr>
                                         <tr>
                                             <td>Informe Individual Semanal <span class="btn-help-chart" onclick="ayudaConfig('enviarInformeIndividual')">?</span></td>
-                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarInformeIndividual"></td>
+                                            <td class="text-center"><input class="form-check-input" type="checkbox" id="cfgEnviarInformeIndividual" aria-label="Activar Informe Individual Semanal"></td>
                                             <td>
                                                 Cada analista recibe el suyo el
                                                 <select class="form-select form-select-sm" id="cfgInformeIndividualDia" style="width:auto;display:inline-block;">
@@ -1073,7 +1127,7 @@
                         <div class="col-md-4 d-flex align-items-end">
                             <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="cfgReporteActivo" checked>
-                                <label class="form-check-label" style="font-size:0.75rem;font-weight:600;">Activar reporte periódico</label>
+                                <label class="form-check-label" for="cfgReporteActivo" style="font-size:0.75rem;font-weight:600;">Activar reporte periódico</label>
                             </div>
                         </div>
                     </div>
@@ -1084,13 +1138,13 @@
                                 <table class="table table-sm align-middle" style="font-size:0.8rem;width:auto;">
                                     <thead><tr><th>Día</th><th class="text-center">Activo</th><th>Desde</th><th>Hasta</th></tr></thead>
                                     <tbody id="cfgReporteDiasTabla">
-                                        <tr><td>Lunes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia1Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia1Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia1Fin" style="width:110px;"></td></tr>
-                                        <tr><td>Martes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia2Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia2Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia2Fin" style="width:110px;"></td></tr>
-                                        <tr><td>Miércoles</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia3Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia3Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia3Fin" style="width:110px;"></td></tr>
-                                        <tr><td>Jueves</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia4Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia4Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia4Fin" style="width:110px;"></td></tr>
-                                        <tr><td>Viernes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia5Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia5Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia5Fin" style="width:110px;"></td></tr>
-                                        <tr><td>Sábado</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia6Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia6Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia6Fin" style="width:110px;"></td></tr>
-                                        <tr><td>Domingo</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia7Activo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia7Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia7Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Lunes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia1Activo" aria-label="Operación activa el lunes"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia1Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia1Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Martes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia2Activo" aria-label="Operación activa el martes"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia2Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia2Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Miércoles</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia3Activo" aria-label="Operación activa el miércoles"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia3Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia3Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Jueves</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia4Activo" aria-label="Operación activa el jueves"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia4Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia4Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Viernes</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia5Activo" aria-label="Operación activa el viernes"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia5Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia5Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Sábado</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia6Activo" aria-label="Operación activa el sábado"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia6Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia6Fin" style="width:110px;"></td></tr>
+                                        <tr><td>Domingo</td><td class="text-center"><input class="form-check-input" type="checkbox" id="cfgDia7Activo" aria-label="Operación activa el domingo"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia7Inicio" style="width:110px;"></td><td><input type="time" step="1800" class="form-control form-control-sm" id="cfgDia7Fin" style="width:110px;"></td></tr>
                                     </tbody>
                                 </table>
                             </div>
