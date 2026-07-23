@@ -1301,10 +1301,9 @@ function onDatosBiometriaCargados(d) {
     document.getElementById('bioMetSinIniciar').textContent = d.totalSinIniciar;
     document.getElementById('bioMetEnviados').textContent = d.totalEnviados;
     document.getElementById('bioMetResueltasSinWA').textContent = d.resueltasSinWA;
-    document.getElementById('bioMetResueltasConWA').textContent = d.enviadasYResueltas;
+    document.getElementById('bioMetResueltasConWA').textContent = d.resueltasConWA;
     document.getElementById('bioMetEscaladas').textContent = d.totalEscaladas;
-    document.getElementById('bioMetResueltasEnCola').textContent = d.totalResueltasEnCola;
-    document.getElementById('bioMetArchivadas').textContent = d.totalArchivadas;
+    renderBioDesgloseCola(d);
 
     // Tasa de Conversión = Resueltas por WhatsApp / Enviados, mismo grupo (por fecha de envío)
     document.getElementById('bioTasaConversion').textContent = d.tasaConversion + '%';
@@ -1595,10 +1594,49 @@ var _BIO_DRILLDOWN_TITULOS = {
     cicloEnviados: 'WA Enviados',
     cicloResueltasConWA: 'Resueltas por WhatsApp',
     cicloEscaladas: 'Escaladas a Análisis',
+    enColaPendiente: 'En Cola (Pendiente de Analista)',
     asignadas: 'Asignadas (analista las tomó)',
     resueltasEnCola: 'Resueltas en Cola (sin analista)',
     archivadas: 'Archivadas (vencidas sin asignar)'
 };
+
+// Desglose de "Enviadas a Cola" como barra apilada parte-del-todo: las 4 fases son
+// mutuamente excluyentes y suman exacto al total (ver totalEscaladas en Código.js),
+// así que el ancho de cada segmento es directamente su participación real.
+function renderBioDesgloseCola(d) {
+    var partes = [
+        { tipo: 'enColaPendiente', label: 'En Cola (Pendiente)', valor: d.totalEnColaPendiente, color: '#d97706' },
+        { tipo: 'asignadas',       label: 'Asignadas',            valor: d.totalAsignadas,       color: '#059669' },
+        { tipo: 'resueltasEnCola', label: 'Resueltas en Cola',    valor: d.totalResueltasEnCola,  color: '#2563eb' },
+        { tipo: 'archivadas',      label: 'Archivadas',           valor: d.totalArchivadas,       color: '#BD0F14' }
+    ];
+    var total = partes.reduce(function (s, p) { return s + p.valor; }, 0);
+    document.getElementById('bioDesgloseTotal').textContent = total;
+
+    var bar = document.getElementById('bioDesgloseBar');
+    var leg = document.getElementById('bioDesgloseLegend');
+
+    if (total === 0) {
+        bar.innerHTML = '<div class="bio-desglose-empty">Sin solicitudes enviadas a cola en este rango</div>';
+        leg.innerHTML = '';
+        return;
+    }
+
+    bar.innerHTML = partes.filter(function (p) { return p.valor > 0; }).map(function (p) {
+        var pct = Math.round(p.valor / total * 1000) / 10;
+        var conValor = pct >= 8; // solo se etiqueta si el segmento tiene espacio real
+        return '<div class="bio-desglose-seg" style="flex-grow:' + p.valor + ';background:' + p.color + ';cursor:pointer;" ' +
+            'onclick="drilldownBio(\'' + p.tipo + '\')" title="' + p.label + ': ' + p.valor + ' (' + pct + '%)">' +
+            (conValor ? p.valor : '') + '</div>';
+    }).join('');
+
+    leg.innerHTML = partes.map(function (p) {
+        return '<div class="bio-desglose-item" style="cursor:pointer;" onclick="drilldownBio(\'' + p.tipo + '\')">' +
+            '<span class="bio-desglose-dot" style="background:' + p.color + ';"></span>' +
+            '<span class="bio-desglose-label">' + p.label + '</span>' +
+            '<span class="bio-desglose-valor">' + p.valor + '</span></div>';
+    }).join('');
+}
 
 function drilldownBio(tipo) {
     var titulo = _BIO_DRILLDOWN_TITULOS[tipo] || 'Detalle';

@@ -732,12 +732,15 @@
                 <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('cascadaSinIniciar')"><div class="bio-ciclo-label"><i class="bi bi-hourglass me-1"></i>Esperando 4h</div><div class="bio-ciclo-value" id="bioMetSinIniciar">0</div><div class="bio-ciclo-sub">Esperando para enviar WA</div></div>
                 <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('cicloEnviados')"><div class="bio-ciclo-label"><i class="bi bi-whatsapp me-1" style="color:#25D366;"></i>WA Enviados</div><div class="bio-ciclo-value" id="bioMetEnviados">0</div><div class="bio-ciclo-sub">Mensajes ya enviados</div></div>
             </div>
-            <div class="bio-ciclo-row bio-ciclo-row-5" style="margin-top:0.5rem;">
+            <div class="bio-ciclo-row bio-ciclo-row-3" style="margin-top:0.5rem;">
                 <div class="bio-ciclo-card bio-c-verde" style="cursor:pointer;" onclick="drilldownBio('cicloResueltasSinWA')"><div class="bio-ciclo-label"><i class="bi bi-person-check me-1"></i>Resueltas sin WA</div><div class="bio-ciclo-value" id="bioMetResueltasSinWA">0</div><div class="bio-ciclo-sub">Se resolvieron sin enviar mensaje</div></div>
                 <div class="bio-ciclo-card bio-c-verde" style="cursor:pointer;" onclick="drilldownBio('cicloResueltasConWA')"><div class="bio-ciclo-label"><i class="bi bi-check-circle me-1"></i>Resueltas por WA</div><div class="bio-ciclo-value" id="bioMetResueltasConWA">0</div><div class="bio-ciclo-sub">Se resolvieron tras el WA, sin escalar</div></div>
                 <div class="bio-ciclo-card bio-c-rojo" style="cursor:pointer;" onclick="drilldownBio('cicloEscaladas')"><div class="bio-ciclo-label"><i class="bi bi-arrow-up-right-circle me-1"></i>Enviadas a Cola</div><div class="bio-ciclo-value" id="bioMetEscaladas">0</div><div class="bio-ciclo-sub">Escaladas a cola de análisis</div></div>
-                <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('resueltasEnCola')"><div class="bio-ciclo-label"><i class="bi bi-shuffle me-1"></i>Resueltas en Cola</div><div class="bio-ciclo-value" id="bioMetResueltasEnCola">0</div><div class="bio-ciclo-sub">Se cerraron solas, sin analista</div></div>
-                <div class="bio-ciclo-card" style="cursor:pointer;" onclick="drilldownBio('archivadas')"><div class="bio-ciclo-label"><i class="bi bi-archive me-1"></i>Archivadas</div><div class="bio-ciclo-value" id="bioMetArchivadas">0</div><div class="bio-ciclo-sub">Vencidas (&gt;12h sin asignar)</div></div>
+            </div>
+            <div class="bio-desglose-cola">
+                <span class="bio-desglose-titulo">¿En qué van las <strong id="bioDesgloseTotal">0</strong> enviadas a cola?</span>
+                <div class="bio-desglose-bar" id="bioDesgloseBar"></div>
+                <div class="bio-desglose-legend" id="bioDesgloseLegend"></div>
             </div>
 
             <!-- Resultados de Gestión -->

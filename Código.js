@@ -1434,7 +1434,7 @@ function obtenerColaAsignacion() {
 }
 
 function obtenerDatosBiometria(fechaDesde, fechaHasta) {
-  var vacio = { totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalProcesadas: 0, totalSinIniciar: 0, faltanRevisar: 0, esperandoCorte: 0, totalEnEspera: 0, totalEscaladas: 0, totalAsignadas: 0, totalResueltasEnCola: 0, totalArchivadas: 0, tasaEfectividadCola: 0, colaActual: 0, totalResueltas: 0, resueltasConWA: 0, resueltasSinWA: 0, enviadasYResueltas: 0, enviadasYEscaladas: 0, cohorteResueltasSinWA: 0, cohorteEnviadas: 0, cohorteEnEspera: 0, cohorteResueltasConWA: 0, cohorteEscaladas: 0, cohorteAsignadas: 0, cohorteResueltasEnCola: 0, cohorteArchivadas: 0, tasaEnvio: 0, tasaConversion: 0, tendencia: [], gestion: { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, motivos: {}, tasaContacto: 0 } };
+  var vacio = { totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalProcesadas: 0, totalSinIniciar: 0, faltanRevisar: 0, esperandoCorte: 0, totalEnEspera: 0, totalEscaladas: 0, totalAsignadas: 0, totalResueltasEnCola: 0, totalArchivadas: 0, totalEnColaPendiente: 0, tasaEfectividadCola: 0, colaActual: 0, totalResueltas: 0, resueltasConWA: 0, resueltasSinWA: 0, enviadasYResueltas: 0, enviadasYEscaladas: 0, cohorteResueltasSinWA: 0, cohorteEnviadas: 0, cohorteEnEspera: 0, cohorteResueltasConWA: 0, cohorteEscaladas: 0, cohorteAsignadas: 0, cohorteResueltasEnCola: 0, cohorteArchivadas: 0, tasaEnvio: 0, tasaConversion: 0, tendencia: [], gestion: { total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0, motivos: {}, tasaContacto: 0 } };
 
   // Cola de asignación en vivo: viene de la hoja "solicitud" (sin filtro de fecha), no de
   // pendiente_biometria. Es la fuente autoritativa del backlog real, independiente del
@@ -1489,7 +1489,7 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
     // bien ubicado en el día real de su desenlace, no perdido en el día de la consulta.
     var totalConsultadas = 0, totalEnviados = 0, totalNoEnviados = 0;
     var totalSinIniciar = 0, totalEnEspera = 0, totalEscaladas = 0;
-    var totalAsignadas = 0, totalResueltasEnCola = 0, totalArchivadas = 0;
+    var totalAsignadas = 0, totalResueltasEnCola = 0, totalArchivadas = 0, totalEnColaPendiente = 0;
     var resueltasConWA = 0, resueltasSinWA = 0;
     // Cohorte-consistentes: de las ENVIADAS por fecha de envío (mismo grupo que "WA Enviados"),
     // cuántas están AHORA MISMO en cada estado — sin importar cuándo cambiaron de fase. Esto
@@ -1587,7 +1587,7 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
 
       if (_enRango(_fechaNorm(faseParte))) {
         if (fase === "WA_ENVIADO") { totalEnEspera++; _bucket(faseParte, 'enEspera'); }
-        else if (fase === "ESCALADA") { totalEscaladas++; _bucket(faseParte, 'escaladas'); }
+        else if (fase === "ESCALADA") { totalEscaladas++; totalEnColaPendiente++; _bucket(faseParte, 'escaladas'); }
         else if (fase === "ASIGNADA") { totalEscaladas++; totalAsignadas++; _bucket(faseParte, 'escaladas'); _bucket(faseParte, 'asignadas'); }
         else if (fase === "RESUELTA_EN_COLA") { totalEscaladas++; totalResueltasEnCola++; _bucket(faseParte, 'escaladas'); _bucket(faseParte, 'resueltasEnCola'); }
         else if (fase === "ARCHIVADA") { totalEscaladas++; totalArchivadas++; _bucket(faseParte, 'escaladas'); _bucket(faseParte, 'archivadas'); }
@@ -1643,6 +1643,7 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
       totalAsignadas: totalAsignadas,
       totalResueltasEnCola: totalResueltasEnCola,
       totalArchivadas: totalArchivadas,
+      totalEnColaPendiente: totalEnColaPendiente,
       tasaEfectividadCola: (totalAsignadas + totalResueltasEnCola + totalArchivadas) > 0 ? Math.round((totalAsignadas / (totalAsignadas + totalResueltasEnCola + totalArchivadas)) * 1000) / 10 : 0,
       colaActual: colaActual,
       totalResueltas: totalResueltas,
@@ -1993,11 +1994,13 @@ function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta) {
       } else if (tipo === "cicloEnviados") {
         incluir = _enRangoD(_fechaNormD(envioParte)) && fueEnviado;
       } else if (tipo === "cicloResueltasConWA") {
-        incluir = _enRangoD(_fechaNormD(envioParte)) && fueEnviado && fase === "RESUELTA";
+        incluir = _enRangoD(_fechaNormD(faseParte)) && fueEnviado && fase === "RESUELTA";
       } else if (tipo === "cicloEscaladas") {
-        incluir = _enRangoD(_fechaNormD(envioParte)) && fueEnviado && (fase === "ESCALADA" || fase === "ASIGNADA" || fase === "RESUELTA_EN_COLA" || fase === "ARCHIVADA");
+        incluir = _enRangoD(_fechaNormD(faseParte)) && (fase === "ESCALADA" || fase === "ASIGNADA" || fase === "RESUELTA_EN_COLA" || fase === "ARCHIVADA");
       } else if (tipo === "asignadas") {
         incluir = _enRangoD(_fechaNormD(faseParte)) && fase === "ASIGNADA";
+      } else if (tipo === "enColaPendiente") {
+        incluir = _enRangoD(_fechaNormD(faseParte)) && fase === "ESCALADA";
       } else if (tipo === "resueltasEnCola") {
         incluir = _enRangoD(_fechaNormD(faseParte)) && fase === "RESUELTA_EN_COLA";
       } else if (tipo === "archivadas") {
@@ -3780,6 +3783,7 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, 
       html += '</td>';
     });
     html += '</tr></table>';
+    html += _construirBarraDesgloseCola(bio);
 
     if (ges.total > 0) {
       html += '<div style="font-size:13px;font-weight:700;color:#253150;margin:18px 0 10px;border-top:1px solid #e5e7eb;padding-top:14px;">Gestión de Analistas (llamadas)</div>';
@@ -4089,15 +4093,15 @@ function _construirEmailReporteBiometria(bio, fecha) {
   [
     { l: "Resueltas sin WA", v: bio.resueltasSinWA, c: "#059669" },
     { l: "Resueltas por WA", v: bio.enviadasYResueltas, c: "#059669" },
-    { l: "Enviadas a Cola", v: bio.totalEscaladas, c: "#BD0F14" },
-    { l: "Archivadas", v: bio.totalArchivadas, c: "#706F6F" }
+    { l: "Enviadas a Cola", v: bio.totalEscaladas, c: "#BD0F14" }
   ].forEach(function(ki) {
-    html += '<td width="25%" style="text-align:center;padding:12px 4px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
-    html += '<div style="font-size:10px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
-    html += '<div style="font-size:20px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
+    html += '<td width="33%" style="text-align:center;padding:12px 6px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;">';
+    html += '<div style="font-size:11px;font-weight:700;color:#706F6F;margin-bottom:4px;">' + ki.l + '</div>';
+    html += '<div style="font-size:22px;font-weight:800;color:' + ki.c + ';">' + ki.v + '</div>';
     html += '</td>';
   });
   html += '</tr></table>';
+  html += _construirBarraDesgloseCola(bio);
   html += '</td></tr>';
 
   // Gestión de Analistas
@@ -4139,6 +4143,50 @@ function _construirEmailReporteBiometria(bio, fecha) {
   html += '</td></tr>';
 
   html += '</table></td></tr></table></body></html>';
+  return html;
+}
+
+// Mismo desglose parte-del-todo del panel (barra apilada), pero armado con <table>
+// en vez de flexbox porque los clientes de correo (Outlook, etc.) no soportan flex.
+// Los 4 valores son fases mutuamente excluyentes que suman exacto bio.totalEscaladas
+// (ver el bucle de faseParte en obtenerDatosBiometria), así que el % de cada celda
+// es su participación real, no una aproximación.
+function _construirBarraDesgloseCola(bio) {
+  var partes = [
+    { label: "En Cola (Pendiente)", valor: bio.totalEnColaPendiente || 0, color: "#d97706" },
+    { label: "Asignadas", valor: bio.totalAsignadas || 0, color: "#059669" },
+    { label: "Resueltas en Cola", valor: bio.totalResueltasEnCola || 0, color: "#2563eb" },
+    { label: "Archivadas", valor: bio.totalArchivadas || 0, color: "#BD0F14" }
+  ];
+  var total = partes.reduce(function(s, p) { return s + p.valor; }, 0);
+
+  var html = '<div style="font-size:13px;font-weight:800;color:#253150;margin:20px 0 10px;">';
+  html += '&#8618; &iquest;En qu&eacute; van las <span style="color:#BD0F14;">' + total + '</span> enviadas a cola?</div>';
+
+  if (total === 0) {
+    html += '<div style="font-size:12px;color:#94a3b8;text-align:center;padding:10px 0;">Sin solicitudes enviadas a cola en este per&iacute;odo</div>';
+    return html;
+  }
+
+  var visibles = partes.filter(function(p) { return p.valor > 0; });
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:6px;"><tr>';
+  visibles.forEach(function(p, i) {
+    var pct = Math.round(p.valor / total * 1000) / 10;
+    var conValor = pct >= 8;
+    html += '<td width="' + pct + '%" style="background:' + p.color + ';height:26px;font-size:11px;font-weight:800;color:#fff;text-align:center;vertical-align:middle;">' + (conValor ? p.valor : '&nbsp;') + '</td>';
+    if (i < visibles.length - 1) html += '<td width="2" style="background:#f0f2f5;">&nbsp;</td>';
+  });
+  html += '</tr></table>';
+
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="6" style="margin-top:10px;"><tr>';
+  partes.forEach(function(p) {
+    html += '<td style="text-align:left;font-size:11px;color:#4a4a4a;white-space:nowrap;">';
+    html += '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + p.color + ';margin-right:5px;"></span>';
+    html += p.label + ' <strong style="color:#253150;">' + p.valor + '</strong>';
+    html += '</td>';
+  });
+  html += '</tr></table>';
+
   return html;
 }
 

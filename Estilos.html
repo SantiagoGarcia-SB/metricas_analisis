@@ -511,4 +511,35 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
 .bio-ciclo-card.bio-c-verde .bio-ciclo-value { color:#059669; }
 .bio-ciclo-card.bio-c-rojo .bio-ciclo-value { color:var(--rojo); }
 .bio-ciclo-sub { font-size:0.68rem; color:var(--text-light); }
+
+/* Desglose de Enviadas a Cola — barra apilada parte-del-todo */
+.bio-desglose-cola {
+    background:#fff; border-radius:16px; padding:18px 20px 16px; margin-bottom:24px;
+    box-shadow:var(--shadow); border-left:4px solid var(--rojo);
+}
+.bio-desglose-titulo {
+    font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;
+    letter-spacing:0.4px; margin-bottom:12px; display:block;
+}
+.bio-desglose-titulo strong { color:var(--rojo); font-weight:800; font-size:0.85rem; }
+.bio-desglose-bar {
+    display:flex; gap:2px; height:30px; border-radius:8px; overflow:hidden; margin-bottom:14px;
+    background:var(--gris-light);
+}
+.bio-desglose-seg {
+    display:flex; align-items:center; justify-content:center; min-width:3px;
+    font-size:0.72rem; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden;
+    transition:filter 0.15s;
+}
+.bio-desglose-seg:hover { filter:brightness(1.08); }
+.bio-desglose-legend { display:flex; flex-wrap:wrap; gap:8px 24px; }
+.bio-desglose-item {
+    display:flex; align-items:center; gap:7px; font-size:0.78rem;
+    padding:4px 8px 4px 6px; border-radius:8px; transition:background 0.15s;
+}
+.bio-desglose-item:hover { background:var(--bg-page); }
+.bio-desglose-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.bio-desglose-label { color:var(--text-muted); font-weight:600; }
+.bio-desglose-valor { color:var(--text-main); font-weight:800; margin-left:6px; }
+.bio-desglose-empty { color:var(--text-light); font-size:0.78rem; text-align:center; width:100%; }
 </style>
