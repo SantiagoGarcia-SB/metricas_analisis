@@ -1589,6 +1589,55 @@ function onDatosBiometriaCargados(d) {
         renderBioGestion(d.gestion);
         _setBioGestionScope('');
     }
+    cargarTopPolizasBiometria();
+}
+
+// === TOP 10 PÓLIZAS PENDIENTES DE BIOMETRÍA ===
+
+function cargarTopPolizasBiometria() {
+    var spinner = document.getElementById('topPolizasBioSpinner');
+    var tbody = document.getElementById('cuerpoTopPolizasBio');
+    if (spinner) spinner.style.display = 'block';
+    google.script.run.withSuccessHandler(function(ranking) {
+        if (spinner) spinner.style.display = 'none';
+        if (!ranking || ranking.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3" style="color:var(--text-light);">No hay pólizas con casos pendientes.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = ranking.map(function(item, idx) {
+            return '<tr style="cursor:pointer;" onclick="verDetallePendientesPoliza(\'' + esc(item.poliza) + '\', \'' + esc(item.inmobiliaria) + '\')">' +
+                '<td class="text-center fw-bold" style="color:#d97706;">' + (idx + 1) + '</td>' +
+                '<td><code style="font-size:0.8rem;">' + esc(item.poliza) + '</code></td>' +
+                '<td>' + esc(item.inmobiliaria) + '</td>' +
+                '<td class="text-center"><span class="badge" style="background:#d97706;color:#fff;font-size:0.8rem;padding:4px 10px;border-radius:8px;">' + item.count + '</span></td>' +
+                '<td class="text-center"><i class="bi bi-eye" style="color:var(--azul);font-size:1rem;"></i></td>' +
+                '</tr>';
+        }).join('');
+    }).withFailureHandler(function(e) {
+        if (spinner) spinner.style.display = 'none';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3" style="color:var(--rojo);">Error: ' + esc(e.message) + '</td></tr>';
+    }).obtenerTopPolizasPendientesBiometria();
+}
+
+function verDetallePendientesPoliza(poliza, inmobiliaria) {
+    Swal.fire({ title: 'Cargando...', didOpen: function() { Swal.showLoading(); } });
+    google.script.run.withSuccessHandler(function(detalle) {
+        detalle = detalle || [];
+        var header = '<tr><th style="white-space:nowrap;">Solicitud</th><th>Nombre del Cliente</th></tr>';
+        var filas = detalle.length > 0 ? detalle.map(function(d) {
+            return '<tr><td><code style="font-size:0.82rem;">' + esc(d.solicitud) + '</code></td><td>' + esc(d.nombre || 'Sin nombre') + '</td></tr>';
+        }).join('') : '<tr><td colspan="2" class="text-center py-3" style="color:var(--text-light);">Sin solicitudes pendientes.</td></tr>';
+        Swal.fire({
+            title: '<i class="bi bi-building me-2" style="color:#d97706;"></i>' + esc(inmobiliaria),
+            html: '<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">Póliza <strong>' + esc(poliza) + '</strong> — ' + detalle.length + ' caso(s) pendiente(s)</p>' +
+                  '<div style="max-height:55vh;overflow-y:auto;"><table class="table table-sm table-hover" style="font-size:0.82rem;width:100%;"><thead>' + header + '</thead><tbody>' + filas + '</tbody></table></div>',
+            width: 600,
+            confirmButtonColor: '#BD0F14',
+            confirmButtonText: 'Cerrar'
+        });
+    }).withFailureHandler(function(e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+    }).obtenerDetallePendientesPorPoliza(poliza);
 }
 
 function renderBioEfectividad(tend) {

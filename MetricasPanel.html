@@ -632,6 +632,7 @@
             <div class="mini-nav">
                 <span class="mini-nav-chip" onclick="document.getElementById('bioConversionBanner').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-graph-up-arrow me-1"></i>Conversión</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaEnVivo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-broadcast me-1"></i>En Vivo</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaTopPolizas').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-building me-1"></i>Top Pólizas</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaCiclo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-activity me-1"></i>Operación</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaGestion').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-telephone me-1"></i>Gestión</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaTendenciaDia').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-funnel me-1"></i>Cohorte</span>
@@ -755,6 +756,29 @@
                     <div class="bio-live-value" id="bioEsperandoCorte">0</div>
                 </div>
             </div>
+
+            <!-- TOP 10 Pólizas con más casos pendientes -->
+            <div id="bioAnclaTopPolizas" class="table-container mb-4" style="border-left:4px solid #d97706;">
+                <div class="table-header">
+                    <div>
+                        <div class="table-title"><i class="bi bi-building me-2" style="color:#d97706;"></i>Top 10 Inmobiliarias con Más Pendientes<span class="btn-help-chart" onclick="ayudaGrafico('bioTopPolizas')">?</span></div>
+                        <div class="table-sub">Pólizas con mayor volumen de biometrías sin resolver (en vivo)</div>
+                    </div>
+                    <button class="btn-outline-brand" onclick="cargarTopPolizasBiometria()" style="padding:6px 14px;font-size:0.75rem;border-radius:8px;"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+                </div>
+                <div id="topPolizasBioSpinner" class="text-center py-3" style="display:none;">
+                    <div class="spinner-border spinner-border-sm" role="status" style="color:#d97706;"></div>
+                    <span class="ms-2 text-muted" style="font-size:0.8rem;">Cargando...</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle" style="font-size:0.82rem;width:100%;">
+                        <thead><tr><th class="text-center" style="width:40px;">#</th><th>Póliza</th><th>Inmobiliaria</th><th class="text-center">Pendientes</th><th class="text-center" style="width:60px;">Detalle</th></tr></thead>
+                        <tbody id="cuerpoTopPolizasBio"><tr><td colspan="5" class="text-center py-3" style="color:var(--text-light);">Cargando...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Modal detalle por póliza se muestra con SweetAlert2 al hacer click -->
 
             <!-- MÉTRICAS DEL PERÍODO — el flujo como lo lee la operación -->
             <div id="bioAnclaCiclo" class="bio-ciclo-section-title"><i class="bi bi-activity me-1"></i>Métricas del Período <span id="bioRangoTexto1" class="bio-rango-badge"></span> <span id="bioRangoTexto2" class="bio-rango-badge" style="display:none;"></span></div>

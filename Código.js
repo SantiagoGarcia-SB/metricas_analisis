@@ -2127,6 +2127,96 @@ function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta) {
 }
 
 // ============================================================================
+// TOP 10 PÓLIZAS CON MÁS CASOS PENDIENTES DE BIOMETRÍA
+// ============================================================================
+
+/**
+ * Devuelve las 10 pólizas (inmobiliarias) con más casos pendientes de biometría.
+ * "Pendiente" = fase vacía, WA_ENVIADO o ESCALADA (no terminal).
+ * Retorna: [{ poliza, inmobiliaria, count }] ordenado de mayor a menor.
+ */
+function obtenerTopPolizasPendientesBiometria() {
+  var scoreMap = cargarDiccionarioScore();
+  try {
+    var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
+    var hoja = ss.getSheetByName("pendiente_biometria");
+    if (!hoja || hoja.getLastRow() < 2) return [];
+
+    var data = hoja.getDataRange().getDisplayValues();
+    var headers = data[0];
+    var colMap = {};
+    for (var h = 0; h < headers.length; h++) {
+      colMap[headers[h].toLowerCase().replace(/\s+/g, '_').trim()] = h;
+    }
+    var cFS = colMap["fase_seguimiento_biometria"] != null ? colMap["fase_seguimiento_biometria"] : -1;
+
+    var polizaCount = {}; // poliza -> count
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][0] || "").trim();
+      if (!solicitud) continue;
+      var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
+      // Solo contar casos pendientes (no terminales)
+      if (fase !== "" && fase !== "WA_ENVIADO" && fase !== "ESCALADA") continue;
+      var poliza = String(data[i][1] || "").trim();
+      if (!poliza) continue;
+      polizaCount[poliza] = (polizaCount[poliza] || 0) + 1;
+    }
+
+    // Ordenar y tomar top 10
+    var ranking = Object.keys(polizaCount).map(function(p) {
+      var info = obtenerSegmentoInmobiliaria(p, scoreMap);
+      return { poliza: p, inmobiliaria: info.inmobiliaria, count: polizaCount[p] };
+    });
+    ranking.sort(function(a, b) { return b.count - a.count; });
+    return ranking.slice(0, 10);
+  } catch (e) {
+    Logger.log("Error en obtenerTopPolizasPendientesBiometria: " + e.message);
+    return [];
+  }
+}
+
+/**
+ * Dado un número de póliza, devuelve el detalle de solicitudes pendientes de biometría.
+ * Retorna: [{ solicitud, nombre }] — máximo 200 filas.
+ */
+function obtenerDetallePendientesPorPoliza(poliza) {
+  var q = String(poliza || "").trim();
+  if (!q) return [];
+  try {
+    var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
+    var hoja = ss.getSheetByName("pendiente_biometria");
+    if (!hoja || hoja.getLastRow() < 2) return [];
+
+    var data = hoja.getDataRange().getDisplayValues();
+    var headers = data[0];
+    var colMap = {};
+    for (var h = 0; h < headers.length; h++) {
+      colMap[headers[h].toLowerCase().replace(/\s+/g, '_').trim()] = h;
+    }
+    var cFS = colMap["fase_seguimiento_biometria"] != null ? colMap["fase_seguimiento_biometria"] : -1;
+
+    var resultados = [];
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][0] || "").trim();
+      if (!solicitud) continue;
+      var polizaFila = String(data[i][1] || "").trim();
+      if (polizaFila !== q) continue;
+      var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
+      if (fase !== "" && fase !== "WA_ENVIADO" && fase !== "ESCALADA") continue;
+      resultados.push({
+        solicitud: solicitud,
+        nombre: String(data[i][4] || "").trim()
+      });
+      if (resultados.length >= 200) break;
+    }
+    return resultados;
+  } catch (e) {
+    Logger.log("Error en obtenerDetallePendientesPorPoliza: " + e.message);
+    return [];
+  }
+}
+
+// ============================================================================
 // AGENTE COORDINADOR INTELIGENTE
 // ============================================================================
 
