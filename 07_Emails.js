@@ -1026,9 +1026,42 @@ function _construirSeccionEstadoCierreEmail(datosCierre) {
   };
   var defaultColor = '#8b5cf6';
 
+  // Calcular cifras clave para la narrativa
+  var aprobadas = 0, pendientes = 0, rechazadas = 0, enEstudio = 0;
+  desglose.forEach(function(item) {
+    if (item.estado === 'APROBADO') aprobadas = item.cantidad;
+    else if (item.estado === 'APROBADO_PENDIENTE_BIOMETRIA' || item.estado === 'PENDIENTE_BIOMETRIA') pendientes += item.cantidad;
+    else if (item.estado === 'RECHAZADO' || item.estado === 'NEGADO') rechazadas += item.cantidad;
+    else if (item.estado === 'EN_ESTUDIO') enEstudio = item.cantidad;
+  });
+  var pctAprobadas = reconsultadas > 0 ? Math.round((aprobadas / reconsultadas) * 100) : 0;
+  var pctPendientes = reconsultadas > 0 ? Math.round((pendientes / reconsultadas) * 100) : 0;
+
   var html = '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
   html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#128269; ¿En qué estado quedaron en SAI?</h2>';
-  html += '<p style="margin:0 0 16px;font-size:12px;color:#706F6F;border-bottom:2px solid #e8edf6;padding-bottom:10px;">De las ' + total + ' consultadas, ' + reconsultadas + ' ya tienen estado verificado en SAI.' + (sinReconsulta > 0 ? ' ' + sinReconsulta + ' pendientes de verificar.' : '') + '</p>';
+
+  // Narrativa accionable
+  html += '<p style="margin:8px 0 16px;font-size:13px;color:#334155;line-height:1.7;">';
+  html += 'De las <strong>' + total + '</strong> consultadas, ';
+  if (aprobadas > 0) html += '<strong style="color:#059669;">' + aprobadas + ' ya están aprobadas</strong> (' + pctAprobadas + '%)';
+  if (aprobadas > 0 && pendientes > 0) html += ' y ';
+  if (pendientes > 0) html += '<strong style="color:#d97706;">' + pendientes + ' siguen pendientes de biometría</strong> (' + pctPendientes + '%)';
+  html += '.';
+  if (rechazadas > 0) html += ' <strong style="color:#BD0F14;">' + rechazadas + '</strong> fueron rechazadas.';
+  if (enEstudio > 0) html += ' <strong>' + enEstudio + '</strong> aún están en estudio.';
+  if (sinReconsulta > 0) html += ' <span style="color:#706F6F;">' + sinReconsulta + ' no se han verificado aún (se verifican al cierre).</span>';
+  html += '</p>';
+
+  // Indicador de acción
+  if (pendientes > 0 && pctPendientes >= 40) {
+    html += '<div style="background:#fffbeb;border-left:4px solid #d97706;border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:16px;">';
+    html += '<div style="font-size:12px;font-weight:800;color:#92400e;">&#128161; ' + pctPendientes + '% sigue pendiente de biometría — considerar reforzar el broadcast o seguimiento telefónico mañana.</div>';
+    html += '</div>';
+  } else if (pctAprobadas >= 70) {
+    html += '<div style="background:#ecfdf5;border-left:4px solid #059669;border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:16px;">';
+    html += '<div style="font-size:12px;font-weight:800;color:#166534;">&#9989; Buen resultado — ' + pctAprobadas + '% de las consultadas ya se aprobaron.</div>';
+    html += '</div>';
+  }
 
   // Barra proporcional
   var totalBarra = desglose.reduce(function(s, d) { return s + d.cantidad; }, 0);

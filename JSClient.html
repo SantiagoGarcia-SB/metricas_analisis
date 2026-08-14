@@ -1795,6 +1795,42 @@ function renderEstadoCierreSAI(data) {
     };
     var _defaultColor = '#8b5cf6';
 
+    // Narrativa resumen
+    var narrativaEl = document.getElementById('bioCierreNarrativa');
+    if (narrativaEl) {
+        if (reconsultadas === 0) {
+            narrativaEl.innerHTML = '<span style="color:var(--text-muted);">Aún no se ha verificado el estado en SAI. Se actualiza al cierre del día (17:30).</span>';
+        } else {
+            var aprobadas = 0, pendientes = 0, rechazadas = 0, enEstudio = 0;
+            desglose.forEach(function(item) {
+                if (item.estado === 'APROBADO') aprobadas = item.cantidad;
+                else if (item.estado === 'APROBADO_PENDIENTE_BIOMETRIA' || item.estado === 'PENDIENTE_BIOMETRIA') pendientes += item.cantidad;
+                else if (item.estado === 'RECHAZADO' || item.estado === 'NEGADO') rechazadas += item.cantidad;
+                else if (item.estado === 'EN_ESTUDIO') enEstudio = item.cantidad;
+            });
+            var pctAprobadas = reconsultadas > 0 ? Math.round((aprobadas / reconsultadas) * 100) : 0;
+            var pctPendientes = reconsultadas > 0 ? Math.round((pendientes / reconsultadas) * 100) : 0;
+
+            var txt = 'De las <strong>' + totalConFase + '</strong> consultadas, ';
+            if (aprobadas > 0) txt += '<strong style="color:#059669;">' + aprobadas + ' ya están aprobadas</strong> (' + pctAprobadas + '%)';
+            if (aprobadas > 0 && pendientes > 0) txt += ' y ';
+            if (pendientes > 0) txt += '<strong style="color:#d97706;">' + pendientes + ' siguen pendientes de biometría</strong> (' + pctPendientes + '%)';
+            txt += '.';
+            if (rechazadas > 0) txt += ' <strong style="color:#BD0F14;">' + rechazadas + '</strong> rechazadas.';
+            if (enEstudio > 0) txt += ' <strong>' + enEstudio + '</strong> en estudio.';
+            if (sinReconsulta > 0) txt += ' <span style="color:var(--text-muted);">' + sinReconsulta + ' sin verificar aún.</span>';
+
+            // Indicador de acción
+            if (pendientes > 0 && pctPendientes >= 40) {
+                txt += '<div style="margin-top:10px;padding:8px 12px;background:#fffbeb;border-left:3px solid #d97706;border-radius:0 6px 6px 0;font-size:0.8rem;color:#92400e;font-weight:700;">💡 ' + pctPendientes + '% sigue pendiente — considerar reforzar broadcast o seguimiento mañana.</div>';
+            } else if (pctAprobadas >= 70) {
+                txt += '<div style="margin-top:10px;padding:8px 12px;background:#ecfdf5;border-left:3px solid #059669;border-radius:0 6px 6px 0;font-size:0.8rem;color:#166534;font-weight:700;">✅ Buen resultado — ' + pctAprobadas + '% ya se aprobaron.</div>';
+            }
+
+            narrativaEl.innerHTML = txt;
+        }
+    }
+
     if (desglose.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3" style="color:var(--text-light);">Sin datos de reconsulta para este período.</td></tr>';
         barEl.innerHTML = '';
