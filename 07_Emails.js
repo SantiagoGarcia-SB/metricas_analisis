@@ -345,7 +345,7 @@ function _construirEmailAlertas(diagnostico) {
 // EMAIL: RESUMEN DIARIO / FOTO DEL MOMENTO
 // ============================================================================
 
-function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, datosRadicado, datosCorteGestion) {
+function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, datosRadicado, datosCorteGestion, datosCierre) {
   var d = diagnostico;
   titulo = titulo || "Cierre del Día";
   var hs = d.healthScore;
@@ -684,6 +684,9 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, 
     html += '</td></tr>';
   }
 
+  // SECCIÓN 7: Estado en SAI al Cierre
+  html += _construirSeccionEstadoCierreEmail(datosCierre);
+
   // Footer
   html += '<tr><td style="background:#253150;color:#fff;padding:20px 32px;border-radius:0 0 12px 12px;text-align:center;">';
   html += '<div style="font-size:12px;opacity:0.9;">Agente Coordinador — Métricas Análisis</div>';
@@ -877,7 +880,7 @@ function _construirEmailChequeoConexion(listaActivos, porEstado, fecha, horaCheq
 // EMAIL: REPORTE BIOMETRÍA
 // ============================================================================
 
-function _construirEmailReporteBiometria(bio, fecha) {
+function _construirEmailReporteBiometria(bio, fecha, datosCierre) {
   var ges = bio.gestion || {};
   var convColor = bio.tasaConversion >= 60 ? "#166534" : bio.tasaConversion >= 40 ? "#a16207" : "#BD0F14";
   var convBg = bio.tasaConversion >= 60 ? "#d1fae5" : bio.tasaConversion >= 40 ? "#fef9c3" : "#fde8e8";
@@ -979,12 +982,87 @@ function _construirEmailReporteBiometria(bio, fecha) {
     html += '</td></tr>';
   }
 
+  // Estado en SAI al Cierre
+  html += _construirSeccionEstadoCierreEmail(datosCierre);
+
   html += '<tr><td style="background:#253150;color:#fff;padding:20px 32px;border-radius:0 0 12px 12px;text-align:center;">';
   html += '<div style="font-size:12px;opacity:0.9;">Agente Coordinador — Métricas Análisis</div>';
   html += '<div style="font-size:11px;opacity:0.6;margin-top:4px;">' + fecha + '</div>';
   html += '</td></tr>';
 
   html += '</table></td></tr></table></body></html>';
+  return html;
+}
+
+// ============================================================================
+// SECCIÓN EMAIL: ESTADO EN SAI AL CIERRE
+// ============================================================================
+
+/**
+ * Construye la sección HTML de "¿En qué estado quedaron en SAI?" para emails.
+ * @param {Object|null} datosCierre - Resultado de obtenerResumenEstadoSAICierre()
+ * @returns {string} HTML de la sección (filas de tabla)
+ * @private
+ */
+function _construirSeccionEstadoCierreEmail(datosCierre) {
+  if (!datosCierre || datosCierre.total === 0) return '';
+
+  var total = datosCierre.total;
+  var sinReconsulta = datosCierre.sinReconsulta || 0;
+  var reconsultadas = total - sinReconsulta;
+  var desglose = datosCierre.desglose || [];
+
+  if (reconsultadas === 0) return '';
+
+  var colores = {
+    'APROBADO': '#059669',
+    'APROBADO_PENDIENTE_BIOMETRIA': '#d97706',
+    'PENDIENTE_BIOMETRIA': '#d97706',
+    'EN_ESTUDIO': '#3b82f6',
+    'RECHAZADO': '#BD0F14',
+    'NEGADO': '#BD0F14',
+    'NO_ENCONTRADA': '#9ca3af',
+    'SIN_DATO': '#6b7280'
+  };
+  var defaultColor = '#8b5cf6';
+
+  var html = '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#128269; ¿En qué estado quedaron en SAI?</h2>';
+  html += '<p style="margin:0 0 16px;font-size:12px;color:#706F6F;border-bottom:2px solid #e8edf6;padding-bottom:10px;">De las ' + total + ' consultadas, ' + reconsultadas + ' ya tienen estado verificado en SAI.' + (sinReconsulta > 0 ? ' ' + sinReconsulta + ' pendientes de verificar.' : '') + '</p>';
+
+  // Barra proporcional
+  var totalBarra = desglose.reduce(function(s, d) { return s + d.cantidad; }, 0);
+  if (totalBarra > 0) {
+    html += '<div style="display:flex;height:24px;border-radius:8px;overflow:hidden;margin-bottom:12px;">';
+    desglose.forEach(function(item) {
+      var color = colores[item.estado] || defaultColor;
+      var pct = Math.round((item.cantidad / totalBarra) * 100);
+      if (pct > 0) {
+        html += '<div style="flex:' + item.cantidad + ';background:' + color + ';display:flex;align-items:center;justify-content:center;">';
+        if (pct >= 8) html += '<span style="font-size:10px;font-weight:800;color:#fff;">' + item.cantidad + '</span>';
+        html += '</div>';
+      }
+    });
+    html += '</div>';
+  }
+
+  // Tabla de desglose
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="4">';
+  desglose.forEach(function(item) {
+    var color = colores[item.estado] || defaultColor;
+    var labelEstado = item.estado.replace(/_/g, ' ');
+    html += '<tr>';
+    html += '<td style="padding:8px 12px;background:#f8fafc;border-radius:8px;border-left:4px solid ' + color + ';">';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+    html += '<td style="font-size:13px;font-weight:700;color:#253150;">' + _escHtml(labelEstado) + '</td>';
+    html += '<td width="80" align="center" style="font-size:16px;font-weight:800;color:' + color + ';">' + item.cantidad + '</td>';
+    html += '<td width="60" align="right" style="font-size:12px;font-weight:700;color:#706F6F;">' + item.pct + '%</td>';
+    html += '</tr></table></td>';
+    html += '</tr>';
+  });
+  html += '</table>';
+  html += '</td></tr>';
+
   return html;
 }
 

@@ -1367,7 +1367,8 @@ function agente_enviarResumenDiario() {
   var datosBio = null; try { datosBio = obtenerDatosBiometria(hoy, hoy); } catch (e) {}
   var datosCola = null; try { datosCola = obtenerColaAsignacion(); } catch (e) {}
   var datosRadicado = null; try { datosRadicado = obtenerDatosMetricas(fecha, fecha); } catch (e) {}
-  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola, null, datosRadicado);
+  var datosCierre = null; try { datosCierre = obtenerResumenEstadoSAICierre(hoy, hoy); } catch (e) {}
+  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola, null, datosRadicado, null, datosCierre);
   try {
     MailApp.sendEmail({ to: email, bcc: BCC_REPORTES_AGENTE, subject: "Cierre del Día | Salud " + (hs.score || "—") + "/100 (" + (hs.grade || "—") + ") | " + fecha, htmlBody: html, name: NOMBRE_REMITENTE_AGENTE, noReply: true });
     return { sent: true, to: email };
@@ -1391,7 +1392,8 @@ function agente_enviarSnapshotActual() {
   var datosCola = null; try { datosCola = obtenerColaAsignacion(); } catch (e) {}
   var datosRadicado = null; try { datosRadicado = obtenerDatosMetricas(fecha, fecha); } catch (e) {}
   var datosCorteGestion = null; try { datosCorteGestion = agente_obtenerCorteGestion(); } catch (e) {}
-  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola, "Foto del Momento", datosRadicado, datosCorteGestion);
+  var datosCierre = null; try { datosCierre = obtenerResumenEstadoSAICierre(hoy, hoy); } catch (e) {}
+  var html = _construirEmailResumenDiario(diagnostico, datosBio, datosCola, "Foto del Momento", datosRadicado, datosCorteGestion, datosCierre);
   var atencion = datosCorteGestion && datosCorteGestion.analistas ? datosCorteGestion.analistas.filter(function(a) { return a.semaforo === "rojo" || a.semaforo === "amarillo"; }).length : null;
   var subject = "Foto del Momento | Salud " + (hs.score || "—") + "/100 (" + (hs.grade || "—") + ")" + (atencion !== null ? " | " + atencion + " requieren atención" : "") + " | " + fecha + " " + hora;
   try {
@@ -1411,7 +1413,9 @@ function agente_enviarReporteBiometria() {
   var datosBio;
   try { datosBio = obtenerDatosBiometria(hoy, hoy); } catch (e) { return { sent: false, reason: e.message }; }
   if (!datosBio || datosBio.totalConsultadas === 0) return { sent: false, reason: "sin datos de biometría hoy" };
-  var html = _construirEmailReporteBiometria(datosBio, fecha);
+  var datosCierre;
+  try { datosCierre = obtenerResumenEstadoSAICierre(hoy, hoy); } catch (e) { datosCierre = null; }
+  var html = _construirEmailReporteBiometria(datosBio, fecha, datosCierre);
   try {
     MailApp.sendEmail({ to: email, bcc: BCC_REPORTES_AGENTE, subject: "Reporte Biometría del Día | " + datosBio.totalConsultadas + " consultadas · " + datosBio.tasaConversion + "% conversión | " + fecha, htmlBody: html, name: NOMBRE_REMITENTE_AGENTE, noReply: true });
     return { sent: true, to: email };
