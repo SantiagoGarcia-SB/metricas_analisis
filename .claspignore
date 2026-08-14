@@ -1,0 +1,10 @@
+# Test files — run locally with Jest, not in Apps Script
+**/*.test.js
+jest.config.js
+package.json
+package-lock.json
+node_modules/**
+.git/**
+.kiro/**
+.vscode/**
+*.md

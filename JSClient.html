@@ -97,38 +97,131 @@ function _splashCompletarDatosYPanel() {
 }
 
 // === INICIALIZACIÓN ===
+// Flag para indicar que la carga inicial ya proveyó métricas (evita doble fetch)
+var _batchCargaInicial = false;
+
 window.onload = function() {
     document.getElementById('metricasSpinner').style.display = 'none';
     var saludoEl = document.getElementById('splashSaludoTexto');
     if (saludoEl) saludoEl.textContent = _splashSaludoTexto();
 
-    google.script.run.withSuccessHandler(function(email) {
-        if(email){
-            var p=email.split('@')[0];
-            var nombre = p.split('.').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(' ');
-            document.getElementById('adminEmail').innerText=nombre;
-            var nombreEl = document.getElementById('splashNombre');
-            if (nombreEl) nombreEl.textContent = nombre;
-        }
-    }).getEmailUsuario();
-
-    google.script.run.withSuccessHandler(function(m) {
-        if (m) _metasDecision = m;
-    }).agente_obtenerMetasDecision();
-
-    google.script.run.withSuccessHandler(function(permiso) {
-        if (permiso.rol === 'sin_acceso') {
-            _splashError('Tu cuenta no tiene permisos para ver este tablero.');
-            aplicarPermisos(permiso);
-            setTimeout(_splashOcultar, 2200);
-            return;
-        }
-        _splashSetPaso(2);
-        aplicarPermisos(permiso);
-    }).withFailureHandler(function(e) {
-        _splashError('Error validando el acceso: ' + (e.message || 'intenta recargar la página.'));
-    }).obtenerPermisoUsuario();
+    // Carga inicial con endpoint batch único (reemplaza 6 round-trips por 1)
+    google.script.run
+        .withSuccessHandler(_onBatchCargado)
+        .withFailureHandler(function(e) {
+            _splashError('Error cargando el dashboard: ' + (e.message || 'intenta recargar la página.'));
+        })
+        .obtenerDatosBatch();
 };
+
+function _onBatchCargado(resultado) {
+    // 1. Email del usuario
+    if (resultado.email) {
+        var p = resultado.email.split('@')[0];
+        var nombre = p.split('.').map(function(w){ return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+        document.getElementById('adminEmail').innerText = nombre;
+        var nombreEl = document.getElementById('splashNombre');
+        if (nombreEl) nombreEl.textContent = nombre;
+    }
+
+    // 2. Metas de decisión
+    if (resultado.metas) {
+        _metasDecision = resultado.metas;
+    }
+
+    // 3. Permisos
+    var permiso = resultado.permisos;
+    if (!permiso) {
+        _splashError('No se pudieron obtener los permisos.');
+        return;
+    }
+
+    if (permiso.rol === 'sin_acceso') {
+        _splashError('Tu cuenta no tiene permisos para ver este tablero.');
+        aplicarPermisos(permiso);
+        setTimeout(_splashOcultar, 2200);
+        return;
+    }
+
+    _splashSetPaso(2);
+
+    // 4. Para coordinador: usar datos batch directamente (evita re-fetch)
+    if (permiso.rol === 'coordinador') {
+        // Configurar UI de permisos (sidebar, barras de filtros)
+        document.getElementById('sidebarNav').style.display = '';
+        document.getElementById('barraFiltrosFecha').style.display = '';
+        document.getElementById('barraFiltrosGenerales').style.display = '';
+
+        // Configurar fechas (hoy) sin disparar cargarMetricas()
+        var h = new Date(), yyyy = h.getFullYear(), mm = String(h.getMonth()+1).padStart(2,'0'), dd = String(h.getDate()).padStart(2,'0');
+        document.getElementById('filtroFechaSeguimiento').value = yyyy + '-' + mm + '-' + dd;
+        document.getElementById('filtroFechaSeguimiento').max = yyyy + '-' + mm + '-' + dd;
+        var r = _calcRango('hoy');
+        document.getElementById('metricaDesde').value = fmtDI(r.desde);
+        document.getElementById('metricaHasta').value = fmtDI(r.hasta);
+
+        // Marcar que la carga inicial ya proveyó métricas
+        _batchCargaInicial = true;
+
+        // Métricas: usar datos del batch si están disponibles
+        if (resultado.metricas) {
+            onDatosCargados(resultado.metricas);
+        } else if (resultado.errores && resultado.errores.metricas) {
+            _mostrarErrorSeccion('metricas', resultado.errores.metricas);
+        }
+
+        // Cola: usar datos del batch si están disponibles
+        if (resultado.cola) {
+            renderColaAsignacion(resultado.cola);
+        } else if (resultado.errores && resultado.errores.cola) {
+            _mostrarErrorSeccion('cola', resultado.errores.cola);
+        }
+
+        // Salud operativa: usar datos del batch si están disponibles
+        if (resultado.salud) {
+            onDatosAgenteCargados(resultado.salud);
+            renderResumenSaludBanner(resultado.salud);
+        } else if (resultado.errores && resultado.errores.salud) {
+            _mostrarErrorSeccion('salud', resultado.errores.salud);
+        }
+
+        // Cargar asesores (no incluido en batch, es interactivo por fecha)
+        cargarAsesoresActivosPrimerResultado();
+    } else {
+        // Para otros roles (biometria), usar el flujo normal de aplicarPermisos
+        aplicarPermisos(permiso);
+    }
+
+    // Indicadores de errores parciales adicionales
+    if (resultado.errores) {
+        console.warn('Errores parciales en carga batch:', resultado.errores);
+    }
+}
+
+/**
+ * Muestra un indicador de error en la sección correspondiente del dashboard.
+ * @param {string} seccion - Nombre de la sección ('metricas', 'cola', 'salud')
+ * @param {string} mensaje - Mensaje de error
+ */
+function _mostrarErrorSeccion(seccion, mensaje) {
+    if (seccion === 'metricas') {
+        document.getElementById('metricasSpinner').style.display = 'none';
+        document.getElementById('metricasContenido').style.display = 'block';
+        var cont = document.getElementById('metricasContenido');
+        var aviso = document.createElement('div');
+        aviso.className = 'alert alert-danger d-flex align-items-center';
+        aviso.style.cssText = 'margin:10px 20px;font-size:0.85rem;border-radius:12px;';
+        aviso.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i> No se pudieron cargar las métricas: ' + esc(mensaje);
+        cont.insertBefore(aviso, cont.firstChild);
+        _splashCompletarDatosYPanel();
+    } else if (seccion === 'cola') {
+        var el = document.getElementById('colaTotalSinAsignar');
+        if (el) el.textContent = '—';
+    } else if (seccion === 'salud') {
+        var banner = document.getElementById('resumenSaludBanner');
+        if (banner) banner.style.display = 'none';
+    }
+}
 
 function _initFechasYCargar() {
     var h=new Date(), yyyy=h.getFullYear(), mm=String(h.getMonth()+1).padStart(2,'0'), dd=String(h.getDate()).padStart(2,'0');
@@ -213,7 +306,11 @@ function onDatosCargados(datos){
     document.getElementById('rendimientoSubtitulo').textContent = 'Rango ' + _fmtRangoPrincipal();
     renderTablaAnalistas(datos.porAnalista);
     cargarAsesoresActivosPrimerResultado();
-    cargarColaAsignacion();
+    // En carga inicial batch, la cola ya fue renderizada; solo recargar en refreshes posteriores
+    if (!_batchCargaInicial) {
+        cargarColaAsignacion();
+    }
+    _batchCargaInicial = false;
 }
 function mostrarAvisoReestudios(disponible){
     var prev=document.getElementById('avisoReestudios');
