@@ -1687,6 +1687,7 @@ function onDatosBiometriaCargados(d) {
         _setBioGestionScope('');
     }
     cargarTopPolizasBiometria();
+    cargarEstadoCierreSAI();
 }
 
 // === TOP 10 PÓLIZAS PENDIENTES DE BIOMETRÍA ===
@@ -1735,6 +1736,119 @@ function verDetallePendientesPoliza(poliza, inmobiliaria) {
     }).withFailureHandler(function(e) {
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
     }).obtenerDetallePendientesPorPoliza(poliza);
+}
+
+// === ESTADO SAI AL CIERRE ===
+
+var _ultimoCierreData = null;
+
+function cargarEstadoCierreSAI() {
+    var spinner = document.getElementById('bioEstadoCierreSpinner');
+    var contenido = document.getElementById('bioEstadoCierreContenido');
+    if (spinner) spinner.style.display = 'block';
+    if (contenido) contenido.style.display = 'none';
+
+    var desde = document.getElementById('bioFiltroDesde').value || '';
+    var hasta = document.getElementById('bioFiltroHasta').value || '';
+
+    var rangoEl = document.getElementById('bioRangoTextoCierre');
+    if (rangoEl) rangoEl.textContent = _fmtRangoBio();
+
+    google.script.run.withSuccessHandler(function(data) {
+        if (spinner) spinner.style.display = 'none';
+        if (contenido) contenido.style.display = 'block';
+        _ultimoCierreData = data;
+        renderEstadoCierreSAI(data);
+    }).withFailureHandler(function(e) {
+        if (spinner) spinner.style.display = 'none';
+        if (contenido) { contenido.style.display = 'block'; contenido.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem;">Error al cargar estado de cierre: ' + esc(e.message) + '</p>'; }
+    }).obtenerResumenEstadoSAICierre(desde, hasta);
+}
+
+function renderEstadoCierreSAI(data) {
+    if (!data) return;
+
+    var totalConFase = data.total || 0;
+    var sinReconsulta = data.sinReconsulta || 0;
+    var reconsultadas = totalConFase - sinReconsulta;
+
+    document.getElementById('bioCierreTotalConFase').textContent = totalConFase;
+    document.getElementById('bioCierreReconsultadas').textContent = reconsultadas;
+    document.getElementById('bioCierrePendientes').textContent = sinReconsulta;
+
+    // Desglose por estado
+    var desglose = data.desglose || [];
+    var tbody = document.getElementById('cuerpoBioCierreDesglose');
+    var barEl = document.getElementById('bioCierreDesgloseBar');
+    var legendEl = document.getElementById('bioCierrDesgloseLegend');
+
+    // Colores por estado
+    var _coloresCierre = {
+        'APROBADO': '#059669',
+        'APROBADO_PENDIENTE_BIOMETRIA': '#d97706',
+        'PENDIENTE_BIOMETRIA': '#d97706',
+        'EN_ESTUDIO': '#3b82f6',
+        'RECHAZADO': '#BD0F14',
+        'NEGADO': '#BD0F14',
+        'NO_ENCONTRADA': '#9ca3af',
+        'SIN_DATO': '#6b7280'
+    };
+    var _defaultColor = '#8b5cf6';
+
+    if (desglose.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3" style="color:var(--text-light);">Sin datos de reconsulta para este período.</td></tr>';
+        barEl.innerHTML = '';
+        legendEl.innerHTML = '';
+        return;
+    }
+
+    // Tabla
+    tbody.innerHTML = desglose.map(function(item) {
+        var color = _coloresCierre[item.estado] || _defaultColor;
+        var badge = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';margin-right:6px;"></span>';
+        return '<tr><td>' + badge + esc(item.estado.replace(/_/g, ' ')) + '</td><td class="text-center"><strong>' + item.cantidad + '</strong></td><td class="text-center">' + item.pct + '%</td></tr>';
+    }).join('');
+
+    // Barra proporcional
+    barEl.innerHTML = desglose.map(function(item) {
+        var color = _coloresCierre[item.estado] || _defaultColor;
+        return '<div style="flex:' + item.cantidad + ';background:' + color + ';height:100%;min-width:2px;border-radius:3px;margin-right:1px;" title="' + esc(item.estado) + ': ' + item.cantidad + ' (' + item.pct + '%)"></div>';
+    }).join('');
+
+    // Leyenda
+    legendEl.innerHTML = desglose.map(function(item) {
+        var color = _coloresCierre[item.estado] || _defaultColor;
+        return '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:14px;font-size:0.78rem;font-weight:600;color:var(--text-main);"><span style="width:8px;height:8px;border-radius:50%;background:' + color + ';"></span>' + esc(item.estado.replace(/_/g, ' ')) + ' <strong>' + item.cantidad + '</strong></span>';
+    }).join('');
+
+    // Detalle
+    var detalleTbody = document.getElementById('cuerpoBioCierreDetalle');
+    var detalle = data.detalle || [];
+    if (detalle.length === 0) {
+        detalleTbody.innerHTML = '<tr><td colspan="6" class="text-center py-3" style="color:var(--text-light);">Sin detalle disponible.</td></tr>';
+    } else {
+        detalleTbody.innerHTML = detalle.map(function(d) {
+            var color = _coloresCierre[d.estadoSAI] || _defaultColor;
+            var badgeSAI = '<span class="badge" style="background:' + color + ';color:#fff;font-size:0.72rem;padding:3px 8px;border-radius:6px;">' + esc(d.estadoSAI.replace(/_/g, ' ')) + '</span>';
+            var badgeFase = '<span class="badge" style="background:var(--azul-mid);color:#fff;font-size:0.72rem;padding:3px 8px;border-radius:6px;">' + esc(d.faseInterna) + '</span>';
+            return '<tr><td><code style="font-size:0.8rem;">' + esc(d.solicitud) + '</code></td><td><code style="font-size:0.8rem;">' + esc(d.poliza) + '</code></td><td>' + esc(d.nombre) + '</td><td>' + badgeFase + '</td><td>' + badgeSAI + '</td><td style="font-size:0.8rem;">' + esc(d.fechaResultado) + '</td></tr>';
+        }).join('');
+    }
+}
+
+function exportarDetalleCierreSAI() {
+    if (!_ultimoCierreData || !_ultimoCierreData.detalle || _ultimoCierreData.detalle.length === 0) {
+        Swal.fire({ icon: 'info', title: 'Sin datos', text: 'No hay detalle para exportar.' });
+        return;
+    }
+    var ws_data = [['Solicitud', 'Póliza', 'Inquilino', 'Fase Interna', 'Estado SAI', 'Fecha Resultado']];
+    _ultimoCierreData.detalle.forEach(function(d) {
+        ws_data.push([d.solicitud, d.poliza, d.nombre, d.faseInterna, d.estadoSAI, d.fechaResultado]);
+    });
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(ws_data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Estado_SAI_Cierre');
+    XLSX.writeFile(wb, 'estado_sai_cierre.xlsx');
 }
 
 function renderBioEfectividad(tend) {

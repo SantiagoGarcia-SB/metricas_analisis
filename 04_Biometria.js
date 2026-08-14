@@ -848,3 +848,435 @@ function obtenerDetallePendientesPorPoliza(poliza) {
     return [];
   }
 }
+
+
+// ============================================================================
+// RECONSULTA SAI AL CIERRE DEL DÍA — Con continuación automática (GAS 6 min)
+// ============================================================================
+
+/**
+ * Clave en PropertiesService para guardar el estado de continuación.
+ * @private
+ */
+var _RECONSULTA_STATE_KEY = 'RECONSULTA_CIERRE_STATE';
+
+/**
+ * Tiempo máximo de ejecución seguro (5 min = 300s). Se detiene antes del
+ * límite real de 6 min para tener margen de escritura y programar continuación.
+ * @private
+ */
+var _MAX_RUNTIME_MS = 300000;
+
+/**
+ * Reconsulta el estado actual en SAI de cada solicitud en la hoja de biometría
+ * y escribe el resultado en las columnas `estado_sai_cierre`
+ * y `fecha_resultado_cierre` (lastResultDate de la API).
+ *
+ * Reconsulta TODAS las solicitudes del rango de fechas que tengan fase asignada,
+ * para saber al final del día cuáles se aprobaron y cuáles siguen pendientes.
+ *
+ * Maneja el límite de 6 minutos de GAS automáticamente:
+ * - Guarda progreso en PropertiesService.
+ * - Se auto-programa un trigger de continuación si no termina.
+ * - Se invoca sin parámetros en ejecuciones de continuación.
+ *
+ * @param {number} [diasAtras=0] - Cantidad de días hacia atrás para incluir casos.
+ *   0 = solo los consultados hoy. Usar >0 para reconsultar pendientes de días previos.
+ *   Solo se usa en la primera ejecución; las continuaciones leen el estado guardado.
+ */
+function reconsultarEstadoSAICierre(diasAtras) {
+  var SLEEP_MS = 500;
+  var BATCH_SIZE = 30;
+
+  var props = PropertiesService.getScriptProperties();
+  var apiKey = props.getProperty('API_KEY');
+  if (!apiKey) {
+    Logger.log('reconsultarEstadoSAICierre: API_KEY no configurada.');
+    return;
+  }
+
+  var ENDPOINT = 'https://2n7hb4m6v7.execute-api.us-east-1.amazonaws.com/prod/flujo/flujo/v1/study/rental';
+
+  // --- Recuperar o inicializar estado de continuación ---
+  var state = _cargarEstadoReconsulta(props);
+  var startIndex = 0;
+
+  if (state && state.enProgreso) {
+    // Continuación: usar estado guardado
+    startIndex = state.ultimoIndice + 1;
+    diasAtras = state.diasAtras;
+    Logger.log('reconsultarEstadoSAICierre: Continuando desde índice ' + startIndex + ' (diasAtras=' + diasAtras + ')');
+  } else {
+    // Primera ejecución
+    var DIAS = (typeof diasAtras === 'number' && diasAtras >= 0) ? diasAtras : 0;
+    diasAtras = DIAS;
+    Logger.log('reconsultarEstadoSAICierre: Primera ejecución (diasAtras=' + diasAtras + ')');
+  }
+
+  // Abrir la hoja directamente (necesitamos escribir, no solo leer)
+  var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
+  var hoja = ss.getSheetByName('pendiente_biometria');
+  if (!hoja) {
+    Logger.log('reconsultarEstadoSAICierre: Hoja pendiente_biometria no encontrada.');
+    _limpiarEstadoReconsulta(props);
+    return;
+  }
+
+  var lastRow = hoja.getLastRow();
+  if (lastRow < 2) {
+    Logger.log('reconsultarEstadoSAICierre: Hoja vacía.');
+    _limpiarEstadoReconsulta(props);
+    return;
+  }
+
+  // --- Resolver columnas por header ---
+  var headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  var colMap = {};
+  for (var h = 0; h < headers.length; h++) {
+    var hNorm = String(headers[h] || '').toLowerCase().replace(/\s+/g, '_').trim();
+    colMap[hNorm] = h;
+  }
+
+  var cFS = colMap['fase_seguimiento_biometria'] != null ? colMap['fase_seguimiento_biometria'] : -1;
+  var cFC = colMap['fecha_consulta_sai'] != null ? colMap['fecha_consulta_sai'] : -1;
+
+  // Buscar o crear columnas de cierre
+  var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
+  var cFechaResultado = colMap['fecha_resultado_cierre'] != null ? colMap['fecha_resultado_cierre'] : -1;
+
+  if (cEstadoCierre === -1) {
+    var nextCol = headers.length;
+    hoja.getRange(1, nextCol + 1).setValue('estado_sai_cierre');
+    hoja.getRange(1, nextCol + 2).setValue('fecha_resultado_cierre');
+    cEstadoCierre = nextCol;
+    cFechaResultado = nextCol + 1;
+    SpreadsheetApp.flush();
+  } else if (cFechaResultado === -1) {
+    var nextCol2 = headers.length;
+    hoja.getRange(1, nextCol2 + 1).setValue('fecha_resultado_cierre');
+    cFechaResultado = nextCol2;
+    SpreadsheetApp.flush();
+  }
+
+  // --- Leer datos y construir lista de filas a reconsultar ---
+  var data = hoja.getDataRange().getDisplayValues();
+
+  var hoy = new Date();
+  var limite = new Date(hoy);
+  limite.setDate(limite.getDate() - diasAtras);
+  var limiteISO = Utilities.formatDate(limite, TIMEZONE, 'yyyy-MM-dd');
+
+  var filasReconsultar = [];
+  for (var i = 1; i < data.length; i++) {
+    var consecutivo = String(data[i][COL_BIOMETRIA.SOLICITUD] || '').trim();
+    if (!consecutivo) continue;
+
+    var fase = cFS >= 0 ? String(data[i][cFS] || '').trim() : '';
+    if (!fase) continue;
+
+    if (cFC >= 0) {
+      var fechaConsultaRaw = String(data[i][cFC] || '').trim();
+      var fechaConsultaISO = _fechaParteISO(fechaConsultaRaw);
+      if (fechaConsultaISO && fechaConsultaISO < limiteISO) continue;
+    }
+
+    filasReconsultar.push({ fila: i + 1, consecutivo: consecutivo });
+  }
+
+  Logger.log('reconsultarEstadoSAICierre: ' + filasReconsultar.length + ' casos totales, comenzando en índice ' + startIndex);
+
+  if (startIndex >= filasReconsultar.length) {
+    Logger.log('reconsultarEstadoSAICierre: Ya no quedan casos. Proceso finalizado.');
+    _limpiarEstadoReconsulta(props);
+    _eliminarTriggerContinuacion();
+    return;
+  }
+
+  // --- Consultar API con control de tiempo ---
+  var inicio = Date.now();
+  var escrituras = [];
+  var errores = 0;
+  var ultimoProcesado = startIndex - 1;
+
+  for (var j = startIndex; j < filasReconsultar.length; j++) {
+    // Verificar si nos acercamos al límite de tiempo
+    if (Date.now() - inicio > _MAX_RUNTIME_MS) {
+      Logger.log('reconsultarEstadoSAICierre: Límite de tiempo alcanzado en índice ' + j + '. Guardando progreso...');
+      // Escribir lo pendiente antes de salir
+      if (escrituras.length > 0) {
+        _escribirLoteCierre(hoja, escrituras, cEstadoCierre, cFechaResultado);
+        escrituras = [];
+      }
+      SpreadsheetApp.flush();
+      // Guardar estado para continuación
+      _guardarEstadoReconsulta(props, { enProgreso: true, ultimoIndice: ultimoProcesado, diasAtras: diasAtras });
+      _programarContinuacion();
+      return;
+    }
+
+    var item = filasReconsultar[j];
+
+    try {
+      var url = ENDPOINT + '?consecutive=' + encodeURIComponent(item.consecutivo);
+      var response = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: {
+          'x-api-key': apiKey,
+          'Accept': 'application/json'
+        },
+        muteHttpExceptions: true
+      });
+
+      var code = response.getResponseCode();
+      if (code === 200) {
+        var respData = JSON.parse(response.getContentText());
+        var registro = null;
+        if (respData && respData.content && respData.content.length > 0) {
+          registro = respData.content[0];
+        } else if (respData && respData.studyStatus) {
+          registro = respData;
+        }
+
+        var estadoSAI = registro ? String(registro.studyStatus || 'SIN_DATO') : 'SIN_DATO';
+        var fechaResultado = registro ? String(registro.lastResultDate || '') : '';
+        escrituras.push({ fila: item.fila, estado: estadoSAI, fechaResultado: fechaResultado });
+      } else if (code === 404) {
+        escrituras.push({ fila: item.fila, estado: 'NO_ENCONTRADA', fechaResultado: '' });
+      } else {
+        escrituras.push({ fila: item.fila, estado: 'ERROR_HTTP_' + code, fechaResultado: '' });
+        errores++;
+      }
+    } catch (e) {
+      escrituras.push({ fila: item.fila, estado: 'ERROR_' + e.message.substring(0, 30), fechaResultado: '' });
+      errores++;
+    }
+
+    ultimoProcesado = j;
+
+    // Escribir en lotes
+    if (escrituras.length >= BATCH_SIZE) {
+      _escribirLoteCierre(hoja, escrituras, cEstadoCierre, cFechaResultado);
+      escrituras = [];
+    }
+
+    // Pausa entre llamadas
+    if (j < filasReconsultar.length - 1) {
+      Utilities.sleep(SLEEP_MS);
+    }
+  }
+
+  // Escribir remanente
+  if (escrituras.length > 0) {
+    _escribirLoteCierre(hoja, escrituras, cEstadoCierre, cFechaResultado);
+  }
+
+  SpreadsheetApp.flush();
+  _limpiarEstadoReconsulta(props);
+  _eliminarTriggerContinuacion();
+  Logger.log('reconsultarEstadoSAICierre: COMPLETADO. Procesados: ' + (ultimoProcesado - startIndex + 1) + ', Errores: ' + errores);
+}
+
+// ── Helpers de estado y continuación ──
+
+/**
+ * @private
+ */
+function _cargarEstadoReconsulta(props) {
+  var raw = props.getProperty(_RECONSULTA_STATE_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
+/**
+ * @private
+ */
+function _guardarEstadoReconsulta(props, state) {
+  props.setProperty(_RECONSULTA_STATE_KEY, JSON.stringify(state));
+}
+
+/**
+ * @private
+ */
+function _limpiarEstadoReconsulta(props) {
+  props.deleteProperty(_RECONSULTA_STATE_KEY);
+}
+
+/**
+ * Programa un trigger de continuación para ejecutar en 1 minuto.
+ * @private
+ */
+function _programarContinuacion() {
+  // Eliminar TODOS los triggers de esta función primero
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'reconsultarEstadoSAICierre') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger('reconsultarEstadoSAICierre')
+    .timeBased()
+    .after(60 * 1000)
+    .create();
+  Logger.log('Trigger de continuación programado (1 minuto).');
+}
+
+/**
+ * Elimina triggers de continuación (one-shot after triggers).
+ * @private
+ */
+function _eliminarTriggerContinuacion() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'reconsultarEstadoSAICierre') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+}
+
+/**
+ * Escribe un lote de resultados de cierre en la hoja.
+ * @private
+ */
+function _escribirLoteCierre(hoja, escrituras, colEstado, colFechaResultado) {
+  for (var k = 0; k < escrituras.length; k++) {
+    var e = escrituras[k];
+    hoja.getRange(e.fila, colEstado + 1).setValue(e.estado);
+    hoja.getRange(e.fila, colFechaResultado + 1).setValue(e.fechaResultado);
+  }
+}
+
+// ── Triggers de reconsulta ──
+
+/**
+ * Crea un trigger diario a las 17:30 para la reconsulta de cierre.
+ */
+function crearTriggerReconsultaCierre() {
+  // Eliminar triggers previos
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'reconsultarEstadoSAICierre') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger('reconsultarEstadoSAICierre')
+    .timeBased()
+    .atHour(17)
+    .nearMinute(30)
+    .everyDays(1)
+    .create();
+  Logger.log('Trigger creado: reconsultarEstadoSAICierre diario a las 17:30.');
+}
+
+/**
+ * Elimina todos los triggers de reconsulta (diario y continuaciones).
+ */
+function eliminarTriggerReconsultaCierre() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'reconsultarEstadoSAICierre') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  // Limpiar estado por si quedó a medias
+  PropertiesService.getScriptProperties().deleteProperty(_RECONSULTA_STATE_KEY);
+  Logger.log('Triggers de reconsulta eliminados y estado limpiado.');
+}
+
+/**
+ * Fuerza reiniciar la reconsulta desde cero (limpia estado previo).
+ * Útil si se quedó en un estado inconsistente.
+ */
+function resetReconsultaCierre() {
+  var props = PropertiesService.getScriptProperties();
+  props.deleteProperty(_RECONSULTA_STATE_KEY);
+  Logger.log('Estado de reconsulta reiniciado. Ejecutar reconsultarEstadoSAICierre() para iniciar de nuevo.');
+}
+
+/**
+ * Obtiene el resumen del estado SAI al cierre para el rango de fechas indicado.
+ * Lee las columnas `estado_sai_cierre` y `fecha_resultado_cierre` de la hoja
+ * de biometría y agrupa por estado.
+ *
+ * @param {string} fechaDesde - yyyy-MM-dd
+ * @param {string} fechaHasta - yyyy-MM-dd
+ * @returns {Object} { total, desglose: [{estado, cantidad, pct}], detalle: [...] }
+ */
+function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
+  var resultado = { total: 0, sinReconsulta: 0, desglose: [], detalle: [] };
+
+  try {
+    var data = obtenerHojaBiometria();
+    if (!data || data.length < 2) return resultado;
+
+    var headers = data[0];
+    var colMap = _construirColMapBiometria(headers);
+
+    var cFC = colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] : -1;
+    var cFS = colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] != null ? colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] : -1;
+    var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
+    var cFechaResultado = colMap['fecha_resultado_cierre'] != null ? colMap['fecha_resultado_cierre'] : -1;
+
+    if (cEstadoCierre === -1) return resultado;
+
+    var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
+    var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+
+    var conteoEstados = {};
+    var detalles = [];
+
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || '').trim();
+      if (!solicitud) continue;
+
+      // Filtrar por fecha de consulta SAI dentro del rango (misma lógica que totalConsultadas)
+      var consultaParte = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || '').trim()) : '';
+      var consultaNorm = consultaParte.replace(/-/g, '');
+      if (!_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) continue;
+
+      resultado.total++;
+
+      var estadoCierre = cEstadoCierre >= 0 ? String(data[i][cEstadoCierre] || '').trim() : '';
+      var fechaResultadoCierre = cFechaResultado >= 0 ? String(data[i][cFechaResultado] || '').trim() : '';
+
+      if (!estadoCierre) {
+        resultado.sinReconsulta++;
+        continue;
+      }
+
+      // Normalizar estado para agrupación
+      var estadoNorm = estadoCierre.toUpperCase().replace(/\s+/g, '_');
+      conteoEstados[estadoNorm] = (conteoEstados[estadoNorm] || 0) + 1;
+
+      // Detalle (máx 300)
+      if (detalles.length < 300) {
+        var fase = cFS >= 0 ? String(data[i][cFS] || '').toUpperCase().trim() : '';
+        detalles.push({
+          solicitud: solicitud,
+          poliza: String(data[i][COL_BIOMETRIA.POLIZA] || '').trim(),
+          nombre: String(data[i][COL_BIOMETRIA.NOMBRE_INQUILINO] || '').trim(),
+          faseInterna: fase || 'SIN FASE',
+          estadoSAI: estadoNorm,
+          fechaResultado: fechaResultadoCierre
+        });
+      }
+    }
+
+    // Construir desglose ordenado por cantidad
+    var totalConEstado = resultado.total - resultado.sinReconsulta;
+    var desglose = Object.keys(conteoEstados).map(function(est) {
+      return {
+        estado: est,
+        cantidad: conteoEstados[est],
+        pct: totalConEstado > 0 ? Math.round((conteoEstados[est] / totalConEstado) * 1000) / 10 : 0
+      };
+    });
+    desglose.sort(function(a, b) { return b.cantidad - a.cantidad; });
+
+    resultado.desglose = desglose;
+    resultado.detalle = detalles;
+    return resultado;
+  } catch (e) {
+    Logger.log('Error en obtenerResumenEstadoSAICierre: ' + e.message);
+    return resultado;
+  }
+}
