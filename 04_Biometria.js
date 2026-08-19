@@ -895,10 +895,8 @@ function reconsultarEstadoSAICierre(diasAtras) {
     return;
   }
 
-  var ENDPOINT = 'https://2n7hb4m6v7.execute-api.us-east-1.amazonaws.com/prod/flujo/flujo/v1/study/rental';
-
   // --- Recuperar o inicializar estado de continuación ---
-  var state = _cargarEstadoReconsulta(props);
+  var state = _cargarEstadoReconsulta(props, _RECONSULTA_STATE_KEY);
   var startIndex = 0;
 
   if (state && state.enProgreso) {
@@ -918,14 +916,14 @@ function reconsultarEstadoSAICierre(diasAtras) {
   var hoja = ss.getSheetByName('pendiente_biometria');
   if (!hoja) {
     Logger.log('reconsultarEstadoSAICierre: Hoja pendiente_biometria no encontrada.');
-    _limpiarEstadoReconsulta(props);
+    _limpiarEstadoReconsulta(props, _RECONSULTA_STATE_KEY);
     return;
   }
 
   var lastRow = hoja.getLastRow();
   if (lastRow < 2) {
     Logger.log('reconsultarEstadoSAICierre: Hoja vacía.');
-    _limpiarEstadoReconsulta(props);
+    _limpiarEstadoReconsulta(props, _RECONSULTA_STATE_KEY);
     return;
   }
 
@@ -987,8 +985,8 @@ function reconsultarEstadoSAICierre(diasAtras) {
 
   if (startIndex >= filasReconsultar.length) {
     Logger.log('reconsultarEstadoSAICierre: Ya no quedan casos. Proceso finalizado.');
-    _limpiarEstadoReconsulta(props);
-    _eliminarTriggerContinuacion();
+    _limpiarEstadoReconsulta(props, _RECONSULTA_STATE_KEY);
+    _eliminarTriggerContinuacion('reconsultarEstadoSAICierre');
     return;
   }
 
@@ -1009,47 +1007,15 @@ function reconsultarEstadoSAICierre(diasAtras) {
       }
       SpreadsheetApp.flush();
       // Guardar estado para continuación
-      _guardarEstadoReconsulta(props, { enProgreso: true, ultimoIndice: ultimoProcesado, diasAtras: diasAtras });
-      _programarContinuacion();
+      _guardarEstadoReconsulta(props, _RECONSULTA_STATE_KEY, { enProgreso: true, ultimoIndice: ultimoProcesado, diasAtras: diasAtras });
+      _programarContinuacion('reconsultarEstadoSAICierre');
       return;
     }
 
     var item = filasReconsultar[j];
-
-    try {
-      var url = ENDPOINT + '?consecutive=' + encodeURIComponent(item.consecutivo);
-      var response = UrlFetchApp.fetch(url, {
-        method: 'get',
-        headers: {
-          'x-api-key': apiKey,
-          'Accept': 'application/json'
-        },
-        muteHttpExceptions: true
-      });
-
-      var code = response.getResponseCode();
-      if (code === 200) {
-        var respData = JSON.parse(response.getContentText());
-        var registro = null;
-        if (respData && respData.content && respData.content.length > 0) {
-          registro = respData.content[0];
-        } else if (respData && respData.studyStatus) {
-          registro = respData;
-        }
-
-        var estadoSAI = registro ? String(registro.studyStatus || 'SIN_DATO') : 'SIN_DATO';
-        var fechaResultado = registro ? String(registro.lastResultDate || '') : '';
-        escrituras.push({ fila: item.fila, estado: estadoSAI, fechaResultado: fechaResultado });
-      } else if (code === 404) {
-        escrituras.push({ fila: item.fila, estado: 'NO_ENCONTRADA', fechaResultado: '' });
-      } else {
-        escrituras.push({ fila: item.fila, estado: 'ERROR_HTTP_' + code, fechaResultado: '' });
-        errores++;
-      }
-    } catch (e) {
-      escrituras.push({ fila: item.fila, estado: 'ERROR_' + e.message.substring(0, 30), fechaResultado: '' });
-      errores++;
-    }
+    var resultado = _consultarEstadoSAICierre(item.consecutivo, apiKey);
+    escrituras.push({ fila: item.fila, estado: resultado.estado, fechaResultado: resultado.fechaResultado });
+    if (resultado.error) errores++;
 
     ultimoProcesado = j;
 
@@ -1071,18 +1037,202 @@ function reconsultarEstadoSAICierre(diasAtras) {
   }
 
   SpreadsheetApp.flush();
-  _limpiarEstadoReconsulta(props);
-  _eliminarTriggerContinuacion();
+  _limpiarEstadoReconsulta(props, _RECONSULTA_STATE_KEY);
+  _eliminarTriggerContinuacion('reconsultarEstadoSAICierre');
   Logger.log('reconsultarEstadoSAICierre: COMPLETADO. Procesados: ' + (ultimoProcesado - startIndex + 1) + ', Errores: ' + errores);
+}
+
+/**
+ * Clave de estado y ventana de reintento del job nocturno de pendientes.
+ * @private
+ */
+var _RECONSULTA_PENDIENTES_STATE_KEY = 'RECONSULTA_PENDIENTES_CIERRE_STATE';
+var _RECONSULTA_PENDIENTES_VENTANA_DIAS = 30;
+
+/**
+ * Estados de `estado_sai_cierre` que el job nocturno reintenta porque todavía
+ * pueden cambiar. Los estados finales (APROBADO, RECHAZADO, NEGADO) no se reintentan.
+ * @private
+ */
+var _ESTADOS_PENDIENTES_RECONSULTA_NOCTURNA = {
+  'APROBADO_PENDIENTE_BIOMETRIA': true,
+  'PENDIENTE_BIOMETRIA': true,
+  'EN_ESTUDIO': true
+};
+
+/**
+ * Reintenta, en horario de bajo tráfico (pensado para correr ~2am), el estado SAI de los
+ * casos que el job de las 17:30 dejó en un estado no definitivo (pendiente de biometría o
+ * en estudio) en días anteriores. El job de las 17:30 solo mira la cohorte del día en que
+ * se consultó cada caso — este job es el que permite detectar cuando, días después, un caso
+ * pasa de "pendiente" a "aprobado" (o a cualquier otro estado) en SAI.
+ *
+ * Reglas clave:
+ * - Solo toca casos con `fecha_consulta_sai` anterior a hoy (hoy lo cubre el job de las 17:30)
+ *   y dentro de los últimos `_RECONSULTA_PENDIENTES_VENTANA_DIAS` días — pasada esa ventana,
+ *   se deja de reintentar para no gastar llamadas API en casos efectivamente abandonados.
+ * - Si la consulta a SAI falla de forma transitoria (timeout, error HTTP), NO se sobrescribe
+ *   `estado_sai_cierre`: el caso simplemente se queda como estaba y vuelve a intentarse la
+ *   noche siguiente. Si se sobrescribiera con un estado de error, ese caso saldría del set de
+ *   reintento (los estados de error no están en `_ESTADOS_PENDIENTES_RECONSULTA_NOCTURNA`) y
+ *   se quedaría congelado para siempre.
+ * - `fecha_resultado_cierre` sí se sobrescribe con cada respuesta válida de SAI (refleja el
+ *   `lastResultDate` real de SAI). Ninguna vista del panel agrupa por esa fecha — todas usan
+ *   `fecha_consulta_sai` — así que sobrescribirla es seguro.
+ *
+ * Maneja el límite de 6 minutos de GAS igual que `reconsultarEstadoSAICierre`, con su propio
+ * estado y su propio trigger de continuación para no interferir con el job de las 17:30.
+ */
+function reconsultarPendientesBiometriaSAICierre() {
+  var SLEEP_MS = 500;
+  var BATCH_SIZE = 30;
+  var HANDLER = 'reconsultarPendientesBiometriaSAICierre';
+
+  var props = PropertiesService.getScriptProperties();
+  var apiKey = props.getProperty('API_KEY');
+  if (!apiKey) {
+    Logger.log('reconsultarPendientesBiometriaSAICierre: API_KEY no configurada.');
+    return;
+  }
+
+  var state = _cargarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY);
+  var startIndex = 0;
+  if (state && state.enProgreso) {
+    startIndex = state.ultimoIndice + 1;
+    Logger.log('reconsultarPendientesBiometriaSAICierre: Continuando desde índice ' + startIndex);
+  } else {
+    Logger.log('reconsultarPendientesBiometriaSAICierre: Primera ejecución.');
+  }
+
+  var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
+  var hoja = ss.getSheetByName('pendiente_biometria');
+  if (!hoja) {
+    Logger.log('reconsultarPendientesBiometriaSAICierre: Hoja pendiente_biometria no encontrada.');
+    _limpiarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY);
+    return;
+  }
+
+  var lastRow = hoja.getLastRow();
+  if (lastRow < 2) {
+    Logger.log('reconsultarPendientesBiometriaSAICierre: Hoja vacía.');
+    _limpiarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY);
+    return;
+  }
+
+  var headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  var colMap = {};
+  for (var h = 0; h < headers.length; h++) {
+    var hNorm = String(headers[h] || '').toLowerCase().replace(/\s+/g, '_').trim();
+    colMap[hNorm] = h;
+  }
+
+  var cFC = colMap['fecha_consulta_sai'] != null ? colMap['fecha_consulta_sai'] : -1;
+  var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
+  var cFechaResultado = colMap['fecha_resultado_cierre'] != null ? colMap['fecha_resultado_cierre'] : -1;
+
+  // Estas columnas las crea `reconsultarEstadoSAICierre` (el job de las 17:30) la primera vez
+  // que corre. Si aún no existen, no hay nada que este job pueda reintentar todavía.
+  if (cEstadoCierre === -1 || cFechaResultado === -1) {
+    Logger.log('reconsultarPendientesBiometriaSAICierre: columnas estado_sai_cierre/fecha_resultado_cierre no existen aún.');
+    _limpiarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY);
+    return;
+  }
+
+  var data = hoja.getDataRange().getDisplayValues();
+
+  var hoyISO = Utilities.formatDate(new Date(), TIMEZONE, 'yyyy-MM-dd');
+  var limiteAntiguo = new Date();
+  limiteAntiguo.setDate(limiteAntiguo.getDate() - _RECONSULTA_PENDIENTES_VENTANA_DIAS);
+  var limiteAntiguoISO = Utilities.formatDate(limiteAntiguo, TIMEZONE, 'yyyy-MM-dd');
+
+  var filasReconsultar = [];
+  for (var i = 1; i < data.length; i++) {
+    var consecutivo = String(data[i][COL_BIOMETRIA.SOLICITUD] || '').trim();
+    if (!consecutivo) continue;
+
+    var estadoActual = String(data[i][cEstadoCierre] || '').trim().toUpperCase().replace(/\s+/g, '_');
+    if (!_ESTADOS_PENDIENTES_RECONSULTA_NOCTURNA[estadoActual]) continue;
+
+    var fechaConsultaISO = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || '').trim()) : '';
+    if (!fechaConsultaISO) continue;
+    if (fechaConsultaISO >= hoyISO) continue; // hoy lo cubre el job de las 17:30
+    if (fechaConsultaISO < limiteAntiguoISO) continue; // demasiado viejo, se deja de reintentar
+
+    filasReconsultar.push({ fila: i + 1, consecutivo: consecutivo });
+  }
+
+  Logger.log('reconsultarPendientesBiometriaSAICierre: ' + filasReconsultar.length + ' casos pendientes a reintentar, comenzando en índice ' + startIndex);
+
+  if (startIndex >= filasReconsultar.length) {
+    Logger.log('reconsultarPendientesBiometriaSAICierre: Ya no quedan casos. Proceso finalizado.');
+    _limpiarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY);
+    _eliminarTriggerContinuacion(HANDLER);
+    return;
+  }
+
+  var inicio = Date.now();
+  var escrituras = [];
+  var errores = 0;
+  var cambios = 0;
+  var ultimoProcesado = startIndex - 1;
+
+  for (var j = startIndex; j < filasReconsultar.length; j++) {
+    if (Date.now() - inicio > _MAX_RUNTIME_MS) {
+      Logger.log('reconsultarPendientesBiometriaSAICierre: Límite de tiempo alcanzado en índice ' + j + '. Guardando progreso...');
+      if (escrituras.length > 0) {
+        _escribirLoteCierre(hoja, escrituras, cEstadoCierre, cFechaResultado);
+        escrituras = [];
+      }
+      SpreadsheetApp.flush();
+      _guardarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY, { enProgreso: true, ultimoIndice: ultimoProcesado });
+      _programarContinuacion(HANDLER);
+      return;
+    }
+
+    var item = filasReconsultar[j];
+    var estadoPrevio = String(data[item.fila - 1][cEstadoCierre] || '').trim().toUpperCase().replace(/\s+/g, '_');
+    var resultado = _consultarEstadoSAICierre(item.consecutivo, apiKey);
+
+    if (resultado.error) {
+      // Falla transitoria: no se escribe nada, el caso sigue "pendiente" y se reintenta mañana.
+      errores++;
+    } else {
+      escrituras.push({ fila: item.fila, estado: resultado.estado, fechaResultado: resultado.fechaResultado });
+      if (resultado.estado !== estadoPrevio) cambios++;
+    }
+
+    ultimoProcesado = j;
+
+    if (escrituras.length >= BATCH_SIZE) {
+      _escribirLoteCierre(hoja, escrituras, cEstadoCierre, cFechaResultado);
+      escrituras = [];
+    }
+
+    if (j < filasReconsultar.length - 1) {
+      Utilities.sleep(SLEEP_MS);
+    }
+  }
+
+  if (escrituras.length > 0) {
+    _escribirLoteCierre(hoja, escrituras, cEstadoCierre, cFechaResultado);
+  }
+
+  SpreadsheetApp.flush();
+  _limpiarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY);
+  _eliminarTriggerContinuacion(HANDLER);
+  Logger.log('reconsultarPendientesBiometriaSAICierre: COMPLETADO. Procesados: ' + (ultimoProcesado - startIndex + 1) + ', Cambios de estado: ' + cambios + ', Fallas transitorias (reintentan mañana): ' + errores);
 }
 
 // ── Helpers de estado y continuación ──
 
 /**
+ * Estas cuatro funciones son compartidas por los dos jobs de reconsulta (el diario de
+ * las 17:30 y el nocturno de las 2am de pendientes) — cada uno pasa su propia stateKey
+ * y su propio nombre de función-handler para no pisar el progreso ni los triggers del otro.
  * @private
  */
-function _cargarEstadoReconsulta(props) {
-  var raw = props.getProperty(_RECONSULTA_STATE_KEY);
+function _cargarEstadoReconsulta(props, stateKey) {
+  var raw = props.getProperty(stateKey);
   if (!raw) return null;
   try { return JSON.parse(raw); } catch (e) { return null; }
 }
@@ -1090,44 +1240,44 @@ function _cargarEstadoReconsulta(props) {
 /**
  * @private
  */
-function _guardarEstadoReconsulta(props, state) {
-  props.setProperty(_RECONSULTA_STATE_KEY, JSON.stringify(state));
+function _guardarEstadoReconsulta(props, stateKey, state) {
+  props.setProperty(stateKey, JSON.stringify(state));
 }
 
 /**
  * @private
  */
-function _limpiarEstadoReconsulta(props) {
-  props.deleteProperty(_RECONSULTA_STATE_KEY);
+function _limpiarEstadoReconsulta(props, stateKey) {
+  props.deleteProperty(stateKey);
 }
 
 /**
  * Programa un trigger de continuación para ejecutar en 1 minuto.
  * @private
  */
-function _programarContinuacion() {
+function _programarContinuacion(handlerName) {
   // Eliminar TODOS los triggers de esta función primero
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'reconsultarEstadoSAICierre') {
+    if (triggers[i].getHandlerFunction() === handlerName) {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
-  ScriptApp.newTrigger('reconsultarEstadoSAICierre')
+  ScriptApp.newTrigger(handlerName)
     .timeBased()
     .after(60 * 1000)
     .create();
-  Logger.log('Trigger de continuación programado (1 minuto).');
+  Logger.log('Trigger de continuación programado (1 minuto) para ' + handlerName + '.');
 }
 
 /**
  * Elimina triggers de continuación (one-shot after triggers).
  * @private
  */
-function _eliminarTriggerContinuacion() {
+function _eliminarTriggerContinuacion(handlerName) {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'reconsultarEstadoSAICierre') {
+    if (triggers[i].getHandlerFunction() === handlerName) {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
@@ -1142,6 +1292,52 @@ function _escribirLoteCierre(hoja, escrituras, colEstado, colFechaResultado) {
     var e = escrituras[k];
     hoja.getRange(e.fila, colEstado + 1).setValue(e.estado);
     hoja.getRange(e.fila, colFechaResultado + 1).setValue(e.fechaResultado);
+  }
+}
+
+/**
+ * Endpoint del API de SAI para consultar el estado de estudio de un consecutivo.
+ * Compartido entre el job diario (17:30, cohorte del día) y el nocturno (2am, backlog pendiente).
+ * @private
+ */
+var _ENDPOINT_SAI_STUDY = 'https://2n7hb4m6v7.execute-api.us-east-1.amazonaws.com/prod/flujo/flujo/v1/study/rental';
+
+/**
+ * Consulta el estado SAI de un consecutivo puntual.
+ * `error: true` marca fallas transitorias (HTTP distinto de 200/404, timeouts, excepciones) —
+ * quien llama decide si vale la pena escribir ese resultado o dejar el caso como estaba para
+ * reintentar después. 404 NO se considera error: es una respuesta de negocio válida ("no existe").
+ * @private
+ */
+function _consultarEstadoSAICierre(consecutivo, apiKey) {
+  try {
+    var url = _ENDPOINT_SAI_STUDY + '?consecutive=' + encodeURIComponent(consecutivo);
+    var response = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'x-api-key': apiKey, 'Accept': 'application/json' },
+      muteHttpExceptions: true
+    });
+
+    var code = response.getResponseCode();
+    if (code === 200) {
+      var respData = JSON.parse(response.getContentText());
+      var registro = null;
+      if (respData && respData.content && respData.content.length > 0) {
+        registro = respData.content[0];
+      } else if (respData && respData.studyStatus) {
+        registro = respData;
+      }
+      return {
+        estado: registro ? String(registro.studyStatus || 'SIN_DATO') : 'SIN_DATO',
+        fechaResultado: registro ? String(registro.lastResultDate || '') : '',
+        error: false
+      };
+    } else if (code === 404) {
+      return { estado: 'NO_ENCONTRADA', fechaResultado: '', error: false };
+    }
+    return { estado: 'ERROR_HTTP_' + code, fechaResultado: '', error: true };
+  } catch (e) {
+    return { estado: 'ERROR_' + e.message.substring(0, 30), fechaResultado: '', error: true };
   }
 }
 
@@ -1193,6 +1389,51 @@ function resetReconsultaCierre() {
 }
 
 /**
+ * Crea un trigger diario a las 2am para el reintento nocturno de casos que siguen
+ * pendientes/en estudio en SAI. Corre en horario de bajo tráfico para no competir con
+ * el uso normal del panel ni con el job de las 17:30.
+ */
+function crearTriggerReconsultaPendientesNocturno() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'reconsultarPendientesBiometriaSAICierre') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger('reconsultarPendientesBiometriaSAICierre')
+    .timeBased()
+    .atHour(2)
+    .nearMinute(0)
+    .everyDays(1)
+    .create();
+  Logger.log('Trigger creado: reconsultarPendientesBiometriaSAICierre diario a las 2am.');
+}
+
+/**
+ * Elimina todos los triggers del job nocturno de pendientes (diario y continuaciones).
+ */
+function eliminarTriggerReconsultaPendientesNocturno() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'reconsultarPendientesBiometriaSAICierre') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  PropertiesService.getScriptProperties().deleteProperty(_RECONSULTA_PENDIENTES_STATE_KEY);
+  Logger.log('Triggers del job nocturno de pendientes eliminados y estado limpiado.');
+}
+
+/**
+ * Fuerza reiniciar el job nocturno de pendientes desde cero (limpia estado previo).
+ * Útil si se quedó en un estado inconsistente.
+ */
+function resetReconsultaPendientesNocturno() {
+  var props = PropertiesService.getScriptProperties();
+  props.deleteProperty(_RECONSULTA_PENDIENTES_STATE_KEY);
+  Logger.log('Estado del job nocturno reiniciado. Ejecutar reconsultarPendientesBiometriaSAICierre() para iniciar de nuevo.');
+}
+
+/**
  * Obtiene el resumen del estado SAI al cierre para el rango de fechas indicado.
  * Lee las columnas `estado_sai_cierre` y `fecha_resultado_cierre` de la hoja
  * de biometría y agrupa por estado.
@@ -1202,7 +1443,7 @@ function resetReconsultaCierre() {
  * @returns {Object} { total, desglose: [{estado, cantidad, pct}], detalle: [...] }
  */
 function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
-  var resultado = { total: 0, sinReconsulta: 0, desglose: [], detalle: [] };
+  var resultado = { total: 0, sinReconsulta: 0, desglose: [], detalle: [], porDia: [] };
 
   try {
     var data = obtenerHojaBiometria();
@@ -1221,8 +1462,21 @@ function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
     var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
     var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
 
+    // Rango para el desglose por día (gráfico de barras): si el usuario no filtró
+    // explícitamente arriba, limitamos a la última semana para no saturar el gráfico
+    // con todo el histórico. Si sí filtró, respetamos su rango tal cual.
+    var filtroDesdeDia = filtroDesde;
+    var filtroHastaDia = filtroHasta;
+    if (!filtroDesde && !filtroHasta) {
+      var hoyDia = new Date();
+      var hace6Dias = new Date(hoyDia.getTime() - 6 * 24 * 60 * 60 * 1000);
+      filtroDesdeDia = Utilities.formatDate(hace6Dias, TIMEZONE, 'yyyyMMdd');
+      filtroHastaDia = Utilities.formatDate(hoyDia, TIMEZONE, 'yyyyMMdd');
+    }
+
     var conteoEstados = {};
     var detalles = [];
+    var porDiaMap = {};
 
     for (var i = 1; i < data.length; i++) {
       var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || '').trim();
@@ -1237,6 +1491,14 @@ function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
 
       var estadoCierre = cEstadoCierre >= 0 ? String(data[i][cEstadoCierre] || '').trim() : '';
       var fechaResultadoCierre = cFechaResultado >= 0 ? String(data[i][cFechaResultado] || '').trim() : '';
+      var estadoNorm = estadoCierre ? estadoCierre.toUpperCase().replace(/\s+/g, '_') : '';
+
+      // Desglose por día para el gráfico de barras (usa su propio rango, ver arriba)
+      if (_enRangoBio(consultaNorm, filtroDesdeDia, filtroHastaDia)) {
+        if (!porDiaMap[consultaParte]) porDiaMap[consultaParte] = {};
+        var claveDia = estadoNorm || 'SIN_VERIFICAR';
+        porDiaMap[consultaParte][claveDia] = (porDiaMap[consultaParte][claveDia] || 0) + 1;
+      }
 
       if (!estadoCierre) {
         resultado.sinReconsulta++;
@@ -1244,7 +1506,6 @@ function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
       }
 
       // Normalizar estado para agrupación
-      var estadoNorm = estadoCierre.toUpperCase().replace(/\s+/g, '_');
       conteoEstados[estadoNorm] = (conteoEstados[estadoNorm] || 0) + 1;
 
       // Detalle (máx 300)
@@ -1274,6 +1535,11 @@ function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
 
     resultado.desglose = desglose;
     resultado.detalle = detalles;
+    resultado.porDia = Object.keys(porDiaMap).sort().map(function(f) {
+      var dia = { fecha: f };
+      Object.keys(porDiaMap[f]).forEach(function(est) { dia[est] = porDiaMap[f][est]; });
+      return dia;
+    });
     return resultado;
   } catch (e) {
     Logger.log('Error en obtenerResumenEstadoSAICierre: ' + e.message);

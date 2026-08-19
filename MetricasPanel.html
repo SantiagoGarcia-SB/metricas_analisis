@@ -879,6 +879,17 @@
                     </div>
                 </div>
 
+                <!-- Desglose por estado SAI, por día -->
+                <div class="table-container mb-4" style="margin-top:0.5rem;border-left:4px solid var(--azul);">
+                    <div class="table-header">
+                        <div>
+                            <div class="table-title"><i class="bi bi-bar-chart-line me-2" style="color:var(--azul);"></i>¿Cómo evoluciona esto día a día?<span class="btn-help-chart" onclick="ayudaGrafico('bioEstadoCierrePorDia')">?</span></div>
+                            <div class="table-sub" id="bioCierrePorDiaSub">Estado real en SAI por día de consulta. Sin filtro arriba, se muestra la última semana; si filtras, se respeta tu rango.</div>
+                        </div>
+                    </div>
+                    <div style="position:relative;height:260px;"><canvas id="chartBioCierrePorDia"></canvas></div>
+                </div>
+
                 <!-- Detalle individual -->
                 <div class="table-container mb-4" style="margin-top:0;">
                     <div class="table-header">

@@ -514,7 +514,8 @@ var _ayudaTextos={
     bioResFinal:{t:'Resultado Final',d:'Aprobado, Rechazado o Aplazado de lo gestionado. Se actualiza al cierre del día, así que "Hoy" en pleno día puede verse incompleto.'},
     bioMotivos:{t:'Motivos de Aplazamiento',d:'Por qué se aplazaron las solicitudes: agotó intentos, error en la página, cliente no desea continuar, etc.'},
     bioGestion:{t:'Resultados de Gestión',d:'Casos que el WhatsApp no resolvió y terminaron con un analista: resultado de la llamada y resultado final.'},
-    bioTasaConversionLlamada:{t:'Tasa de Conversión — ¿Sirve la llamada?',d:'De las llamadas donde SÍ se logró contacto (OK Llamada), qué % terminó aprobado. Mide si la llamada, cuando conecta, sirve para resolver el caso — no cuenta los "No contestó".'}
+    bioTasaConversionLlamada:{t:'Tasa de Conversión — ¿Sirve la llamada?',d:'De las llamadas donde SÍ se logró contacto (OK Llamada), qué % terminó aprobado. Mide si la llamada, cuando conecta, sirve para resolver el caso — no cuenta los "No contestó".'},
+    bioEstadoCierrePorDia:{t:'Estado SAI por Día',d:'El mismo desglose de estado en SAI (Aprobado, Pendiente, Rechazado, En Estudio…), pero un día a la vez, agrupado por la fecha en que se consultó cada solicitud. Si no filtras arriba, se muestra la última semana; si eliges un rango, el gráfico se ajusta a ese rango.'}
 };
 function ayudaGrafico(id){var info=_ayudaTextos[id];if(!info)return;Swal.fire({title:info.t,html:'<p style="font-size:0.9rem;color:#253150;line-height:1.6;text-align:left;">'+info.d+'</p>',icon:'info',confirmButtonColor:'#253150',confirmButtonText:'Entendido',width:500});}
 
@@ -1594,6 +1595,7 @@ function renderColaAsignacion(d) {
 var _biometriaCargada = false;
 var chartBioEfectividad = null, chartBioTendencia = null, chartBioTasaTendencia = null;
 var chartBioResLlamada = null, chartBioResFinal = null, chartBioMotivos = null;
+var chartBioCierrePorDia = null;
 var chartBioLlamadasDia = null, chartBioResultadoDia = null;
 var _ultimoGestionPeriodo = null;
 
@@ -1765,6 +1767,20 @@ function cargarEstadoCierreSAI() {
     }).obtenerResumenEstadoSAICierre(desde, hasta);
 }
 
+// Colores por estado SAI de cierre — compartido entre el desglose total y el gráfico por día
+var _coloresCierre = {
+    'APROBADO': '#059669',
+    'APROBADO_PENDIENTE_BIOMETRIA': '#d97706',
+    'PENDIENTE_BIOMETRIA': '#d97706',
+    'EN_ESTUDIO': '#3b82f6',
+    'RECHAZADO': '#BD0F14',
+    'NEGADO': '#BD0F14',
+    'NO_ENCONTRADA': '#9ca3af',
+    'SIN_DATO': '#6b7280',
+    'SIN_VERIFICAR': '#cbd5e1'
+};
+var _defaultColorCierre = '#8b5cf6';
+
 function renderEstadoCierreSAI(data) {
     if (!data) return;
 
@@ -1781,19 +1797,7 @@ function renderEstadoCierreSAI(data) {
     var tbody = document.getElementById('cuerpoBioCierreDesglose');
     var barEl = document.getElementById('bioCierreDesgloseBar');
     var legendEl = document.getElementById('bioCierrDesgloseLegend');
-
-    // Colores por estado
-    var _coloresCierre = {
-        'APROBADO': '#059669',
-        'APROBADO_PENDIENTE_BIOMETRIA': '#d97706',
-        'PENDIENTE_BIOMETRIA': '#d97706',
-        'EN_ESTUDIO': '#3b82f6',
-        'RECHAZADO': '#BD0F14',
-        'NEGADO': '#BD0F14',
-        'NO_ENCONTRADA': '#9ca3af',
-        'SIN_DATO': '#6b7280'
-    };
-    var _defaultColor = '#8b5cf6';
+    var _defaultColor = _defaultColorCierre;
 
     // Narrativa resumen
     var narrativaEl = document.getElementById('bioCierreNarrativa');
@@ -1870,6 +1874,99 @@ function renderEstadoCierreSAI(data) {
             return '<tr><td><code style="font-size:0.8rem;">' + esc(d.solicitud) + '</code></td><td><code style="font-size:0.8rem;">' + esc(d.poliza) + '</code></td><td>' + esc(d.nombre) + '</td><td>' + badgeFase + '</td><td>' + badgeSAI + '</td><td style="font-size:0.8rem;">' + esc(d.fechaResultado) + '</td></tr>';
         }).join('');
     }
+
+    renderBioCierrePorDia(data.porDia);
+}
+
+// Estado SAI por día — mismo desglose de arriba pero desagregado por fecha de consulta.
+// Sin filtro explícito arriba se acota a la última semana (lo hace el backend); con filtro,
+// respeta el rango elegido por el usuario.
+function renderBioCierrePorDia(porDia) {
+    var subEl = document.getElementById('bioCierrePorDiaSub');
+    if (subEl) {
+        var desde = document.getElementById('bioFiltroDesde').value || '';
+        var hasta = document.getElementById('bioFiltroHasta').value || '';
+        subEl.textContent = (desde || hasta)
+            ? 'Estado real en SAI por día de consulta, para el rango filtrado arriba ' + _fmtRangoBio() + '.'
+            : 'Estado real en SAI por día de consulta. Sin filtro arriba, se muestra la última semana.';
+    }
+
+    if (chartBioCierrePorDia) { chartBioCierrePorDia.destroy(); chartBioCierrePorDia = null; }
+    if (!porDia || porDia.length === 0) return;
+
+    // Unión de todos los estados presentes en el rango, ordenados por volumen total descendente
+    // (con SIN_VERIFICAR siempre al final, ya que es "aún no sabemos" y no un resultado real).
+    var totales = {};
+    porDia.forEach(function(dia) {
+        Object.keys(dia).forEach(function(k) {
+            if (k === 'fecha') return;
+            totales[k] = (totales[k] || 0) + dia[k];
+        });
+    });
+    var estados = Object.keys(totales).sort(function(a, b) {
+        if (a === 'SIN_VERIFICAR') return 1;
+        if (b === 'SIN_VERIFICAR') return -1;
+        return totales[b] - totales[a];
+    });
+
+    var totalesPorDia = porDia.map(function(d) {
+        return estados.reduce(function(sum, est) { return sum + (d[est] || 0); }, 0);
+    });
+
+    var ctx = document.getElementById('chartBioCierrePorDia').getContext('2d');
+    chartBioCierrePorDia = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: porDia.map(function(d) { return fmtDB(d.fecha); }),
+            datasets: estados.map(function(est) {
+                var color = _coloresCierre[est] || _defaultColorCierre;
+                return {
+                    label: est.replace(/_/g, ' '),
+                    data: porDia.map(function(d) { return d[est] || 0; }),
+                    backgroundColor: color,
+                    borderColor: '#fff',
+                    borderWidth: 1,
+                    borderRadius: 2,
+                    datalabels: { color: _textColorSobre(color) }
+                };
+            })
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
+            plugins: {
+                // 'auto' deja que el plugin oculte por sí solo las etiquetas que no caben en
+                // segmentos angostos (ej. Rechazado o En Estudio con pocos casos), en vez de
+                // superponer texto ilegible. El detalle exacto de esos segmentos queda en el tooltip.
+                datalabels: {
+                    display: function(dctx) { return dctx.dataset.data[dctx.dataIndex] > 0 ? 'auto' : false; },
+                    font: { weight: 'bold', size: 10 },
+                    formatter: function(v) { return v; },
+                    clip: false
+                },
+                tooltip: {
+                    mode: 'index', intersect: false,
+                    callbacks: {
+                        footer: function(items) {
+                            var total = totalesPorDia[items[0].dataIndex];
+                            return 'Total: ' + total;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Elige texto blanco o gris oscuro según qué tan clara sea la barra, para que la etiqueta
+// numérica sea legible tanto sobre colores fuertes (verde/naranja/rojo) como sobre el gris
+// claro de "Sin Verificar".
+function _textColorSobre(hex) {
+    var h = (hex || '').replace('#', '');
+    if (h.length !== 6) return '#fff';
+    var r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16);
+    var luminancia = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminancia > 0.6 ? '#1f2937' : '#fff';
 }
 
 function exportarDetalleCierreSAI() {
