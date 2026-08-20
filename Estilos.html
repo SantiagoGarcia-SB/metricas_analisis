@@ -458,11 +458,14 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
     border-radius:var(--radius); padding:24px 28px; margin-bottom:20px; color:#fff;
     box-shadow:var(--shadow);
 }
-.bio-conversion-banner.bio-conv-good { background:var(--grad-azul); }
-.bio-conversion-banner.bio-conv-bad { background:var(--grad-rojo); }
+.bio-conversion-banner { background:var(--grad-azul); }
 .bio-conversion-label { font-size:0.8rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; opacity:0.9; }
 .bio-conversion-sub { font-size:0.75rem; opacity:0.7; margin-top:4px; }
 .bio-conversion-value { font-size:3rem; font-weight:800; line-height:1; }
+/* Insignia por-métrica: solo se usa donde hay una meta de negocio definida (hoy, Tasa Conversión WA) */
+.bio-conv-badge { display:inline-block; font-size:0.68rem; font-weight:800; padding:3px 12px; border-radius:20px; letter-spacing:0.3px; }
+.bio-conv-badge-good { background:#059669; color:#fff; }
+.bio-conv-badge-bad { background:var(--rojo); color:#fff; }
 
 /* En vivo: Cola de Asignación / Faltan por Revisar */
 .bio-live-row { display:grid; grid-template-columns:repeat(2, 1fr); gap:16px; margin-bottom:24px; }
@@ -508,11 +511,12 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
 .bio-ciclo-card.bio-c-rojo .bio-ciclo-value { color:var(--rojo); }
 .bio-ciclo-sub { font-size:0.68rem; color:var(--text-light); }
 
-/* Desglose de Enviadas a Cola — barra apilada parte-del-todo */
-.bio-desglose-cola {
+/* Desglose de Enviadas a Cola (rojo) y de la Cascada del Período (azul) — barra apilada parte-del-todo */
+.bio-desglose-cola, .bio-desglose-cascada {
     background:#fff; border-radius:16px; padding:18px 20px 16px; margin-bottom:24px;
     box-shadow:var(--shadow); border-left:4px solid var(--rojo);
 }
+.bio-desglose-cascada { border-left-color:var(--azul); }
 .bio-desglose-titulo {
     font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;
     letter-spacing:0.4px; margin-bottom:12px; display:block;

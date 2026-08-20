@@ -1657,20 +1657,26 @@ function onDatosBiometriaCargados(d) {
     document.getElementById('bioColaAsignacion').textContent = d.colaActual;
     document.getElementById('bioEsperandoCorte').textContent = d.esperandoCorte;
 
-    // === MÉTRICAS DEL PERÍODO ===
+    // === CASCADA + ACTIVIDAD DEL PERÍODO ===
+    // bioMetSinIniciar ya no es tarjeta suelta: ahora es un segmento de la barra de
+    // Cascada, escrito dentro de renderBioDesgloseCascada(d) más abajo.
     document.getElementById('bioMetConsultadas').textContent = d.totalConsultadas;
-    document.getElementById('bioMetSinIniciar').textContent = d.totalSinIniciar;
     document.getElementById('bioMetEnviados').textContent = d.totalEnviados;
     document.getElementById('bioMetResueltasSinWA').textContent = d.resueltasSinWA;
     document.getElementById('bioMetResueltasConWA').textContent = d.resueltasConWA;
     document.getElementById('bioMetEscaladas').textContent = d.totalEscaladas;
+    renderBioDesgloseCascada(d);
     renderBioDesgloseCola(d);
 
-    // Tasa de Conversión = Resueltas por WhatsApp / Enviados, mismo grupo (por fecha de envío)
+    // Tasa de Conversión = Resueltas por WhatsApp / Enviados, mismo grupo (por fecha de envío).
+    // Es la única de las 3 tasas del banner con meta de negocio definida en la app (≥50%, mismo
+    // umbral que usa la Tendencia diaria), así que es la única que recibe insignia de color —
+    // el banner ya no cambia de color completo por un solo KPI de los tres que muestra.
     document.getElementById('bioTasaConversion').textContent = d.tasaConversion + '%';
-    var bannerEl = document.getElementById('bioConversionBanner');
-    bannerEl.classList.remove('bio-conv-good', 'bio-conv-bad');
-    bannerEl.classList.add(d.tasaConversion >= 50 ? 'bio-conv-good' : 'bio-conv-bad');
+    var convBadge = document.getElementById('bioTasaConversionBadge');
+    var convOk = d.tasaConversion >= 50;
+    convBadge.textContent = convOk ? 'Meta ≥50% — cumple' : 'Meta ≥50% — no cumple';
+    convBadge.className = 'bio-conv-badge ' + (convOk ? 'bio-conv-badge-good' : 'bio-conv-badge-bad');
 
     // Tasa Resolución sin WA = Resueltas sin WA / Consultadas
     var tasaResSinWA = d.totalConsultadas > 0 ? Math.round((d.resueltasSinWA / d.totalConsultadas) * 1000) / 10 : 0;
@@ -2255,6 +2261,43 @@ var _BIO_DRILLDOWN_TITULOS = {
     resueltasEnCola: 'Resueltas en Cola (sin analista)',
     archivadas: 'Archivadas (vencidas sin asignar)'
 };
+
+// Desglose de la Cascada del Período como barra apilada parte-del-todo: Sin Iniciar +
+// Resueltas sin WA (cohorte) + Ya Enviadas (cohorte) son mutuamente excluyentes y suman
+// exacto el total de Consultadas SAI (ver obtenerDatosBiometria en 04_Biometria.js).
+function renderBioDesgloseCascada(d) {
+    var partes = [
+        { tipo: 'cascadaSinIniciar',     label: 'Sin Iniciar (esperando 4h)', valor: d.totalSinIniciar,       color: '#94a3b8' },
+        { tipo: 'cascadaResueltasSinWA', label: 'Resueltas sin WA',           valor: d.cohorteResueltasSinWA, color: '#059669' },
+        { tipo: 'cascadaEnviadas',       label: 'Ya Enviadas',                valor: d.cohorteEnviadas,       color: '#2563eb' }
+    ];
+    var total = d.totalConsultadas;
+    document.getElementById('bioCascadaTotal').textContent = total;
+
+    var bar = document.getElementById('bioCascadaBar');
+    var leg = document.getElementById('bioCascadaLegend');
+
+    if (total === 0) {
+        bar.innerHTML = '<div class="bio-desglose-empty">Sin solicitudes consultadas en este rango</div>';
+        leg.innerHTML = '';
+        return;
+    }
+
+    bar.innerHTML = partes.filter(function (p) { return p.valor > 0; }).map(function (p) {
+        var pct = Math.round(p.valor / total * 1000) / 10;
+        var conValor = pct >= 8;
+        return '<div class="bio-desglose-seg" style="flex-grow:' + p.valor + ';background:' + p.color + ';cursor:pointer;" ' +
+            'onclick="drilldownBio(\'' + p.tipo + '\')" title="' + p.label + ': ' + p.valor + ' (' + pct + '%)">' +
+            (conValor ? p.valor : '') + '</div>';
+    }).join('');
+
+    leg.innerHTML = partes.map(function (p) {
+        return '<div class="bio-desglose-item" style="cursor:pointer;" onclick="drilldownBio(\'' + p.tipo + '\')">' +
+            '<span class="bio-desglose-dot" style="background:' + p.color + ';"></span>' +
+            '<span class="bio-desglose-label">' + p.label + '</span>' +
+            '<span class="bio-desglose-valor">' + p.valor + '</span></div>';
+    }).join('');
+}
 
 // Desglose de "Enviadas a Cola" como barra apilada parte-del-todo: las 4 fases son
 // mutuamente excluyentes y suman exacto al total (ver totalEscaladas en Código.js),
