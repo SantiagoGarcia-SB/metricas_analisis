@@ -515,7 +515,8 @@ var _ayudaTextos={
     bioMotivos:{t:'Motivos de Aplazamiento',d:'Por qué se aplazaron las solicitudes: agotó intentos, error en la página, cliente no desea continuar, etc.'},
     bioGestion:{t:'Resultados de Gestión',d:'Casos que el WhatsApp no resolvió y terminaron con un analista: resultado de la llamada y resultado final.'},
     bioTasaConversionLlamada:{t:'Tasa de Conversión — ¿Sirve la llamada?',d:'De las llamadas donde SÍ se logró contacto (OK Llamada), qué % terminó aprobado. Mide si la llamada, cuando conecta, sirve para resolver el caso — no cuenta los "No contestó".'},
-    bioEstadoCierrePorDia:{t:'Estado SAI por Día',d:'El mismo desglose de estado en SAI (Aprobado, Pendiente, Rechazado, En Estudio…), pero un día a la vez, agrupado por la fecha en que se consultó cada solicitud. Si no filtras arriba, se muestra la última semana; si eliges un rango, el gráfico se ajusta a ese rango.'}
+    bioEstadoCierrePorDia:{t:'Estado SAI por Día',d:'El mismo desglose de estado en SAI (Aprobado, Pendiente, Rechazado, En Estudio…), pero un día a la vez, agrupado por la fecha en que se consultó cada solicitud. Si no filtras arriba, se muestra la última semana; si eliges un rango, el gráfico se ajusta a ese rango.'},
+    bioRangoCanon:{t:'Pendientes por Rango de Canon',d:'Todas las biometrías que llegaron en el rango de fechas elegido arriba, clasificadas por el valor del canon mensual: $0-$4.999.999, $5.000.000-$14.999.999 y mayor a $15.000.000. Incluye el caso sin importar si ya se resolvió, se escaló a un analista o se archivó — sirve para priorizar la revisión por el valor del canon, no solo por lo que sigue sin resolver en este momento.'}
 };
 function ayudaGrafico(id){var info=_ayudaTextos[id];if(!info)return;Swal.fire({title:info.t,html:'<p style="font-size:0.9rem;color:#253150;line-height:1.6;text-align:left;">'+info.d+'</p>',icon:'info',confirmButtonColor:'#253150',confirmButtonText:'Entendido',width:500});}
 
@@ -1695,6 +1696,7 @@ function onDatosBiometriaCargados(d) {
         _setBioGestionScope('');
     }
     cargarTopPolizasBiometria();
+    cargarPendientesPorCanon(document.getElementById('bioFiltroDesde').value || '', document.getElementById('bioFiltroHasta').value || '');
     cargarEstadoCierreSAI();
 }
 
@@ -1744,6 +1746,78 @@ function verDetallePendientesPoliza(poliza, inmobiliaria) {
     }).withFailureHandler(function(e) {
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
     }).obtenerDetallePendientesPorPoliza(poliza);
+}
+
+// === PENDIENTES POR RANGO DE CANON ===
+
+var _CANON_RANGO_COLOR = { bajo: '#059669', medio: '#d97706', alto: 'var(--rojo)' };
+
+var _ultimoRangoFechasCanon = { desde: '', hasta: '' };
+
+function cargarPendientesPorCanon(desde, hasta) {
+    desde = desde !== undefined ? desde : (document.getElementById('bioFiltroDesde').value || '');
+    hasta = hasta !== undefined ? hasta : (document.getElementById('bioFiltroHasta').value || '');
+    _ultimoRangoFechasCanon = { desde: desde, hasta: hasta };
+
+    var spinner = document.getElementById('canonBioSpinner');
+    var tbody = document.getElementById('cuerpoCanonBio');
+    var sinDatoEl = document.getElementById('canonBioSinDato');
+    var badgeEl = document.getElementById('bioRangoTextoCanon');
+    if (badgeEl) badgeEl.textContent = _fmtRangoBio();
+    if (spinner) spinner.style.display = 'block';
+    google.script.run.withSuccessHandler(function(res) {
+        if (spinner) spinner.style.display = 'none';
+        res = res || { rangos: [], sinDato: 0, total: 0 };
+        if (!res.rangos || res.rangos.length === 0 || res.total === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3" style="color:var(--text-light);">No hay casos APROBADO_PENDIENTE_BIOMETRIA en el período seleccionado.</td></tr>';
+            if (sinDatoEl) sinDatoEl.style.display = 'none';
+            return;
+        }
+        tbody.innerHTML = res.rangos.map(function(r) {
+            var color = _CANON_RANGO_COLOR[r.key] || 'var(--azul)';
+            return '<tr style="cursor:pointer;" onclick="verDetallePendientesCanon(\'' + esc(r.key) + '\', \'' + esc(r.label) + '\')">' +
+                '<td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';margin-right:8px;"></span>' + esc(r.label) + '</td>' +
+                '<td class="text-center"><span class="badge" style="background:' + color + ';color:#fff;font-size:0.8rem;padding:4px 10px;border-radius:8px;">' + r.count + '</span></td>' +
+                '<td class="text-center fw-bold" style="color:' + color + ';">' + r.pct + '%</td>' +
+                '<td class="text-center"><i class="bi bi-eye" style="color:var(--azul);font-size:1rem;"></i></td>' +
+                '</tr>';
+        }).join('');
+        if (sinDatoEl) {
+            sinDatoEl.style.display = 'block';
+            sinDatoEl.textContent = 'Total del período: ' + res.total + '.' + (res.sinDato > 0 ? ' ' + res.sinDato + ' caso(s) sin canon registrado, no incluido(s) en la tabla.' : '');
+        }
+    }).withFailureHandler(function(e) {
+        if (spinner) spinner.style.display = 'none';
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3" style="color:var(--rojo);">Error: ' + esc(e.message) + '</td></tr>';
+    }).obtenerPendientesPorRangoCanon(desde, hasta);
+}
+
+function verDetallePendientesCanon(rangoKey, label) {
+    Swal.fire({ title: 'Cargando...', didOpen: function() { Swal.showLoading(); } });
+    var _FASE_LABEL = { SIN_INICIAR: 'Sin iniciar', WA_ENVIADO: 'WA enviado', ESCALADA: 'En cola', RESUELTA: 'Resuelta', ASIGNADA: 'Asignada', RESUELTA_EN_COLA: 'Resuelta en cola', ARCHIVADA: 'Archivada' };
+    google.script.run.withSuccessHandler(function(detalle) {
+        detalle = detalle || [];
+        var header = '<tr><th style="white-space:nowrap;">Solicitud</th><th>Póliza</th><th>Inmobiliaria</th><th>Inquilino</th><th class="text-end">Canon</th><th>Estado</th></tr>';
+        var filas = detalle.length > 0 ? detalle.map(function(d) {
+            return '<tr><td><code style="font-size:0.82rem;">' + esc(d.solicitud) + '</code></td>' +
+                '<td><code style="font-size:0.8rem;">' + esc(d.poliza) + '</code></td>' +
+                '<td>' + esc(d.inmobiliaria) + '</td>' +
+                '<td>' + esc(d.nombre || 'Sin nombre') + '</td>' +
+                '<td class="text-end">$' + Math.round(d.canon || 0).toLocaleString('es-CO') + '</td>' +
+                '<td>' + esc(_FASE_LABEL[d.fase] || d.fase || '') + '</td></tr>';
+        }).join('') : '<tr><td colspan="6" class="text-center py-3" style="color:var(--text-light);">Sin casos en este rango.</td></tr>';
+        Swal.fire({
+            title: '<i class="bi bi-cash-stack me-2" style="color:var(--rojo);"></i>' + esc(label),
+            html: '<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">' + detalle.length + ' caso(s) en este rango · ' + esc(_fmtRangoBio()) + '</p>' +
+                  '<div style="max-height:55vh;overflow-y:auto;"><table class="table table-sm table-hover" style="font-size:0.8rem;width:100%;"><thead>' + header + '</thead><tbody>' + filas + '</tbody></table></div>' +
+                  (detalle.length >= 200 ? '<p style="font-size:0.7rem;color:var(--text-light);margin-top:8px;">Mostrando primeras 200.</p>' : ''),
+            width: 820,
+            confirmButtonColor: '#BD0F14',
+            confirmButtonText: 'Cerrar'
+        });
+    }).withFailureHandler(function(e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+    }).obtenerDetallePendientesPorRangoCanon(rangoKey, _ultimoRangoFechasCanon.desde, _ultimoRangoFechasCanon.hasta);
 }
 
 // === ESTADO SAI AL CIERRE ===

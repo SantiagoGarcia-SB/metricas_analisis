@@ -849,6 +849,167 @@ function obtenerDetallePendientesPorPoliza(poliza) {
   }
 }
 
+// ============================================================================
+// PENDIENTES POR RANGO DE CANON — pedido por Operación para priorizar revisión
+// ============================================================================
+
+/**
+ * Rangos de canon definidos por Operación para priorizar la revisión de biometrías
+ * pendientes. El límite superior de "alto" es Infinity a propósito (no hay techo).
+ * @private
+ */
+var _RANGOS_CANON_BIOMETRIA = [
+  { key: 'bajo', label: '$0 - $4.999.999', min: 0, max: 4999999 },
+  { key: 'medio', label: '$5.000.000 - $14.999.999', min: 5000000, max: 14999999 },
+  { key: 'alto', label: 'Mayor a $15.000.000', min: 15000000, max: Infinity }
+];
+
+/**
+ * Convierte el valor crudo de canon (número o texto con formato $/,) a número.
+ * @private
+ */
+function _parseCanonNumero(raw) {
+  if (raw === null || raw === undefined || raw === '') return NaN;
+  if (typeof raw === 'number') return raw;
+  var limpio = String(raw).replace(/[^\d.-]/g, '');
+  if (!limpio) return NaN;
+  var num = parseFloat(limpio);
+  return isNaN(num) ? NaN : num;
+}
+
+/**
+ * @private
+ * @returns {?string} key del rango en _RANGOS_CANON_BIOMETRIA, o null si no calza en ninguno.
+ */
+function _rangoCanon(valor) {
+  for (var i = 0; i < _RANGOS_CANON_BIOMETRIA.length; i++) {
+    var r = _RANGOS_CANON_BIOMETRIA[i];
+    if (valor >= r.min && valor <= r.max) return r.key;
+  }
+  return null;
+}
+
+/**
+ * Distribución de casos APROBADO_PENDIENTE_BIOMETRIA por rango de canon.
+ * Población: TODAS las filas de pendiente_biometria (registro maestro completo, no la
+ * cola en vivo), filtradas por `fecha_consulta_sai` dentro del rango elegido en el panel —
+ * misma fecha de anclaje que usa la cohorte "Consultadas SAI". No filtra por fase: incluye
+ * el caso sin importar si ya se resolvió, escaló o archivó, porque a Operación le interesa
+ * el canon de todo lo que en algún momento quedó pendiente de biometría en el período.
+ *
+ * @param {string} [fechaDesde] - 'YYYY-MM-DD'. Vacío = sin límite inferior.
+ * @param {string} [fechaHasta] - 'YYYY-MM-DD'. Vacío = sin límite superior.
+ * @returns {{rangos: Array<{key:string,label:string,count:number,pct:number}>, sinDato: number, total: number}}
+ */
+function obtenerPendientesPorRangoCanon(fechaDesde, fechaHasta) {
+  var vacio = {
+    rangos: _RANGOS_CANON_BIOMETRIA.map(function(r) { return { key: r.key, label: r.label, count: 0, pct: 0 }; }),
+    sinDato: 0, total: 0
+  };
+  try {
+    var data = obtenerHojaBiometria();
+    if (!data || data.length < 2) return vacio;
+
+    var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
+    var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+
+    var headers = data[0];
+    var colMap = _construirColMapBiometria(headers);
+    var cFC = colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] : -1;
+
+    var conteo = { bajo: 0, medio: 0, alto: 0 };
+    var sinDato = 0;
+    var total = 0;
+
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || "").trim();
+      if (!solicitud) continue;
+
+      var consultaParte = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || "").trim()) : "";
+      var consultaNorm = consultaParte.replace(/-/g, '');
+      if (!_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) continue;
+
+      total++;
+      var canon = _parseCanonNumero(data[i][COL_BIOMETRIA.CANON]);
+      var rango = isNaN(canon) ? null : _rangoCanon(canon);
+      if (rango) conteo[rango]++;
+      else sinDato++;
+    }
+
+    var rangos = _RANGOS_CANON_BIOMETRIA.map(function(r) {
+      return {
+        key: r.key,
+        label: r.label,
+        count: conteo[r.key],
+        pct: total > 0 ? Math.round((conteo[r.key] / total) * 1000) / 10 : 0
+      };
+    });
+
+    return { rangos: rangos, sinDato: sinDato, total: total };
+  } catch (e) {
+    Logger.log("Error en obtenerPendientesPorRangoCanon: " + e.message);
+    return vacio;
+  }
+}
+
+/**
+ * Detalle de casos APROBADO_PENDIENTE_BIOMETRIA dentro de un rango de canon, para que
+ * Operación pueda revisar caso por caso. Misma población y fecha de anclaje
+ * (`fecha_consulta_sai`) que obtenerPendientesPorRangoCanon().
+ *
+ * @param {string} rangoKey - 'bajo' | 'medio' | 'alto'
+ * @param {string} [fechaDesde] - 'YYYY-MM-DD'. Vacío = sin límite inferior.
+ * @param {string} [fechaHasta] - 'YYYY-MM-DD'. Vacío = sin límite superior.
+ * @returns {Array<{solicitud:string,poliza:string,inmobiliaria:string,nombre:string,canon:number,fase:string}>} Máximo 200 filas
+ */
+function obtenerDetallePendientesPorRangoCanon(rangoKey, fechaDesde, fechaHasta) {
+  var rangoDef = _RANGOS_CANON_BIOMETRIA.filter(function(r) { return r.key === rangoKey; })[0];
+  if (!rangoDef) return [];
+  var scoreMap = cargarDiccionarioScore();
+  try {
+    var data = obtenerHojaBiometria();
+    if (!data || data.length < 2) return [];
+
+    var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
+    var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+
+    var headers = data[0];
+    var colMap = _construirColMapBiometria(headers);
+    var cFC = colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] : -1;
+    var cFS = colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] != null ? colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] : -1;
+
+    var resultados = [];
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || "").trim();
+      if (!solicitud) continue;
+
+      var consultaParte = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || "").trim()) : "";
+      var consultaNorm = consultaParte.replace(/-/g, '');
+      if (!_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) continue;
+
+      var canon = _parseCanonNumero(data[i][COL_BIOMETRIA.CANON]);
+      if (isNaN(canon) || canon < rangoDef.min || canon > rangoDef.max) continue;
+
+      var poliza = String(data[i][COL_BIOMETRIA.POLIZA] || "").trim();
+      var info = obtenerSegmentoInmobiliaria(poliza, scoreMap);
+      var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
+      resultados.push({
+        solicitud: solicitud,
+        poliza: poliza,
+        inmobiliaria: info.inmobiliaria,
+        nombre: String(data[i][COL_BIOMETRIA.NOMBRE_INQUILINO] || "").trim(),
+        canon: canon,
+        fase: fase || 'SIN_INICIAR'
+      });
+      if (resultados.length >= 200) break;
+    }
+    return resultados;
+  } catch (e) {
+    Logger.log("Error en obtenerDetallePendientesPorRangoCanon: " + e.message);
+    return [];
+  }
+}
+
 
 // ============================================================================
 // RECONSULTA SAI AL CIERRE DEL DÍA — Con continuación automática (GAS 6 min)

@@ -880,7 +880,87 @@ function _construirEmailChequeoConexion(listaActivos, porEstado, fecha, horaCheq
 // EMAIL: REPORTE BIOMETRÍA
 // ============================================================================
 
-function _construirEmailReporteBiometria(bio, fecha, datosCierre) {
+/**
+ * Sección "En Vivo" del email de biometría — mismos 2 indicadores que el tablero
+ * (Cola de Asignación / Esperando Próximo Corte), que no dependen del día del reporte.
+ * @private
+ */
+function _construirSeccionEnVivoEmail(bio) {
+  var html = '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#128225; En Vivo</h2>';
+  html += '<p style="margin:0 0 14px;font-size:12px;color:#706F6F;">El estado del proceso ahora mismo, al momento de enviar este correo</p>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
+  [
+    { l: "Cola de Asignación", v: bio.colaActual || 0, s: "Esperando que un analista las tome", bg: "#BD0F14" },
+    { l: "Esperando Próximo Corte", v: bio.esperandoCorte || 0, s: "Ya tienen WhatsApp enviado, esperan el corte de 8am/12pm", bg: "#253150" }
+  ].forEach(function(k) {
+    html += '<td width="50%" style="padding:18px 16px;background:' + k.bg + ';border-radius:12px;color:#fff;">';
+    html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;opacity:0.9;">' + k.l + '</div>';
+    html += '<div style="font-size:34px;font-weight:800;line-height:1.1;margin-top:4px;">' + k.v + '</div>';
+    html += '<div style="font-size:10px;opacity:0.75;margin-top:4px;">' + k.s + '</div>';
+    html += '</td>';
+  });
+  html += '</tr></table>';
+  html += '</td></tr>';
+  return html;
+}
+
+/**
+ * Sección "Top Inmobiliarias con Más Pendientes" del email — mismo ranking que el
+ * tablero (en vivo, no depende del día del reporte).
+ * @param {Array<{poliza:string,inmobiliaria:string,count:number}>} ranking
+ * @private
+ */
+function _construirSeccionTopPolizasEmail(ranking) {
+  if (!ranking || ranking.length === 0) return '';
+  var html = '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#127970; Top Inmobiliarias con Más Pendientes</h2>';
+  html += '<p style="margin:0 0 14px;font-size:12px;color:#706F6F;">Pólizas con mayor volumen de biometrías sin resolver, ahora mismo</p>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="4">';
+  ranking.slice(0, 10).forEach(function(item, idx) {
+    html += '<tr><td style="padding:8px 12px;background:#f8fafc;border-radius:8px;border-left:4px solid #d97706;">';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+    html += '<td width="22" style="font-size:12px;font-weight:800;color:#d97706;">' + (idx + 1) + '</td>';
+    html += '<td style="font-size:12px;color:#253150;"><strong>' + _escHtml(item.inmobiliaria) + '</strong> <span style="color:#706F6F;">&middot; p&oacute;liza ' + _escHtml(item.poliza) + '</span></td>';
+    html += '<td width="46" align="right" style="font-size:15px;font-weight:800;color:#d97706;">' + item.count + '</td>';
+    html += '</tr></table></td></tr>';
+  });
+  html += '</table>';
+  html += '</td></tr>';
+  return html;
+}
+
+/**
+ * Sección "Pendientes por Rango de Canon" del email — mismo desglose que el tablero,
+ * cohorte de casos consultados a SAI el día del reporte (fecha_consulta_sai).
+ * @param {{rangos:Array,sinDato:number,total:number}|null} datosCanon
+ * @private
+ */
+function _construirSeccionCanonEmail(datosCanon) {
+  if (!datosCanon || !datosCanon.rangos || datosCanon.total === 0) return '';
+  var colores = { bajo: '#059669', medio: '#d97706', alto: '#BD0F14' };
+  var html = '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
+  html += '<h2 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#253150;">&#128181; Pendientes por Rango de Canon</h2>';
+  html += '<p style="margin:0 0 14px;font-size:12px;color:#706F6F;">De las biometrías de hoy, cu&aacute;ntas caen en cada rango de canon</p>';
+  html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="6">';
+  datosCanon.rangos.forEach(function(r) {
+    var color = colores[r.key] || '#253150';
+    html += '<tr><td style="padding:10px 14px;background:#f8fafc;border-radius:8px;border-left:4px solid ' + color + ';">';
+    html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>';
+    html += '<td style="font-size:13px;font-weight:700;color:#253150;">' + _escHtml(r.label) + '</td>';
+    html += '<td width="60" align="center" style="font-size:18px;font-weight:800;color:' + color + ';">' + r.count + '</td>';
+    html += '<td width="50" align="right" style="font-size:12px;font-weight:700;color:#706F6F;">' + r.pct + '%</td>';
+    html += '</tr></table></td></tr>';
+  });
+  html += '</table>';
+  if (datosCanon.sinDato > 0) {
+    html += '<div style="font-size:11px;color:#94a3b8;margin-top:8px;">' + datosCanon.sinDato + ' caso(s) sin canon registrado, no incluido(s) arriba.</div>';
+  }
+  html += '</td></tr>';
+  return html;
+}
+
+function _construirEmailReporteBiometria(bio, fecha, datosCierre, topPolizas, datosCanon) {
   var ges = bio.gestion || {};
   var convColor = bio.tasaConversion >= 60 ? "#166534" : bio.tasaConversion >= 40 ? "#a16207" : "#BD0F14";
   var convBg = bio.tasaConversion >= 60 ? "#d1fae5" : bio.tasaConversion >= 40 ? "#fef9c3" : "#fde8e8";
@@ -911,6 +991,15 @@ function _construirEmailReporteBiometria(bio, fecha, datosCierre) {
   });
   html += '</tr></table>';
   html += '</td></tr>';
+
+  // En Vivo: mismos 2 indicadores del tablero, ahora mismo (no dependen del día del reporte)
+  html += _construirSeccionEnVivoEmail(bio);
+
+  // Top Pólizas con más pendientes — mismo ranking que el tablero (en vivo)
+  html += _construirSeccionTopPolizasEmail(topPolizas);
+
+  // Pendientes por Rango de Canon — mismo desglose que el tablero, cohorte del día del reporte
+  html += _construirSeccionCanonEmail(datosCanon);
 
   // Narrativa
   html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';

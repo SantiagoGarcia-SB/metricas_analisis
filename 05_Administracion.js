@@ -1415,7 +1415,11 @@ function agente_enviarReporteBiometria() {
   if (!datosBio || datosBio.totalConsultadas === 0) return { sent: false, reason: "sin datos de biometría hoy" };
   var datosCierre;
   try { datosCierre = obtenerResumenEstadoSAICierre(hoy, hoy); } catch (e) { datosCierre = null; }
-  var html = _construirEmailReporteBiometria(datosBio, fecha, datosCierre);
+  var topPolizas;
+  try { topPolizas = obtenerTopPolizasPendientesBiometria(); } catch (e) { topPolizas = []; }
+  var datosCanon;
+  try { datosCanon = obtenerPendientesPorRangoCanon(hoy, hoy); } catch (e) { datosCanon = null; }
+  var html = _construirEmailReporteBiometria(datosBio, fecha, datosCierre, topPolizas, datosCanon);
   try {
     MailApp.sendEmail({ to: email, bcc: BCC_REPORTES_AGENTE, subject: "Reporte Biometría del Día | " + datosBio.totalConsultadas + " consultadas · " + datosBio.tasaConversion + "% conversión | " + fecha, htmlBody: html, name: NOMBRE_REMITENTE_AGENTE, noReply: true });
     return { sent: true, to: email };

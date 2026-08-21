@@ -633,6 +633,7 @@
                 <span class="mini-nav-chip" onclick="document.getElementById('bioConversionBanner').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-graph-up-arrow me-1"></i>Conversión</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaEnVivo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-broadcast me-1"></i>En Vivo</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaTopPolizas').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-building me-1"></i>Top Pólizas</span>
+                <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaCanon').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-cash-stack me-1"></i>Canon</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaCiclo').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-activity me-1"></i>Operación</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaGestion').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-telephone me-1"></i>Gestión</span>
                 <span class="mini-nav-chip" onclick="document.getElementById('bioAnclaEstadoCierre').scrollIntoView({behavior:'smooth',block:'start'});"><i class="bi bi-clipboard-data me-1"></i>¿Qué pasó en SAI?</span>
@@ -785,6 +786,28 @@
             </div>
 
             <!-- Modal detalle por póliza se muestra con SweetAlert2 al hacer click -->
+
+            <!-- PENDIENTES POR RANGO DE CANON — pedido por Operación para priorizar revisión -->
+            <div id="bioAnclaCanon" class="table-container mb-4" style="border-left:4px solid var(--rojo);">
+                <div class="table-header">
+                    <div>
+                        <div class="table-title"><i class="bi bi-cash-stack me-2" style="color:var(--rojo);"></i>Pendientes por Rango de Canon<span id="bioRangoTextoCanon" class="bio-rango-badge"></span><span class="btn-help-chart" onclick="ayudaGrafico('bioRangoCanon')">?</span></div>
+                        <div class="table-sub">De todas las biometrías que llegaron en el rango de fechas elegido arriba, cuántas caen en cada rango de canon — incluye las ya resueltas, las escaladas a un analista y las que aún siguen sin resolver</div>
+                    </div>
+                    <button class="btn-outline-brand" onclick="cargarPendientesPorCanon()" style="padding:6px 14px;font-size:0.75rem;border-radius:8px;"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+                </div>
+                <div id="canonBioSpinner" class="text-center py-3" style="display:none;">
+                    <div class="spinner-border spinner-border-sm" role="status" style="color:var(--rojo);"></div>
+                    <span class="ms-2 text-muted" style="font-size:0.8rem;">Cargando...</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle" style="font-size:0.82rem;width:100%;">
+                        <thead><tr><th>Rango de Canon</th><th class="text-center">Casos</th><th class="text-center">% del Pendiente</th><th class="text-center" style="width:60px;">Detalle</th></tr></thead>
+                        <tbody id="cuerpoCanonBio"><tr><td colspan="4" class="text-center py-3" style="color:var(--text-light);">Cargando...</td></tr></tbody>
+                    </table>
+                </div>
+                <div id="canonBioSinDato" style="display:none;font-size:0.72rem;color:var(--text-muted);padding:0 4px 4px;"></div>
+            </div>
 
             <!-- CASCADA DEL PERÍODO — ancla en fecha de CAPTURA (fecha_consulta_sai). Estas 3 partes
                  son mutuamente excluyentes y suman exacto el total de Consultadas SAI: es la misma
