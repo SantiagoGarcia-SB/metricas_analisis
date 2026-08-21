@@ -861,6 +861,20 @@ function obtenerDetallePendientesPorPoliza(poliza) {
 var _RECONSULTA_STATE_KEY = 'RECONSULTA_CIERRE_STATE';
 
 /**
+ * Nombre de handler distinto para los triggers de continuación (los que se
+ * autoprograman a 1 minuto cuando el job no termina dentro del límite de tiempo).
+ * Es DISTINTO del nombre de la función principal a propósito: `_programarContinuacion`
+ * y `_eliminarTriggerContinuacion` borran TODOS los triggers que coincidan con el nombre
+ * de handler que reciben. Si usáramos el mismo nombre que el trigger diario fijo (creado
+ * por `crearTriggerReconsultaCierre`), cada vez que el job terminara (con o sin necesitar
+ * continuación) se borraría también el trigger diario junto con el de continuación,
+ * dejando el job sin programación desde el día siguiente. Con un nombre separado, la
+ * limpieza de continuaciones nunca toca el trigger diario.
+ * @private
+ */
+var _CONT_HANDLER_CIERRE = '_continuarReconsultaEstadoSAICierre';
+
+/**
  * Tiempo máximo de ejecución seguro (5 min = 300s). Se detiene antes del
  * límite real de 6 min para tener margen de escritura y programar continuación.
  * @private
@@ -986,7 +1000,7 @@ function reconsultarEstadoSAICierre(diasAtras) {
   if (startIndex >= filasReconsultar.length) {
     Logger.log('reconsultarEstadoSAICierre: Ya no quedan casos. Proceso finalizado.');
     _limpiarEstadoReconsulta(props, _RECONSULTA_STATE_KEY);
-    _eliminarTriggerContinuacion('reconsultarEstadoSAICierre');
+    _eliminarTriggerContinuacion(_CONT_HANDLER_CIERRE);
     return;
   }
 
@@ -1008,7 +1022,7 @@ function reconsultarEstadoSAICierre(diasAtras) {
       SpreadsheetApp.flush();
       // Guardar estado para continuación
       _guardarEstadoReconsulta(props, _RECONSULTA_STATE_KEY, { enProgreso: true, ultimoIndice: ultimoProcesado, diasAtras: diasAtras });
-      _programarContinuacion('reconsultarEstadoSAICierre');
+      _programarContinuacion(_CONT_HANDLER_CIERRE);
       return;
     }
 
@@ -1038,7 +1052,7 @@ function reconsultarEstadoSAICierre(diasAtras) {
 
   SpreadsheetApp.flush();
   _limpiarEstadoReconsulta(props, _RECONSULTA_STATE_KEY);
-  _eliminarTriggerContinuacion('reconsultarEstadoSAICierre');
+  _eliminarTriggerContinuacion(_CONT_HANDLER_CIERRE);
   Logger.log('reconsultarEstadoSAICierre: COMPLETADO. Procesados: ' + (ultimoProcesado - startIndex + 1) + ', Errores: ' + errores);
 }
 
@@ -1048,6 +1062,14 @@ function reconsultarEstadoSAICierre(diasAtras) {
  */
 var _RECONSULTA_PENDIENTES_STATE_KEY = 'RECONSULTA_PENDIENTES_CIERRE_STATE';
 var _RECONSULTA_PENDIENTES_VENTANA_DIAS = 30;
+
+/**
+ * Nombre de handler distinto para los triggers de continuación de este job.
+ * Mismo motivo que _CONT_HANDLER_CIERRE: evita que la limpieza de continuaciones
+ * borre también el trigger diario fijo de las 2am.
+ * @private
+ */
+var _CONT_HANDLER_PENDIENTES = '_continuarReconsultaPendientesBiometriaSAICierre';
 
 /**
  * Estados de `estado_sai_cierre` que el job nocturno reintenta porque todavía
@@ -1062,13 +1084,13 @@ var _ESTADOS_PENDIENTES_RECONSULTA_NOCTURNA = {
 
 /**
  * Reintenta, en horario de bajo tráfico (pensado para correr ~2am), el estado SAI de los
- * casos que el job de las 17:30 dejó en un estado no definitivo (pendiente de biometría o
- * en estudio) en días anteriores. El job de las 17:30 solo mira la cohorte del día en que
+ * casos que el job de las 17:00 dejó en un estado no definitivo (pendiente de biometría o
+ * en estudio) en días anteriores. El job de las 17:00 solo mira la cohorte del día en que
  * se consultó cada caso — este job es el que permite detectar cuando, días después, un caso
  * pasa de "pendiente" a "aprobado" (o a cualquier otro estado) en SAI.
  *
  * Reglas clave:
- * - Solo toca casos con `fecha_consulta_sai` anterior a hoy (hoy lo cubre el job de las 17:30)
+ * - Solo toca casos con `fecha_consulta_sai` anterior a hoy (hoy lo cubre el job de las 17:00)
  *   y dentro de los últimos `_RECONSULTA_PENDIENTES_VENTANA_DIAS` días — pasada esa ventana,
  *   se deja de reintentar para no gastar llamadas API en casos efectivamente abandonados.
  * - Si la consulta a SAI falla de forma transitoria (timeout, error HTTP), NO se sobrescribe
@@ -1081,12 +1103,11 @@ var _ESTADOS_PENDIENTES_RECONSULTA_NOCTURNA = {
  *   `fecha_consulta_sai` — así que sobrescribirla es seguro.
  *
  * Maneja el límite de 6 minutos de GAS igual que `reconsultarEstadoSAICierre`, con su propio
- * estado y su propio trigger de continuación para no interferir con el job de las 17:30.
+ * estado y su propio trigger de continuación para no interferir con el job de las 17:00.
  */
 function reconsultarPendientesBiometriaSAICierre() {
   var SLEEP_MS = 500;
   var BATCH_SIZE = 30;
-  var HANDLER = 'reconsultarPendientesBiometriaSAICierre';
 
   var props = PropertiesService.getScriptProperties();
   var apiKey = props.getProperty('API_KEY');
@@ -1130,7 +1151,7 @@ function reconsultarPendientesBiometriaSAICierre() {
   var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
   var cFechaResultado = colMap['fecha_resultado_cierre'] != null ? colMap['fecha_resultado_cierre'] : -1;
 
-  // Estas columnas las crea `reconsultarEstadoSAICierre` (el job de las 17:30) la primera vez
+  // Estas columnas las crea `reconsultarEstadoSAICierre` (el job de las 17:00) la primera vez
   // que corre. Si aún no existen, no hay nada que este job pueda reintentar todavía.
   if (cEstadoCierre === -1 || cFechaResultado === -1) {
     Logger.log('reconsultarPendientesBiometriaSAICierre: columnas estado_sai_cierre/fecha_resultado_cierre no existen aún.');
@@ -1155,7 +1176,7 @@ function reconsultarPendientesBiometriaSAICierre() {
 
     var fechaConsultaISO = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || '').trim()) : '';
     if (!fechaConsultaISO) continue;
-    if (fechaConsultaISO >= hoyISO) continue; // hoy lo cubre el job de las 17:30
+    if (fechaConsultaISO >= hoyISO) continue; // hoy lo cubre el job de las 17:00
     if (fechaConsultaISO < limiteAntiguoISO) continue; // demasiado viejo, se deja de reintentar
 
     filasReconsultar.push({ fila: i + 1, consecutivo: consecutivo });
@@ -1166,7 +1187,7 @@ function reconsultarPendientesBiometriaSAICierre() {
   if (startIndex >= filasReconsultar.length) {
     Logger.log('reconsultarPendientesBiometriaSAICierre: Ya no quedan casos. Proceso finalizado.');
     _limpiarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY);
-    _eliminarTriggerContinuacion(HANDLER);
+    _eliminarTriggerContinuacion(_CONT_HANDLER_PENDIENTES);
     return;
   }
 
@@ -1185,7 +1206,7 @@ function reconsultarPendientesBiometriaSAICierre() {
       }
       SpreadsheetApp.flush();
       _guardarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY, { enProgreso: true, ultimoIndice: ultimoProcesado });
-      _programarContinuacion(HANDLER);
+      _programarContinuacion(_CONT_HANDLER_PENDIENTES);
       return;
     }
 
@@ -1219,7 +1240,7 @@ function reconsultarPendientesBiometriaSAICierre() {
 
   SpreadsheetApp.flush();
   _limpiarEstadoReconsulta(props, _RECONSULTA_PENDIENTES_STATE_KEY);
-  _eliminarTriggerContinuacion(HANDLER);
+  _eliminarTriggerContinuacion(_CONT_HANDLER_PENDIENTES);
   Logger.log('reconsultarPendientesBiometriaSAICierre: COMPLETADO. Procesados: ' + (ultimoProcesado - startIndex + 1) + ', Cambios de estado: ' + cambios + ', Fallas transitorias (reintentan mañana): ' + errores);
 }
 
@@ -1227,7 +1248,7 @@ function reconsultarPendientesBiometriaSAICierre() {
 
 /**
  * Estas cuatro funciones son compartidas por los dos jobs de reconsulta (el diario de
- * las 17:30 y el nocturno de las 2am de pendientes) — cada uno pasa su propia stateKey
+ * las 17:00 y el nocturno de las 2am de pendientes) — cada uno pasa su propia stateKey
  * y su propio nombre de función-handler para no pisar el progreso ni los triggers del otro.
  * @private
  */
@@ -1284,6 +1305,27 @@ function _eliminarTriggerContinuacion(handlerName) {
 }
 
 /**
+ * Handler real de los triggers one-shot de continuación de `reconsultarEstadoSAICierre`.
+ * Se usa un nombre de función separado (en vez de apuntar el trigger de continuación
+ * directamente a `reconsultarEstadoSAICierre`) para que `_programarContinuacion` /
+ * `_eliminarTriggerContinuacion` puedan limpiar continuaciones sin arrastrar consigo
+ * el trigger diario fijo de las 17:00, que usa el nombre de handler original.
+ * @private
+ */
+function _continuarReconsultaEstadoSAICierre() {
+  reconsultarEstadoSAICierre();
+}
+
+/**
+ * Handler real de los triggers one-shot de continuación de `reconsultarPendientesBiometriaSAICierre`.
+ * Mismo motivo que `_continuarReconsultaEstadoSAICierre`.
+ * @private
+ */
+function _continuarReconsultaPendientesBiometriaSAICierre() {
+  reconsultarPendientesBiometriaSAICierre();
+}
+
+/**
  * Escribe un lote de resultados de cierre en la hoja.
  * @private
  */
@@ -1297,7 +1339,7 @@ function _escribirLoteCierre(hoja, escrituras, colEstado, colFechaResultado) {
 
 /**
  * Endpoint del API de SAI para consultar el estado de estudio de un consecutivo.
- * Compartido entre el job diario (17:30, cohorte del día) y el nocturno (2am, backlog pendiente).
+ * Compartido entre el job diario (17:00, cohorte del día) y el nocturno (2am, backlog pendiente).
  * @private
  */
 var _ENDPOINT_SAI_STUDY = 'https://2n7hb4m6v7.execute-api.us-east-1.amazonaws.com/prod/flujo/flujo/v1/study/rental';
@@ -1344,7 +1386,7 @@ function _consultarEstadoSAICierre(consecutivo, apiKey) {
 // ── Triggers de reconsulta ──
 
 /**
- * Crea un trigger diario a las 17:30 para la reconsulta de cierre.
+ * Crea un trigger diario a las 17:00 para la reconsulta de cierre.
  */
 function crearTriggerReconsultaCierre() {
   // Eliminar triggers previos
@@ -1357,10 +1399,10 @@ function crearTriggerReconsultaCierre() {
   ScriptApp.newTrigger('reconsultarEstadoSAICierre')
     .timeBased()
     .atHour(17)
-    .nearMinute(30)
+    .nearMinute(0)
     .everyDays(1)
     .create();
-  Logger.log('Trigger creado: reconsultarEstadoSAICierre diario a las 17:30.');
+  Logger.log('Trigger creado: reconsultarEstadoSAICierre diario a las 17:00.');
 }
 
 /**
@@ -1369,7 +1411,8 @@ function crearTriggerReconsultaCierre() {
 function eliminarTriggerReconsultaCierre() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'reconsultarEstadoSAICierre') {
+    var fn = triggers[i].getHandlerFunction();
+    if (fn === 'reconsultarEstadoSAICierre' || fn === _CONT_HANDLER_CIERRE) {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
@@ -1391,7 +1434,7 @@ function resetReconsultaCierre() {
 /**
  * Crea un trigger diario a las 2am para el reintento nocturno de casos que siguen
  * pendientes/en estudio en SAI. Corre en horario de bajo tráfico para no competir con
- * el uso normal del panel ni con el job de las 17:30.
+ * el uso normal del panel ni con el job de las 17:00.
  */
 function crearTriggerReconsultaPendientesNocturno() {
   var triggers = ScriptApp.getProjectTriggers();
@@ -1415,7 +1458,8 @@ function crearTriggerReconsultaPendientesNocturno() {
 function eliminarTriggerReconsultaPendientesNocturno() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'reconsultarPendientesBiometriaSAICierre') {
+    var fn = triggers[i].getHandlerFunction();
+    if (fn === 'reconsultarPendientesBiometriaSAICierre' || fn === _CONT_HANDLER_PENDIENTES) {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }

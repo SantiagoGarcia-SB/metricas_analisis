@@ -1810,7 +1810,7 @@ function renderEstadoCierreSAI(data) {
     var narrativaEl = document.getElementById('bioCierreNarrativa');
     if (narrativaEl) {
         if (reconsultadas === 0) {
-            narrativaEl.innerHTML = '<span style="color:var(--text-muted);">Aún no se ha verificado el estado en SAI. Se actualiza al cierre del día (17:30).</span>';
+            narrativaEl.innerHTML = '<span style="color:var(--text-muted);">Aún no se ha verificado el estado en SAI. Se actualiza al cierre del día (17:00).</span>';
         } else {
             var aprobadas = 0, pendientes = 0, rechazadas = 0, enEstudio = 0;
             desglose.forEach(function(item) {
