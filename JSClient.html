@@ -1767,6 +1767,7 @@ function cargarEstadoCierreSAI() {
         if (contenido) contenido.style.display = 'block';
         _ultimoCierreData = data;
         renderEstadoCierreSAI(data);
+        cargarEvolucionCierreSAI();
     }).withFailureHandler(function(e) {
         if (spinner) spinner.style.display = 'none';
         if (contenido) { contenido.style.display = 'block'; contenido.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem;">Error al cargar estado de cierre: ' + esc(e.message) + '</p>'; }
@@ -1848,12 +1849,21 @@ function renderEstadoCierreSAI(data) {
         return;
     }
 
-    // Tabla
+    // Tabla (clickeable — drill-down por estado)
     tbody.innerHTML = desglose.map(function(item) {
         var color = _coloresCierre[item.estado] || _defaultColor;
         var badge = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';margin-right:6px;"></span>';
-        return '<tr><td>' + badge + esc(item.estado.replace(/_/g, ' ')) + '</td><td class="text-center"><strong>' + item.cantidad + '</strong></td><td class="text-center">' + item.pct + '%</td></tr>';
+        return '<tr style="cursor:pointer;" onclick="verDetalleCierrePorEstado(\'' + esc(item.estado) + '\', ' + item.cantidad + ')" title="Click para ver detalle">' +
+            '<td>' + badge + esc(item.estado.replace(/_/g, ' ')) + ' <i class="bi bi-box-arrow-up-right" style="font-size:0.65rem;color:var(--text-light);margin-left:4px;"></i></td>' +
+            '<td class="text-center"><strong>' + item.cantidad + '</strong></td><td class="text-center">' + item.pct + '%</td></tr>';
     }).join('');
+    // Fila clickeable para "Sin Verificar" si hay
+    if (sinReconsulta > 0) {
+        var pctSinVer = totalConFase > 0 ? Math.round((sinReconsulta / totalConFase) * 1000) / 10 : 0;
+        tbody.innerHTML += '<tr style="cursor:pointer;opacity:0.7;" onclick="verDetalleCierrePorEstado(\'SIN_VERIFICAR\', ' + sinReconsulta + ')" title="Click para ver detalle">' +
+            '<td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#cbd5e1;margin-right:6px;"></span>Sin Verificar <i class="bi bi-box-arrow-up-right" style="font-size:0.65rem;color:var(--text-light);margin-left:4px;"></i></td>' +
+            '<td class="text-center"><strong>' + sinReconsulta + '</strong></td><td class="text-center">' + pctSinVer + '%</td></tr>';
+    }
 
     // Barra proporcional
     barEl.innerHTML = desglose.map(function(item) {
@@ -1988,6 +1998,172 @@ function exportarDetalleCierreSAI() {
     var ws = XLSX.utils.aoa_to_sheet(ws_data);
     XLSX.utils.book_append_sheet(wb, ws, 'Estado_SAI_Cierre');
     XLSX.writeFile(wb, 'estado_sai_cierre.xlsx');
+}
+
+// === DRILL-DOWN POR ESTADO SAI AL CIERRE ===
+
+function verDetalleCierrePorEstado(estado, cantidad) {
+    Swal.fire({ title: 'Cargando ' + cantidad + ' solicitudes...', didOpen: function() { Swal.showLoading(); } });
+    var desde = document.getElementById('bioFiltroDesde').value || '';
+    var hasta = document.getElementById('bioFiltroHasta').value || '';
+    google.script.run.withSuccessHandler(function(detalle) {
+        detalle = detalle || [];
+        var estadoLabel = estado.replace(/_/g, ' ');
+        var colorEstado = _coloresCierre[estado] || _defaultColorCierre;
+        var header = '<tr><th style="white-space:nowrap;">Solicitud</th><th>Póliza</th><th>Inquilino</th><th>Fase Interna</th><th>Estado SAI</th><th>Fecha Resultado</th><th>Fecha Consulta</th></tr>';
+        var filas = detalle.length > 0 ? detalle.map(function(d) {
+            var badgeSAI = '<span class="badge" style="background:' + colorEstado + ';color:#fff;font-size:0.72rem;padding:3px 8px;border-radius:6px;">' + esc(d.estadoSAI.replace(/_/g, ' ')) + '</span>';
+            return '<tr><td><code style="font-size:0.8rem;">' + esc(d.solicitud) + '</code></td>' +
+                '<td><code style="font-size:0.8rem;">' + esc(d.poliza) + '</code></td>' +
+                '<td>' + esc(d.nombre) + '</td>' +
+                '<td><span class="badge" style="background:var(--azul-mid);color:#fff;font-size:0.72rem;padding:3px 8px;border-radius:6px;">' + esc(d.faseInterna) + '</span></td>' +
+                '<td>' + badgeSAI + '</td>' +
+                '<td style="font-size:0.8rem;">' + esc(d.fechaResultado || '-') + '</td>' +
+                '<td style="font-size:0.8rem;">' + esc(d.fechaConsulta || '-') + '</td></tr>';
+        }).join('') : '<tr><td colspan="7" class="text-center py-3" style="color:var(--text-light);">Sin solicitudes para este estado.</td></tr>';
+
+        Swal.fire({
+            title: '<span style="color:' + colorEstado + ';">' + esc(estadoLabel) + '</span> — ' + detalle.length + ' solicitud(es)',
+            html: '<div style="text-align:right;margin-bottom:10px;">' +
+                  '<button class="btn btn-sm" style="background:var(--azul);color:#fff;border-radius:8px;font-size:0.78rem;padding:5px 14px;" onclick="exportarDetalleCierrePorEstado()"><i class="bi bi-download me-1"></i>Descargar Excel</button></div>' +
+                  '<div style="max-height:55vh;overflow:auto;"><table class="table table-sm table-hover" style="font-size:0.82rem;width:100%;"><thead>' + header + '</thead><tbody>' + filas + '</tbody></table></div>',
+            width: 900,
+            confirmButtonColor: '#BD0F14',
+            confirmButtonText: 'Cerrar'
+        });
+        // Guardar referencia para descarga
+        window._ultimoDetalleCierreEstado = detalle;
+        window._ultimoDetalleCierreEstadoLabel = estadoLabel;
+    }).withFailureHandler(function(e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+    }).obtenerDetalleCierrePorEstado(desde, hasta, estado);
+}
+
+function exportarDetalleCierrePorEstado() {
+    var detalle = window._ultimoDetalleCierreEstado || [];
+    var label = window._ultimoDetalleCierreEstadoLabel || 'Estado';
+    if (detalle.length === 0) {
+        Swal.fire({ icon: 'info', title: 'Sin datos', text: 'No hay detalle para exportar.' });
+        return;
+    }
+    var ws_data = [['Solicitud', 'Póliza', 'Inquilino', 'Fase Interna', 'Estado SAI', 'Fecha Resultado', 'Fecha Consulta']];
+    detalle.forEach(function(d) {
+        ws_data.push([d.solicitud, d.poliza, d.nombre, d.faseInterna, d.estadoSAI, d.fechaResultado, d.fechaConsulta]);
+    });
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(ws_data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Detalle_' + label.substring(0, 20));
+    XLSX.writeFile(wb, 'detalle_cierre_' + label.toLowerCase().replace(/\s+/g, '_') + '.xlsx');
+}
+
+// === EVOLUCIÓN CIERRE SAI — Diario/Mensual ===
+
+var _ultimaEvolucionData = null;
+
+function cargarEvolucionCierreSAI() {
+    var spinner = document.getElementById('bioEvolucionSpinner');
+    var contenido = document.getElementById('bioEvolucionContenido');
+    if (spinner) spinner.style.display = 'block';
+    if (contenido) contenido.style.display = 'none';
+
+    var desde = document.getElementById('bioFiltroDesde').value || '';
+    var hasta = document.getElementById('bioFiltroHasta').value || '';
+    var agrupacion = document.getElementById('bioEvolucionToggle') && document.getElementById('bioEvolucionToggle').value === 'mensual' ? 'mensual' : 'diario';
+
+    google.script.run.withSuccessHandler(function(data) {
+        if (spinner) spinner.style.display = 'none';
+        if (contenido) contenido.style.display = 'block';
+        _ultimaEvolucionData = data;
+        renderEvolucionCierreSAI(data, agrupacion);
+    }).withFailureHandler(function(e) {
+        if (spinner) spinner.style.display = 'none';
+        if (contenido) { contenido.style.display = 'block'; contenido.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem;">Error al cargar evolución: ' + esc(e.message) + '</p>'; }
+    }).obtenerEvolucionCierreSAI(desde, hasta, agrupacion);
+}
+
+function renderEvolucionCierreSAI(data, agrupacion) {
+    if (!data || !data.periodos || data.periodos.length === 0) {
+        var tbl = document.getElementById('bioEvolucionTabla');
+        if (tbl) tbl.innerHTML = '<p class="text-muted text-center py-3" style="font-size:0.85rem;">Sin datos de evolución para este período.</p>';
+        return;
+    }
+
+    var periodos = data.periodos;
+    var estados = data.estados || [];
+    var esMensual = agrupacion === 'mensual';
+
+    // Construir header
+    var thPeriodo = esMensual ? 'Mes' : 'Fecha';
+    var headerCols = '<th style="white-space:nowrap;">' + thPeriodo + '</th><th class="text-center">Total</th>';
+    estados.forEach(function(est) {
+        var color = _coloresCierre[est] || _defaultColorCierre;
+        headerCols += '<th class="text-center" style="white-space:nowrap;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + color + ';margin-right:4px;"></span>' + esc(est.replace(/_/g, ' ')) + '</th>';
+    });
+
+    // Construir filas
+    var filas = periodos.map(function(p) {
+        var periodoLabel = esMensual ? _formatMesLabel(p.periodo) : fmtDB(p.periodo);
+        var row = '<td style="white-space:nowrap;font-weight:600;">' + periodoLabel + '</td>';
+        row += '<td class="text-center"><strong>' + p.total + '</strong></td>';
+        estados.forEach(function(est) {
+            var cant = (p.desglose && p.desglose[est]) || 0;
+            var pct = (p.pcts && p.pcts[est]) || 0;
+            var variacionHtml = '';
+            if (esMensual && p.variacion && p.variacion[est] !== undefined) {
+                var delta = p.variacion[est];
+                if (delta > 0) variacionHtml = ' <span style="color:#059669;font-size:0.7rem;font-weight:700;">↑' + delta + 'pp</span>';
+                else if (delta < 0) variacionHtml = ' <span style="color:#BD0F14;font-size:0.7rem;font-weight:700;">↓' + Math.abs(delta) + 'pp</span>';
+            }
+            row += '<td class="text-center">' + cant + ' <span style="font-size:0.72rem;color:var(--text-muted);">(' + pct + '%)</span>' + variacionHtml + '</td>';
+        });
+        return '<tr>' + row + '</tr>';
+    }).join('');
+
+    var tabla = '<div style="overflow-x:auto;"><table class="table table-sm table-hover align-middle" style="font-size:0.82rem;width:100%;"><thead><tr>' + headerCols + '</tr></thead><tbody>' + filas + '</tbody></table></div>';
+    var tbl = document.getElementById('bioEvolucionTabla');
+    if (tbl) tbl.innerHTML = tabla;
+}
+
+function _formatMesLabel(periodo) {
+    // periodo: "2026-08" → "Ago 2026"
+    var meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    var parts = periodo.split('-');
+    if (parts.length >= 2) {
+        var mesIdx = parseInt(parts[1], 10) - 1;
+        return (meses[mesIdx] || parts[1]) + ' ' + parts[0];
+    }
+    return periodo;
+}
+
+function exportarEvolucionCierreSAI() {
+    if (!_ultimaEvolucionData || !_ultimaEvolucionData.periodos || _ultimaEvolucionData.periodos.length === 0) {
+        Swal.fire({ icon: 'info', title: 'Sin datos', text: 'No hay datos de evolución para exportar.' });
+        return;
+    }
+    var data = _ultimaEvolucionData;
+    var estados = data.estados || [];
+    var agrupacion = document.getElementById('bioEvolucionToggle') && document.getElementById('bioEvolucionToggle').value === 'mensual' ? 'mensual' : 'diario';
+    var esMensual = agrupacion === 'mensual';
+
+    var headerRow = [esMensual ? 'Mes' : 'Fecha', 'Total'];
+    estados.forEach(function(est) { headerRow.push(est.replace(/_/g, ' ')); headerRow.push(est.replace(/_/g, ' ') + ' %'); });
+    if (esMensual) estados.forEach(function(est) { headerRow.push('Var ' + est.replace(/_/g, ' ') + ' (pp)'); });
+
+    var ws_data = [headerRow];
+    data.periodos.forEach(function(p) {
+        var row = [esMensual ? _formatMesLabel(p.periodo) : p.periodo, p.total];
+        estados.forEach(function(est) {
+            row.push((p.desglose && p.desglose[est]) || 0);
+            row.push(((p.pcts && p.pcts[est]) || 0) + '%');
+        });
+        if (esMensual) estados.forEach(function(est) { row.push(p.variacion && p.variacion[est] !== undefined ? p.variacion[est] : ''); });
+        ws_data.push(row);
+    });
+
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(ws_data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Evolucion_' + (esMensual ? 'Mensual' : 'Diaria'));
+    XLSX.writeFile(wb, 'evolucion_cierre_sai_' + agrupacion + '.xlsx');
 }
 
 function renderBioEfectividad(tend) {

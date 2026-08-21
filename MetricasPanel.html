@@ -925,6 +925,35 @@
                 </div>
             </div>
 
+            <!-- Evolución Cierre SAI — Diario/Mensual -->
+            <div class="bio-ciclo-section-title" style="margin-top:1.5rem;"><i class="bi bi-graph-up-arrow me-1"></i>Evolución del Estado SAI <span class="bio-rango-badge" id="bioEvolucionRangoTexto"></span></div>
+            <div class="table-sub mb-3">¿Cómo cambia la proporción de aprobadas vs pendientes en el tiempo? Agrupado por día de consulta SAI.</div>
+
+            <div class="table-container mb-4" style="border-left:4px solid #059669;">
+                <div class="table-header">
+                    <div>
+                        <div class="table-title"><i class="bi bi-graph-up me-2" style="color:#059669;"></i>Evolución por Período</div>
+                        <div class="table-sub">Desglose de estados SAI al cierre, por día o por mes</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <select id="bioEvolucionToggle" class="form-select form-select-sm" style="width:auto;font-size:0.78rem;border-radius:8px;" onchange="cargarEvolucionCierreSAI()">
+                            <option value="diario">Diario</option>
+                            <option value="mensual">Mensual</option>
+                        </select>
+                        <button class="btn-outline-brand" onclick="exportarEvolucionCierreSAI()" style="padding:6px 14px;font-size:0.72rem;border-radius:8px;"><i class="bi bi-download me-1"></i>Exportar</button>
+                    </div>
+                </div>
+
+                <div id="bioEvolucionSpinner" class="text-center py-3" style="display:none;">
+                    <div class="spinner-border spinner-border-sm" role="status" style="color:#059669;"></div>
+                    <span class="ms-2 text-muted" style="font-size:0.8rem;">Cargando evolución...</span>
+                </div>
+
+                <div id="bioEvolucionContenido" style="display:none;">
+                    <div id="bioEvolucionTabla"></div>
+                </div>
+            </div>
+
             <!-- Tendencia por día -->
             <div id="bioAnclaTendenciaDia" class="bio-kpi-section-title mt-4" style="font-size:0.85rem;"><i class="bi bi-calendar3"></i>Tendencia por Día</div>
             <div class="table-sub mb-3">Evolución diaria.</div>

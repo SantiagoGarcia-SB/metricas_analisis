@@ -1546,3 +1546,201 @@ function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
     return resultado;
   }
 }
+
+
+// ============================================================================
+// DRILL-DOWN POR ESTADO SAI AL CIERRE
+// ============================================================================
+
+/**
+ * Retorna el detalle de solicitudes filtradas por estado SAI al cierre.
+ * Permite al usuario hacer click en un estado de la tabla "¿Cuántas se aprobaron
+ * vs siguen pendientes?" y ver exactamente cuáles solicitudes tienen ese estado.
+ *
+ * Filtro: fecha_consulta_sai dentro del rango + estado_sai_cierre === estadoFiltro.
+ *
+ * @param {string} fechaDesde - yyyy-MM-dd (rango inicio)
+ * @param {string} fechaHasta - yyyy-MM-dd (rango fin)
+ * @param {string} estado - Estado SAI normalizado (ej. "APROBADO", "APROBADO_PENDIENTE_BIOMETRIA")
+ * @returns {Array<{solicitud, poliza, nombre, faseInterna, estadoSAI, fechaResultado, fechaConsulta}>}
+ */
+function obtenerDetalleCierrePorEstado(fechaDesde, fechaHasta, estado) {
+  var resultados = [];
+  var estadoFiltro = String(estado || '').toUpperCase().replace(/\s+/g, '_').trim();
+  if (!estadoFiltro) return resultados;
+
+  try {
+    var data = obtenerHojaBiometria();
+    if (!data || data.length < 2) return resultados;
+
+    var headers = data[0];
+    var colMap = _construirColMapBiometria(headers);
+
+    var cFC = colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] : -1;
+    var cFS = colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] != null ? colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] : -1;
+    var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
+    var cFechaResultado = colMap['fecha_resultado_cierre'] != null ? colMap['fecha_resultado_cierre'] : -1;
+
+    if (cEstadoCierre === -1) return resultados;
+
+    var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
+    var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || '').trim();
+      if (!solicitud) continue;
+
+      // Filtrar por fecha de consulta SAI dentro del rango
+      var consultaParte = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || '').trim()) : '';
+      var consultaNorm = consultaParte.replace(/-/g, '');
+      if (!_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) continue;
+
+      // Filtrar por estado SAI al cierre
+      var estadoCierre = cEstadoCierre >= 0 ? String(data[i][cEstadoCierre] || '').trim() : '';
+      var estadoNorm = estadoCierre ? estadoCierre.toUpperCase().replace(/\s+/g, '_') : '';
+
+      // Caso especial: "SIN_VERIFICAR" para las que no tienen estado de cierre
+      if (estadoFiltro === 'SIN_VERIFICAR') {
+        if (estadoCierre !== '') continue;
+      } else {
+        if (estadoNorm !== estadoFiltro) continue;
+      }
+
+      var fase = cFS >= 0 ? String(data[i][cFS] || '').toUpperCase().trim() : '';
+      var fechaResultadoCierre = cFechaResultado >= 0 ? String(data[i][cFechaResultado] || '').trim() : '';
+
+      resultados.push({
+        solicitud: solicitud,
+        poliza: String(data[i][COL_BIOMETRIA.POLIZA] || '').trim(),
+        nombre: String(data[i][COL_BIOMETRIA.NOMBRE_INQUILINO] || '').trim(),
+        faseInterna: fase || 'SIN FASE',
+        estadoSAI: estadoFiltro === 'SIN_VERIFICAR' ? 'SIN_VERIFICAR' : estadoNorm,
+        fechaResultado: fechaResultadoCierre,
+        fechaConsulta: consultaParte
+      });
+
+      if (resultados.length >= 500) break;
+    }
+
+    return resultados;
+  } catch (e) {
+    Logger.log('Error en obtenerDetalleCierrePorEstado: ' + e.message);
+    return resultados;
+  }
+}
+
+// ============================================================================
+// EVOLUCIÓN CIERRE SAI — Diario y Mensual
+// ============================================================================
+
+/**
+ * Retorna la evolución del estado SAI al cierre agrupada por día o por mes.
+ * Permite al usuario ver cómo cambian las aprobaciones/pendientes a lo largo
+ * del tiempo para las solicitudes consultadas en cada período.
+ *
+ * Filtro: fecha_consulta_sai como anclaje por período.
+ *
+ * @param {string} fechaDesde - yyyy-MM-dd
+ * @param {string} fechaHasta - yyyy-MM-dd
+ * @param {string} agrupacion - "diario" o "mensual"
+ * @returns {Object} { periodos: [{periodo, total, desglose: {ESTADO: n, ...}, pcts: {ESTADO: n, ...}}], variacion: [{periodo, campo, delta}] }
+ */
+function obtenerEvolucionCierreSAI(fechaDesde, fechaHasta, agrupacion) {
+  var resultado = { periodos: [], estados: [] };
+  var agrup = String(agrupacion || 'diario').toLowerCase();
+
+  try {
+    var data = obtenerHojaBiometria();
+    if (!data || data.length < 2) return resultado;
+
+    var headers = data[0];
+    var colMap = _construirColMapBiometria(headers);
+
+    var cFC = colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] : -1;
+    var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
+
+    if (cEstadoCierre === -1) return resultado;
+
+    var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
+    var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+
+    // Acumular por período
+    var periodoMap = {}; // { "2026-08-01" o "2026-08": { total: n, estados: { APROBADO: n, ... } } }
+    var estadosSet = {};
+
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || '').trim();
+      if (!solicitud) continue;
+
+      var consultaParte = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || '').trim()) : '';
+      var consultaNorm = consultaParte.replace(/-/g, '');
+      if (!_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) continue;
+      if (!consultaParte) continue;
+
+      // Determinar clave del período
+      var clavePeriodo = '';
+      if (agrup === 'mensual') {
+        clavePeriodo = consultaParte.substring(0, 7); // yyyy-MM
+      } else {
+        clavePeriodo = consultaParte; // yyyy-MM-dd
+      }
+
+      if (!periodoMap[clavePeriodo]) {
+        periodoMap[clavePeriodo] = { total: 0, estados: {} };
+      }
+      periodoMap[clavePeriodo].total++;
+
+      var estadoCierre = cEstadoCierre >= 0 ? String(data[i][cEstadoCierre] || '').trim() : '';
+      var estadoNorm = estadoCierre ? estadoCierre.toUpperCase().replace(/\s+/g, '_') : 'SIN_VERIFICAR';
+      estadosSet[estadoNorm] = true;
+      periodoMap[clavePeriodo].estados[estadoNorm] = (periodoMap[clavePeriodo].estados[estadoNorm] || 0) + 1;
+    }
+
+    // Construir array ordenado
+    var periodosOrdenados = Object.keys(periodoMap).sort();
+    var periodos = [];
+
+    for (var p = 0; p < periodosOrdenados.length; p++) {
+      var clave = periodosOrdenados[p];
+      var pd = periodoMap[clave];
+      var desglose = pd.estados;
+      var pcts = {};
+
+      // Calcular porcentajes
+      var keys = Object.keys(desglose);
+      for (var k = 0; k < keys.length; k++) {
+        pcts[keys[k]] = pd.total > 0 ? Math.round((desglose[keys[k]] / pd.total) * 1000) / 10 : 0;
+      }
+
+      var item = {
+        periodo: clave,
+        total: pd.total,
+        desglose: desglose,
+        pcts: pcts
+      };
+
+      // Variación vs período anterior (solo en modo mensual)
+      if (agrup === 'mensual' && p > 0) {
+        var anterior = periodoMap[periodosOrdenados[p - 1]];
+        var variacion = {};
+        var keysActual = Object.keys(desglose);
+        for (var v = 0; v < keysActual.length; v++) {
+          var est = keysActual[v];
+          var pctActual = pcts[est] || 0;
+          var pctAnterior = anterior.total > 0 ? Math.round(((anterior.estados[est] || 0) / anterior.total) * 1000) / 10 : 0;
+          variacion[est] = Math.round((pctActual - pctAnterior) * 10) / 10; // delta en puntos porcentuales
+        }
+        item.variacion = variacion;
+      }
+
+      periodos.push(item);
+    }
+
+    resultado.periodos = periodos;
+    resultado.estados = Object.keys(estadosSet).sort();
+    return resultado;
+  } catch (e) {
+    Logger.log('Error en obtenerEvolucionCierreSAI: ' + e.message);
+    return resultado;
+  }
+}
