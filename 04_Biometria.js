@@ -1055,8 +1055,10 @@ var _MAX_RUNTIME_MS = 300000;
  * - Se auto-programa un trigger de continuación si no termina.
  * - Se invoca sin parámetros en ejecuciones de continuación.
  *
- * @param {number} [diasAtras=0] - Cantidad de días hacia atrás para incluir casos.
- *   0 = solo los consultados hoy. Usar >0 para reconsultar pendientes de días previos.
+ * @param {number} [diasAtras=1] - Cantidad de días hacia atrás para incluir casos.
+ *   0 = solo los consultados hoy. 1 (default) = hoy y ayer, para no dejar afuera casos
+ *   del día anterior que no se hayan procesado. El trigger diario de las 17:00 invoca
+ *   esta función sin argumentos, así que el default es el que aplica en producción.
  *   Solo se usa en la primera ejecución; las continuaciones leen el estado guardado.
  */
 function reconsultarEstadoSAICierre(diasAtras) {
@@ -1081,7 +1083,10 @@ function reconsultarEstadoSAICierre(diasAtras) {
     Logger.log('reconsultarEstadoSAICierre: Continuando desde índice ' + startIndex + ' (diasAtras=' + diasAtras + ')');
   } else {
     // Primera ejecución
-    var DIAS = (typeof diasAtras === 'number' && diasAtras >= 0) ? diasAtras : 0;
+    // Default 1 (hoy + ayer): el trigger diario de las 17:00 se invoca sin argumentos,
+    // así que este default es el que realmente aplica en producción. Cubre ayer además
+    // de hoy por si algún caso no se alcanzó a procesar el día anterior.
+    var DIAS = (typeof diasAtras === 'number' && diasAtras >= 0) ? diasAtras : 1;
     diasAtras = DIAS;
     Logger.log('reconsultarEstadoSAICierre: Primera ejecución (diasAtras=' + diasAtras + ')');
   }
