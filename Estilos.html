@@ -542,4 +542,40 @@ body { font-family:'Manrope',sans-serif; background:var(--bg-page); color:var(--
 .bio-desglose-label { color:var(--text-muted); font-weight:600; }
 .bio-desglose-valor { color:var(--text-main); font-weight:800; margin-left:6px; }
 .bio-desglose-empty { color:var(--text-light); font-size:0.78rem; text-align:center; width:100%; }
+
+/* Leaderboard — Top 10 Inmobiliarias con Más Pendientes */
+.bio-lb-list { display:flex; flex-direction:column; gap:4px; }
+.bio-lb-row {
+    display:flex; align-items:center; gap:14px; padding:10px 12px;
+    border-radius:14px; cursor:pointer; transition:background 0.15s, transform 0.15s;
+}
+.bio-lb-row:hover { background:var(--bg-page); transform:translateX(2px); }
+.bio-lb-rank {
+    width:28px; height:28px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:0.76rem; font-weight:800; color:var(--text-muted); background:var(--gris-light);
+}
+.bio-lb-rank-1 { background:var(--amarillo); color:#fff; }
+.bio-lb-rank-2 { background:color-mix(in srgb, var(--amarillo) 75%, white); color:#fff; }
+.bio-lb-rank-3 { background:color-mix(in srgb, var(--amarillo) 40%, white); color:var(--azul); }
+.bio-lb-avatar {
+    width:38px; height:38px; border-radius:12px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--azul-light); color:var(--azul); font-weight:800; font-size:0.76rem; letter-spacing:0.2px;
+}
+.bio-lb-info { flex:1; min-width:0; }
+.bio-lb-name {
+    font-size:0.84rem; font-weight:700; color:var(--text-main);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.bio-lb-meta { font-size:0.7rem; color:var(--text-light); margin-top:1px; letter-spacing:0.2px; }
+.bio-lb-track { height:5px; border-radius:3px; background:var(--amarillo-light); margin-top:6px; overflow:hidden; }
+.bio-lb-fill { height:100%; border-radius:3px; background:var(--amarillo); }
+.bio-lb-count {
+    min-width:36px; text-align:center; font-size:0.88rem; font-weight:800; color:var(--amarillo);
+    background:var(--amarillo-light); padding:5px 10px; border-radius:10px; flex-shrink:0;
+    font-variant-numeric:tabular-nums;
+}
+.bio-lb-chevron { color:var(--text-light); font-size:0.85rem; flex-shrink:0; transition:transform 0.15s, color 0.15s; }
+.bio-lb-row:hover .bio-lb-chevron { color:var(--amarillo); transform:translateX(2px); }
 </style>

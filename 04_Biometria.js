@@ -43,6 +43,34 @@ function _construirColMapBiometria(headers) {
 }
 
 /**
+ * Mapa solicitud → estado_sai_cierre normalizado, leyendo la hoja de biometría
+ * de forma independiente. Para llamadores que no tienen ya esa hoja cargada
+ * (ver obtenerDatosBiometria, que arma el mismo mapa inline para no releer).
+ *
+ * @returns {Object<string,string>}
+ * @private
+ */
+function _mapaEstadoCierreBiometria() {
+  var mapa = {};
+  try {
+    var data = obtenerHojaBiometria();
+    if (!data || data.length < 2) return mapa;
+    var colMap = _construirColMapBiometria(data[0]);
+    var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
+    if (cEstadoCierre === -1) return mapa;
+    for (var i = 1; i < data.length; i++) {
+      var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || '').trim();
+      if (!solicitud) continue;
+      var estadoCierreRaw = String(data[i][cEstadoCierre] || '').toUpperCase().trim();
+      if (estadoCierreRaw) mapa[solicitud] = estadoCierreRaw.replace(/\s+/g, '_');
+    }
+  } catch (e) {
+    Logger.log('Error en _mapaEstadoCierreBiometria: ' + e.message);
+  }
+  return mapa;
+}
+
+/**
  * Extrae la parte de fecha de un string raw (antes del espacio si hay hora)
  * y la convierte a formato ISO yyyy-MM-dd usando normalizarFechaISO.
  *
@@ -99,7 +127,8 @@ function _fueEnviadoBio(estadoBrod) {
 function _gestionVacia() {
   return {
     total: 0, okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0,
-    aplazadas: 0, aprobadasConLlamada: 0, motivos: {}, tendencia: [],
+    aplazadas: 0, llamadaAprobadaSAI: 0, llamadaNoAprobadaSAI: 0, llamadaSinVerificarSAI: 0,
+    motivos: {}, tendencia: [],
     tasaContacto: 0, tasaConversionLlamada: 0
   };
 }
@@ -111,12 +140,17 @@ function _gestionVacia() {
  *
  * @param {string[][]} dataH - Datos de Historico_Gestiones (con headers)
  * @param {function} incluirFila - Función filtro (fila, fechaDiaISO) → boolean
+ * @param {Object} [mapaEstadoCierre] - Mapa solicitud → estado_sai_cierre normalizado (ver obtenerDatosBiometria).
+ *   Se usa para saber el resultado REAL en SAI de las llamadas contactadas (OK LLAMADA), en vez del
+ *   estado_general que el analista deja al cerrar la gestión — que casi siempre es "APLAZADO" porque
+ *   la biometría física/digital todavía no se ha hecho en ese momento.
  * @returns {Object} Objeto de gestión con KPIs y tendencia
  * @private
  */
-function _agregarGestionBiometria(dataH, incluirFila) {
+function _agregarGestionBiometria(dataH, incluirFila, mapaEstadoCierre) {
   var gestion = _gestionVacia();
   var gesTendMap = {};
+  mapaEstadoCierre = mapaEstadoCierre || {};
 
   for (var g = 1; g < dataH.length; g++) {
     var tipoAsignadoH = String(dataH[g][COL_HISTORICO.TIPO_ASIGNADO] || "").toUpperCase().replace(/[ÁÉÍÓÚ]/g, function(c) {
@@ -142,8 +176,17 @@ function _agregarGestionBiometria(dataH, incluirFila) {
     if (resLlamada === "OK LLAMADA") { gestion.okLlamada++; gesTendMap[fechaDia].okLlamada++; }
     else if (resLlamada === "NO CONTESTO") { gestion.noContesto++; gesTendMap[fechaDia].noContesto++; }
 
+    // Resultado real en SAI (al cierre) de las llamadas contactadas — no el estado_general
+    // que queda al cerrar la gestión, que todavía no refleja la biometría (aún no hecha).
+    if (resLlamada === "OK LLAMADA") {
+      var solicitudH = String(dataH[g][COL_HISTORICO.SOLICITUD] || "").trim();
+      var estadoCierreH = mapaEstadoCierre[solicitudH];
+      if (!estadoCierreH) gestion.llamadaSinVerificarSAI++;
+      else if (estadoCierreH === "APROBADO") gestion.llamadaAprobadaSAI++;
+      else gestion.llamadaNoAprobadaSAI++;
+    }
+
     var resFinal = String(dataH[g][COL_HISTORICO.ESTADO_GENERAL] || "").toUpperCase().trim();
-    if (resLlamada === "OK LLAMADA" && resFinal === "APROBADO") gestion.aprobadasConLlamada++;
     if (resFinal === "APROBADO") { gestion.aprobadas++; gesTendMap[fechaDia].aprobadas++; }
     else if (resFinal === "RECHAZADO") { gestion.negadas++; gesTendMap[fechaDia].negadas++; }
     else if (resFinal === "APLAZADO") {
@@ -159,7 +202,8 @@ function _agregarGestionBiometria(dataH, incluirFila) {
   });
 
   gestion.tasaContacto = gestion.total > 0 ? Math.round((gestion.okLlamada / gestion.total) * 1000) / 10 : 0;
-  gestion.tasaConversionLlamada = gestion.okLlamada > 0 ? Math.round((gestion.aprobadasConLlamada / gestion.okLlamada) * 1000) / 10 : 0;
+  var llamadaVerificadas = gestion.llamadaAprobadaSAI + gestion.llamadaNoAprobadaSAI;
+  gestion.tasaConversionLlamada = llamadaVerificadas > 0 ? Math.round((gestion.llamadaAprobadaSAI / llamadaVerificadas) * 1000) / 10 : 0;
 
   return gestion;
 }
@@ -258,9 +302,14 @@ function obtenerColaAsignacion() {
  *
  * @param {string} fechaDesde - Fecha inicio en formato yyyy-MM-dd (desde input type="date")
  * @param {string} fechaHasta - Fecha fin en formato yyyy-MM-dd
+ * @param {string} [faseFiltro] - Valor de fase_seguimiento_biometria para acotar Cascada, Actividad
+ *   del Período, tendencias y Top Pólizas. Vacío = sin filtro. NO afecta Cola de Asignación (viene de
+ *   la hoja "solicitud", que no tiene esta columna), Esperando Próximo Corte (ya es intrínsecamente
+ *   WA_ENVIADO) ni Resultados de Gestión (Historico_Gestiones no tiene fase_seguimiento_biometria —
+ *   toda fila ahí ya pasó por ASIGNADA, filtrar por otra fase la dejaría siempre vacía).
  * @returns {Object} Métricas completas de biometría
  */
-function obtenerDatosBiometria(fechaDesde, fechaHasta) {
+function obtenerDatosBiometria(fechaDesde, fechaHasta, faseFiltro) {
   var vacio = {
     totalConsultadas: 0, totalEnviados: 0, totalNoEnviados: 0, totalProcesadas: 0,
     totalSinIniciar: 0, faltanRevisar: 0, esperandoCorte: 0, totalEnEspera: 0,
@@ -293,6 +342,7 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
 
     var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
     var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+    var filtroFaseNorm = faseFiltro ? String(faseFiltro).toUpperCase().trim() : '';
 
     var headers = data[0];
     var colMap = _construirColMapBiometria(headers);
@@ -302,6 +352,12 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
     var cFA = colMap[COL_BIOMETRIA.HEADER_FECHA_ACTUALIZACION_FASE] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_ACTUALIZACION_FASE] : -1;
     var cEB = colMap[COL_BIOMETRIA.HEADER_ESTADO_BROADCAST] != null ? colMap[COL_BIOMETRIA.HEADER_ESTADO_BROADCAST] : -1;
     var cFS = colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] != null ? colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] : -1;
+    var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
+
+    // Mapa solicitud → estado real en SAI al cierre (reconsulta diaria). Se arma aquí,
+    // reutilizando esta misma lectura de la hoja, para cruzarlo luego contra
+    // Historico_Gestiones sin tener que releer la hoja de biometría.
+    var mapaEstadoCierre = {};
 
     var totalConsultadas = 0, totalEnviados = 0, totalNoEnviados = 0;
     var totalSinIniciar = 0, totalEnEspera = 0, totalEscaladas = 0;
@@ -334,6 +390,11 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
       var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || "").trim();
       if (!solicitud) continue;
 
+      if (cEstadoCierre >= 0) {
+        var estadoCierreRaw = String(data[i][cEstadoCierre] || "").toUpperCase().trim();
+        if (estadoCierreRaw) mapaEstadoCierre[solicitud] = estadoCierreRaw.replace(/\s+/g, '_');
+      }
+
       var consultaParte = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || "").trim()) : "";
       var envioParte = cFE >= 0 ? _fechaParteISO(String(data[i][cFE] || "").trim()) : "";
       var faseParte = cFA >= 0 ? _fechaParteISO(String(data[i][cFA] || "").trim()) : "";
@@ -341,9 +402,15 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
       var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
       var fueEnviado = _fueEnviadoBio(estadoBrod);
 
-      // Conteos en vivo (sin filtro de fecha)
+      // Conteos en vivo (sin filtro de fecha NI de fase — son el estado actual real,
+      // independiente de cualquier filtro que el usuario aplique arriba)
       if (fase === "") liveFaltanRevisar++;
       else if (fase === "WA_ENVIADO") liveEsperandoCorte++;
+
+      // Filtro de fase (opcional) — de aquí en adelante todo (cascada, ciclo, tendencia)
+      // respeta la fase elegida. mapaEstadoCierre ya se armó arriba sin este filtro,
+      // porque lo usa también la sección "¿Qué pasó en SAI?", que tiene su propio filtro.
+      if (filtroFaseNorm && (fase || 'SIN FASE') !== filtroFaseNorm) continue;
 
       // --- Métricas por fecha de consulta (cohorte) ---
       var consultaNorm = consultaParte.replace(/-/g, '');
@@ -415,7 +482,7 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta) {
           if (filtroDesde && fechaFinNorm < filtroDesde) return false;
           if (filtroHasta && fechaFinNorm > filtroHasta) return false;
           return true;
-        });
+        }, mapaEstadoCierre);
       }
     } catch (e) {
       Logger.log("Aviso: Error leyendo gestión biometría: " + e.message);
@@ -641,7 +708,7 @@ function obtenerGestionBiometriaPorSolicitud(query) {
       var solicitud = String(fila[COL_HISTORICO.SOLICITUD] || "").trim().toLowerCase();
       var poliza = String(fila[COL_HISTORICO.POLIZA] || "").trim().toLowerCase();
       return solicitud.indexOf(q) !== -1 || poliza.indexOf(q) !== -1;
-    });
+    }, _mapaEstadoCierreBiometria());
   } catch (e) {
     Logger.log("Error en obtenerGestionBiometriaPorSolicitud: " + e.message);
     return _gestionVacia();
@@ -655,9 +722,11 @@ function obtenerGestionBiometriaPorSolicitud(query) {
  * @param {string} tipo - Tipo de tarjeta clickeada
  * @param {string} fechaDesde - yyyy-MM-dd
  * @param {string} fechaHasta - yyyy-MM-dd
+ * @param {string} [faseFiltro] - Igual que en obtenerDatosBiometria. No aplica a "colaAsignacion"
+ *   (hoja distinta) ni a "esperandoCorte" (ya es intrínsecamente WA_ENVIADO).
  * @returns {Array} Detalle de solicitudes (máx 200)
  */
-function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta) {
+function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta, faseFiltro) {
   try {
     // Caso especial: cola de asignación (lee de hoja solicitud)
     if (tipo === "colaAsignacion") {
@@ -690,6 +759,7 @@ function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta) {
 
     var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
     var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+    var filtroFaseNorm = faseFiltro ? String(faseFiltro).toUpperCase().trim() : '';
 
     var headers = data[0];
     var colMap = _construirColMapBiometria(headers);
@@ -740,6 +810,11 @@ function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta) {
       } else if (tipo === "archivadas") {
         incluir = _enRangoBio(faseParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fase === "ARCHIVADA";
       }
+      // El filtro de fase no aplica a "esperandoCorte" (ya es intrínsecamente WA_ENVIADO,
+      // igual que la tarjeta En Vivo de la que sale este drill-down).
+      if (incluir && filtroFaseNorm && tipo !== "esperandoCorte") {
+        incluir = (fase || 'SIN FASE') === filtroFaseNorm;
+      }
       if (!incluir) continue;
 
       var numDest = 0;
@@ -772,12 +847,16 @@ function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta) {
 
 /**
  * Top 10 pólizas con más casos pendientes de biometría.
- * "Pendiente" = fase vacía, WA_ENVIADO o ESCALADA (no terminal).
+ * "Pendiente" = fase vacía, WA_ENVIADO o ESCALADA (no terminal) — salvo que se pase
+ * faseFiltro, en cuyo caso se cuenta esa fase exacta en su lugar (permite ver, por
+ * ejemplo, el top de inmobiliarias con más casos ya RESUELTA o ASIGNADA).
  *
+ * @param {string} [faseFiltro] - Fase exacta a contar en vez del set "pendiente" por defecto.
  * @returns {Array<{poliza: string, inmobiliaria: string, count: number}>}
  */
-function obtenerTopPolizasPendientesBiometria() {
+function obtenerTopPolizasPendientesBiometria(faseFiltro) {
   var scoreMap = cargarDiccionarioScore();
+  var filtroFaseNorm = faseFiltro ? String(faseFiltro).toUpperCase().trim() : '';
   try {
     var data = obtenerHojaBiometria();
     if (!data || data.length < 2) return [];
@@ -791,8 +870,11 @@ function obtenerTopPolizasPendientesBiometria() {
       var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || "").trim();
       if (!solicitud) continue;
       var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
-      // Solo contar casos pendientes (no terminales)
-      if (fase !== "" && fase !== "WA_ENVIADO" && fase !== "ESCALADA") continue;
+      if (filtroFaseNorm) {
+        if ((fase || 'SIN FASE') !== filtroFaseNorm) continue;
+      } else if (fase !== "" && fase !== "WA_ENVIADO" && fase !== "ESCALADA") {
+        continue; // Solo contar casos pendientes (no terminales) cuando no hay filtro explícito
+      }
       var poliza = String(data[i][COL_BIOMETRIA.POLIZA] || "").trim();
       if (!poliza) continue;
       polizaCount[poliza] = (polizaCount[poliza] || 0) + 1;
@@ -813,13 +895,16 @@ function obtenerTopPolizasPendientesBiometria() {
 
 /**
  * Dado un número de póliza, devuelve el detalle de solicitudes pendientes de biometría.
+ * Mismo criterio de fase (por defecto o faseFiltro) que obtenerTopPolizasPendientesBiometria().
  *
  * @param {string} poliza - Número de póliza
+ * @param {string} [faseFiltro] - Fase exacta a contar en vez del set "pendiente" por defecto.
  * @returns {Array<{solicitud: string, nombre: string}>} Máximo 200 filas
  */
-function obtenerDetallePendientesPorPoliza(poliza) {
+function obtenerDetallePendientesPorPoliza(poliza, faseFiltro) {
   var q = String(poliza || "").trim();
   if (!q) return [];
+  var filtroFaseNorm = faseFiltro ? String(faseFiltro).toUpperCase().trim() : '';
   try {
     var data = obtenerHojaBiometria();
     if (!data || data.length < 2) return [];
@@ -835,7 +920,11 @@ function obtenerDetallePendientesPorPoliza(poliza) {
       var polizaFila = String(data[i][COL_BIOMETRIA.POLIZA] || "").trim();
       if (polizaFila !== q) continue;
       var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
-      if (fase !== "" && fase !== "WA_ENVIADO" && fase !== "ESCALADA") continue;
+      if (filtroFaseNorm) {
+        if ((fase || 'SIN FASE') !== filtroFaseNorm) continue;
+      } else if (fase !== "" && fase !== "WA_ENVIADO" && fase !== "ESCALADA") {
+        continue;
+      }
       resultados.push({
         solicitud: solicitud,
         nombre: String(data[i][COL_BIOMETRIA.NOMBRE_INQUILINO] || "").trim()
@@ -896,12 +985,15 @@ function _rangoCanon(valor) {
  * misma fecha de anclaje que usa la cohorte "Consultadas SAI". No filtra por fase: incluye
  * el caso sin importar si ya se resolvió, escaló o archivó, porque a Operación le interesa
  * el canon de todo lo que en algún momento quedó pendiente de biometría en el período.
+ * Si se pasa faseFiltro, se añade como filtro adicional (sigue sin ser el comportamiento
+ * por defecto, que a propósito no filtra por fase).
  *
  * @param {string} [fechaDesde] - 'YYYY-MM-DD'. Vacío = sin límite inferior.
  * @param {string} [fechaHasta] - 'YYYY-MM-DD'. Vacío = sin límite superior.
+ * @param {string} [faseFiltro] - Fase exacta a filtrar adicionalmente. Vacío = sin filtro (default).
  * @returns {{rangos: Array<{key:string,label:string,count:number,pct:number}>, sinDato: number, total: number}}
  */
-function obtenerPendientesPorRangoCanon(fechaDesde, fechaHasta) {
+function obtenerPendientesPorRangoCanon(fechaDesde, fechaHasta, faseFiltro) {
   var vacio = {
     rangos: _RANGOS_CANON_BIOMETRIA.map(function(r) { return { key: r.key, label: r.label, count: 0, pct: 0 }; }),
     sinDato: 0, total: 0
@@ -912,10 +1004,12 @@ function obtenerPendientesPorRangoCanon(fechaDesde, fechaHasta) {
 
     var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
     var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+    var filtroFaseNorm = faseFiltro ? String(faseFiltro).toUpperCase().trim() : '';
 
     var headers = data[0];
     var colMap = _construirColMapBiometria(headers);
     var cFC = colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] : -1;
+    var cFS = colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] != null ? colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] : -1;
 
     var conteo = { bajo: 0, medio: 0, alto: 0 };
     var sinDato = 0;
@@ -928,6 +1022,11 @@ function obtenerPendientesPorRangoCanon(fechaDesde, fechaHasta) {
       var consultaParte = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || "").trim()) : "";
       var consultaNorm = consultaParte.replace(/-/g, '');
       if (!_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) continue;
+
+      if (filtroFaseNorm) {
+        var faseFilaCanon = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
+        if ((faseFilaCanon || 'SIN FASE') !== filtroFaseNorm) continue;
+      }
 
       total++;
       var canon = _parseCanonNumero(data[i][COL_BIOMETRIA.CANON]);
@@ -960,12 +1059,14 @@ function obtenerPendientesPorRangoCanon(fechaDesde, fechaHasta) {
  * @param {string} rangoKey - 'bajo' | 'medio' | 'alto'
  * @param {string} [fechaDesde] - 'YYYY-MM-DD'. Vacío = sin límite inferior.
  * @param {string} [fechaHasta] - 'YYYY-MM-DD'. Vacío = sin límite superior.
+ * @param {string} [faseFiltro] - Fase exacta a filtrar adicionalmente. Vacío = sin filtro (default).
  * @returns {Array<{solicitud:string,poliza:string,inmobiliaria:string,nombre:string,canon:number,fase:string}>} Máximo 200 filas
  */
-function obtenerDetallePendientesPorRangoCanon(rangoKey, fechaDesde, fechaHasta) {
+function obtenerDetallePendientesPorRangoCanon(rangoKey, fechaDesde, fechaHasta, faseFiltro) {
   var rangoDef = _RANGOS_CANON_BIOMETRIA.filter(function(r) { return r.key === rangoKey; })[0];
   if (!rangoDef) return [];
   var scoreMap = cargarDiccionarioScore();
+  var filtroFaseNorm = faseFiltro ? String(faseFiltro).toUpperCase().trim() : '';
   try {
     var data = obtenerHojaBiometria();
     if (!data || data.length < 2) return [];
@@ -990,9 +1091,11 @@ function obtenerDetallePendientesPorRangoCanon(rangoKey, fechaDesde, fechaHasta)
       var canon = _parseCanonNumero(data[i][COL_BIOMETRIA.CANON]);
       if (isNaN(canon) || canon < rangoDef.min || canon > rangoDef.max) continue;
 
+      var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
+      if (filtroFaseNorm && (fase || 'SIN FASE') !== filtroFaseNorm) continue;
+
       var poliza = String(data[i][COL_BIOMETRIA.POLIZA] || "").trim();
       var info = obtenerSegmentoInmobiliaria(poliza, scoreMap);
-      var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
       resultados.push({
         solicitud: solicitud,
         poliza: poliza,
@@ -1650,9 +1753,10 @@ function resetReconsultaPendientesNocturno() {
  *
  * @param {string} fechaDesde - yyyy-MM-dd
  * @param {string} fechaHasta - yyyy-MM-dd
+ * @param {string} [faseFiltro] - Valor de fase_seguimiento_biometria a filtrar (ej. "ASIGNADA", "SIN FASE" para vacía). Vacío = sin filtro.
  * @returns {Object} { total, desglose: [{estado, cantidad, pct}], detalle: [...] }
  */
-function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
+function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta, faseFiltro) {
   var resultado = { total: 0, sinReconsulta: 0, desglose: [], detalle: [], porDia: [] };
 
   try {
@@ -1671,6 +1775,7 @@ function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
 
     var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
     var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+    var filtroFaseNorm = faseFiltro ? String(faseFiltro).toUpperCase().trim() : '';
 
     // Rango para el desglose por día (gráfico de barras): si el usuario no filtró
     // explícitamente arriba, limitamos a la última semana para no saturar el gráfico
@@ -1697,6 +1802,10 @@ function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
       var consultaNorm = consultaParte.replace(/-/g, '');
       if (!_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) continue;
 
+      // Filtrar por fase_seguimiento_biometria (opcional)
+      var fase = cFS >= 0 ? String(data[i][cFS] || '').toUpperCase().trim() : '';
+      if (filtroFaseNorm && (fase || 'SIN FASE') !== filtroFaseNorm) continue;
+
       resultado.total++;
 
       var estadoCierre = cEstadoCierre >= 0 ? String(data[i][cEstadoCierre] || '').trim() : '';
@@ -1720,7 +1829,6 @@ function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
 
       // Detalle (máx 300)
       if (detalles.length < 300) {
-        var fase = cFS >= 0 ? String(data[i][cFS] || '').toUpperCase().trim() : '';
         detalles.push({
           solicitud: solicitud,
           poliza: String(data[i][COL_BIOMETRIA.POLIZA] || '').trim(),
@@ -1772,9 +1880,10 @@ function obtenerResumenEstadoSAICierre(fechaDesde, fechaHasta) {
  * @param {string} fechaDesde - yyyy-MM-dd (rango inicio)
  * @param {string} fechaHasta - yyyy-MM-dd (rango fin)
  * @param {string} estado - Estado SAI normalizado (ej. "APROBADO", "APROBADO_PENDIENTE_BIOMETRIA")
+ * @param {string} [faseFiltro] - Valor de fase_seguimiento_biometria a filtrar (ej. "ASIGNADA", "SIN FASE" para vacía). Vacío = sin filtro.
  * @returns {Array<{solicitud, poliza, nombre, faseInterna, estadoSAI, fechaResultado, fechaConsulta}>}
  */
-function obtenerDetalleCierrePorEstado(fechaDesde, fechaHasta, estado) {
+function obtenerDetalleCierrePorEstado(fechaDesde, fechaHasta, estado, faseFiltro) {
   var resultados = [];
   var estadoFiltro = String(estado || '').toUpperCase().replace(/\s+/g, '_').trim();
   if (!estadoFiltro) return resultados;
@@ -1795,6 +1904,7 @@ function obtenerDetalleCierrePorEstado(fechaDesde, fechaHasta, estado) {
 
     var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
     var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+    var filtroFaseNorm = faseFiltro ? String(faseFiltro).toUpperCase().trim() : '';
 
     for (var i = 1; i < data.length; i++) {
       var solicitud = String(data[i][COL_BIOMETRIA.SOLICITUD] || '').trim();
@@ -1817,6 +1927,8 @@ function obtenerDetalleCierrePorEstado(fechaDesde, fechaHasta, estado) {
       }
 
       var fase = cFS >= 0 ? String(data[i][cFS] || '').toUpperCase().trim() : '';
+      if (filtroFaseNorm && (fase || 'SIN FASE') !== filtroFaseNorm) continue;
+
       var fechaResultadoCierre = cFechaResultado >= 0 ? String(data[i][cFechaResultado] || '').trim() : '';
 
       resultados.push({
@@ -1853,9 +1965,10 @@ function obtenerDetalleCierrePorEstado(fechaDesde, fechaHasta, estado) {
  * @param {string} fechaDesde - yyyy-MM-dd
  * @param {string} fechaHasta - yyyy-MM-dd
  * @param {string} agrupacion - "diario" o "mensual"
+ * @param {string} [faseFiltro] - Igual que en obtenerResumenEstadoSAICierre. Vacío = sin filtro.
  * @returns {Object} { periodos: [{periodo, total, desglose: {ESTADO: n, ...}, pcts: {ESTADO: n, ...}}], variacion: [{periodo, campo, delta}] }
  */
-function obtenerEvolucionCierreSAI(fechaDesde, fechaHasta, agrupacion) {
+function obtenerEvolucionCierreSAI(fechaDesde, fechaHasta, agrupacion, faseFiltro) {
   var resultado = { periodos: [], estados: [] };
   var agrup = String(agrupacion || 'diario').toLowerCase();
 
@@ -1868,11 +1981,13 @@ function obtenerEvolucionCierreSAI(fechaDesde, fechaHasta, agrupacion) {
 
     var cFC = colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] : -1;
     var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
+    var cFS = colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] != null ? colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] : -1;
 
     if (cEstadoCierre === -1) return resultado;
 
     var filtroDesde = fechaDesde ? fechaDesde.replace(/-/g, '') : '';
     var filtroHasta = fechaHasta ? fechaHasta.replace(/-/g, '') : '';
+    var filtroFaseNorm = faseFiltro ? String(faseFiltro).toUpperCase().trim() : '';
 
     // Acumular por período
     var periodoMap = {}; // { "2026-08-01" o "2026-08": { total: n, estados: { APROBADO: n, ... } } }
@@ -1886,6 +2001,11 @@ function obtenerEvolucionCierreSAI(fechaDesde, fechaHasta, agrupacion) {
       var consultaNorm = consultaParte.replace(/-/g, '');
       if (!_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) continue;
       if (!consultaParte) continue;
+
+      if (filtroFaseNorm) {
+        var faseFilaEvol = cFS >= 0 ? String(data[i][cFS] || '').toUpperCase().trim() : '';
+        if ((faseFilaEvol || 'SIN FASE') !== filtroFaseNorm) continue;
+      }
 
       // Determinar clave del período
       var clavePeriodo = '';

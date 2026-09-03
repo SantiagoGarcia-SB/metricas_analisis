@@ -977,11 +977,11 @@ function _construirEmailReporteBiometria(bio, fecha, datosCierre, topPolizas, da
   // Hero: 3 Tasas
   html += '<tr><td style="background:#fff;padding:28px 32px;border-bottom:2px solid #f0f2f5;">';
   html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
-  var tasaResSinWA = bio.totalConsultadas > 0 ? Math.round((bio.resueltasSinWA / bio.totalConsultadas) * 1000) / 10 : 0;
+  var tasaResSinWA = bio.totalConsultadas > 0 ? Math.round((bio.cohorteResueltasSinWA / bio.totalConsultadas) * 1000) / 10 : 0;
   [
     { l: "Tasa Conversión WA", v: bio.tasaConversion + "%", c: convColor, b: convBg, s: "De los WA enviados, % que se resolvió solo con el mensaje" },
     { l: "Tasa Resolución sin WA", v: tasaResSinWA + "%", c: "#059669", b: "#ecfdf5", s: "De las capturadas, % que se resolvió sin necesitar mensaje" },
-    { l: "Conversión Llamada", v: (ges.tasaConversionLlamada || 0) + "%", c: "#253150", b: "#f0f4ff", s: "De las llamadas exitosas, % que terminó aprobada" }
+    { l: "Conversión Llamada", v: (ges.tasaConversionLlamada || 0) + "%", c: "#253150", b: "#f0f4ff", s: "De las llamadas exitosas ya verificadas en SAI, % aprobada" }
   ].forEach(function(ki) {
     html += '<td width="33%" style="text-align:center;padding:16px 8px;background:' + ki.b + ';border-radius:10px;">';
     html += '<div style="font-size:10px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">' + ki.l + '</div>';
@@ -1053,7 +1053,7 @@ function _construirEmailReporteBiometria(bio, fecha, datosCierre, topPolizas, da
     html += 'Los analistas gestionaron <strong>' + ges.total + ' casos</strong>. ';
     html += 'Contactaron a <strong>' + ges.okLlamada + '</strong> (' + ges.tasaContacto + '% tasa de contacto). ';
     if (ges.noContesto > 0) html += '<strong>' + ges.noContesto + '</strong> no contestaron. ';
-    if (ges.tasaConversionLlamada > 0) html += 'De las llamadas exitosas, <strong>' + ges.tasaConversionLlamada + '%</strong> terminaron aprobadas.';
+    if (ges.tasaConversionLlamada > 0) html += 'De las llamadas exitosas ya verificadas en SAI, <strong>' + ges.tasaConversionLlamada + '%</strong> terminaron aprobadas.';
     html += '</p>';
     html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
     [{ l: "Aprobados", v: ges.aprobadas, c: "#059669", b: "#ecfdf5" }, { l: "Rechazados", v: ges.negadas, c: "#BD0F14", b: "#fde8e8" }, { l: "Aplazados", v: ges.aplazadas, c: "#d97706", b: "#fffbeb" }].forEach(function(ri) {

@@ -507,6 +507,7 @@ var _ayudaTextos={
     bioActResueltasWA:{t:'Resueltas por WhatsApp',d:'De los WhatsApp enviados en el rango, cuántos ya se resolvieron. Es el numerador de la Tasa de Conversión.'},
     bioActResueltasSinWA:{t:'Resueltas sin WhatsApp',d:'Cuántas se resolvieron solas en el rango, sin WhatsApp, sin importar cuándo entraron.'},
     bioActEscaladas:{t:'Escaladas a Análisis',d:'De los WhatsApp enviados en el rango, cuántos siguen sin resolver y pasan a un analista.'},
+    bioTopPolizas:{t:'Top 10 Inmobiliarias con Más Pendientes',d:'Ranking en vivo (no depende del filtro de fechas) de las pólizas con más casos sin resolver: fase vacía (recién capturada), WA Enviado o Escalada. No incluye casos ya asignados a un analista, resueltos ni archivados.'},
     bioEfectividad:{t:'Resultado del Broadcast',d:'Qué pasó cada día:<br><b>Resuelta por WA:</b> el cliente completó la biometría tras el mensaje.<br><b>Resuelta sin WhatsApp:</b> se resolvió antes del mensaje.<br><b>Escalada:</b> no funcionó el mensaje, pasa a un analista.'},
     bioTendencia:{t:'Tendencia Diaria',d:'Evolución día a día de consultadas, enviados, resueltas y escaladas — cada una en su propio día real.'},
     bioTasaTendencia:{t:'Tasa de Conversión en el Tiempo',d:'% diario de mensajes que terminaron en biometría resuelta. Verde = buena conversión (≥50%), naranja = baja.'},
@@ -514,7 +515,7 @@ var _ayudaTextos={
     bioResFinal:{t:'Resultado Final',d:'Aprobado, Rechazado o Aplazado de lo gestionado. Se actualiza al cierre del día, así que "Hoy" en pleno día puede verse incompleto.'},
     bioMotivos:{t:'Motivos de Aplazamiento',d:'Por qué se aplazaron las solicitudes: agotó intentos, error en la página, cliente no desea continuar, etc.'},
     bioGestion:{t:'Resultados de Gestión',d:'Casos que el WhatsApp no resolvió y terminaron con un analista: resultado de la llamada y resultado final.'},
-    bioTasaConversionLlamada:{t:'Tasa de Conversión — ¿Sirve la llamada?',d:'De las llamadas donde SÍ se logró contacto (OK Llamada), qué % terminó aprobado. Mide si la llamada, cuando conecta, sirve para resolver el caso — no cuenta los "No contestó".'},
+    bioTasaConversionLlamada:{t:'Tasa de Conversión — ¿Sirve la llamada?',d:'De las llamadas donde SÍ se logró contacto (OK Llamada) y que YA tienen un resultado verificado en SAI (aprobado o no), qué % terminó aprobado. Usa el estado real en SAI al cierre, no lo que el analista alcanza a marcar en el momento de la llamada — la biometría toma tiempo en resolverse, así que ese estado inicial casi siempre es "Aplazado". Las llamadas contactadas que SAI todavía no ha verificado no cuentan ni suman ni restan a esta tasa.'},
     bioEstadoCierrePorDia:{t:'Estado SAI por Día',d:'El mismo desglose de estado en SAI (Aprobado, Pendiente, Rechazado, En Estudio…), pero un día a la vez, agrupado por la fecha en que se consultó cada solicitud. Si no filtras arriba, se muestra la última semana; si eliges un rango, el gráfico se ajusta a ese rango.'},
     bioRangoCanon:{t:'Pendientes por Rango de Canon',d:'Todas las biometrías que llegaron en el rango de fechas elegido arriba, clasificadas por el valor del canon mensual: $0-$4.999.999, $5.000.000-$14.999.999 y mayor a $15.000.000. Incluye el caso sin importar si ya se resolvió, se escaló a un analista o se archivó — sirve para priorizar la revisión por el valor del canon, no solo por lo que sigue sin resolver en este momento.'}
 };
@@ -1609,12 +1610,28 @@ function _setBioGestionScope(texto) {
     else { el.style.display = 'none'; }
 }
 
+// Etiqueta legible de la fase activa en el filtro (reutiliza el texto de la propia
+// opción seleccionada, para no duplicar el mapa de labels en dos sitios).
+function _labelFaseFiltroBio() {
+    var el = document.getElementById('bioCierreFiltroFase');
+    if (!el || !el.value) return '';
+    var opt = el.options[el.selectedIndex];
+    return opt ? opt.text : el.value;
+}
+
 function _fmtRangoBio() {
     var desde = document.getElementById('bioFiltroDesde').value || '';
     var hasta = document.getElementById('bioFiltroHasta').value || '';
-    if (!desde && !hasta) return '(todo el histórico)';
-    if (desde === hasta) return '(' + fmtDB(desde) + ')';
-    return '(' + fmtDB(desde) + ' → ' + fmtDB(hasta) + ')';
+    var rango = !desde && !hasta ? '(todo el histórico)' : (desde === hasta ? '(' + fmtDB(desde) + ')' : '(' + fmtDB(desde) + ' → ' + fmtDB(hasta) + ')');
+    var faseLabel = _labelFaseFiltroBio();
+    return faseLabel ? rango + ' · Fase: ' + faseLabel : rango;
+}
+
+// Fase seleccionada en el filtro general (barra de arriba). Ver el select
+// bioCierreFiltroFase en MetricasPanel.html para el detalle de qué secciones respeta.
+function _faseFiltroBio() {
+    var el = document.getElementById('bioCierreFiltroFase');
+    return el ? el.value : '';
 }
 
 function cargarDatosBiometria() {
@@ -1627,7 +1644,7 @@ function cargarDatosBiometria() {
         document.getElementById('biometriaSpinner').style.display = 'none';
         if (_splashActivo) _splashError('No se pudieron cargar los datos: ' + e.message);
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
-    }).obtenerDatosBiometria(desde, hasta);
+    }).obtenerDatosBiometria(desde, hasta, _faseFiltroBio());
 }
 
 function setBioRangoRapido(tipo) {
@@ -1679,13 +1696,20 @@ function onDatosBiometriaCargados(d) {
     convBadge.textContent = convOk ? 'Meta ≥50% — cumple' : 'Meta ≥50% — no cumple';
     convBadge.className = 'bio-conv-badge ' + (convOk ? 'bio-conv-badge-good' : 'bio-conv-badge-bad');
 
-    // Tasa Resolución sin WA = Resueltas sin WA / Consultadas
-    var tasaResSinWA = d.totalConsultadas > 0 ? Math.round((d.resueltasSinWA / d.totalConsultadas) * 1000) / 10 : 0;
+    // Tasa Resolución sin WA = de las CONSULTADAS en el rango (cohorte por fecha de consulta),
+    // % que terminó resuelta sin WA — usa cohorteResueltasSinWA, no resueltasSinWA (esa cuenta
+    // por fecha de actualización de fase, una población distinta a totalConsultadas).
+    var tasaResSinWA = d.totalConsultadas > 0 ? Math.round((d.cohorteResueltasSinWA / d.totalConsultadas) * 1000) / 10 : 0;
     document.getElementById('bioTasaResolucionSinWA').textContent = tasaResSinWA + '%';
 
-    // Tasa Conversión Llamada = de las llamadas exitosas, % aprobadas
+    // Tasa Conversión Llamada = de las llamadas exitosas YA verificadas en SAI, % aprobadas
+    // (llamadaSinVerificarSAI queda fuera del cálculo — todavía no tienen resultado real en SAI)
     var ges = d.gestion || {};
     document.getElementById('bioTasaConversionLlamada').textContent = (ges.tasaConversionLlamada || 0) + '%';
+    var subLlamadaEl = document.getElementById('bioTasaConversionLlamadaSub');
+    if (subLlamadaEl) {
+        subLlamadaEl.textContent = (ges.llamadaSinVerificarSAI > 0) ? (ges.llamadaSinVerificarSAI + ' sin verificar aún') : '';
+    }
 
     renderBioEfectividad(d.tendencia);
     renderBioTendencia(d.tendencia);
@@ -1702,29 +1726,57 @@ function onDatosBiometriaCargados(d) {
 
 // === TOP 10 PÓLIZAS PENDIENTES DE BIOMETRÍA ===
 
+// Iniciales para el avatar del leaderboard: primera letra de las 2 primeras palabras.
+function _inicialesInmobiliaria(nombre) {
+    var n = String(nombre || '').trim().toUpperCase();
+    if (!n || n === 'SIN NOMBRE') return '';
+    var palabras = n.split(/\s+/).filter(function(w) { return w.length > 0; });
+    if (palabras.length === 0) return '';
+    if (palabras.length === 1) return palabras[0].substring(0, 2);
+    return palabras[0].charAt(0) + palabras[1].charAt(0);
+}
+
 function cargarTopPolizasBiometria() {
     var spinner = document.getElementById('topPolizasBioSpinner');
-    var tbody = document.getElementById('cuerpoTopPolizasBio');
+    var cont = document.getElementById('cuerpoTopPolizasBio');
+    var faseTextoEl = document.getElementById('bioTopPolizasFaseTexto');
+    var faseLabel = _labelFaseFiltroBio();
+    if (faseTextoEl) faseTextoEl.textContent = faseLabel ? 'Fase: ' + faseLabel : '';
+    var subEl = document.getElementById('bioTopPolizasSub');
+    if (subEl) subEl.textContent = faseLabel
+        ? 'Pólizas con más casos en fase "' + faseLabel + '" (en vivo)'
+        : 'Pólizas con mayor volumen de biometrías sin resolver (en vivo)';
     if (spinner) spinner.style.display = 'block';
     google.script.run.withSuccessHandler(function(ranking) {
         if (spinner) spinner.style.display = 'none';
         if (!ranking || ranking.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3" style="color:var(--text-light);">No hay pólizas con casos pendientes.</td></tr>';
+            cont.innerHTML = '<div class="text-center py-3" style="color:var(--text-light);">No hay pólizas con casos pendientes.</div>';
             return;
         }
-        tbody.innerHTML = ranking.map(function(item, idx) {
-            return '<tr style="cursor:pointer;" onclick="verDetallePendientesPoliza(\'' + esc(item.poliza) + '\', \'' + esc(item.inmobiliaria) + '\')">' +
-                '<td class="text-center fw-bold" style="color:#d97706;">' + (idx + 1) + '</td>' +
-                '<td><code style="font-size:0.8rem;">' + esc(item.poliza) + '</code></td>' +
-                '<td>' + esc(item.inmobiliaria) + '</td>' +
-                '<td class="text-center"><span class="badge" style="background:#d97706;color:#fff;font-size:0.8rem;padding:4px 10px;border-radius:8px;">' + item.count + '</span></td>' +
-                '<td class="text-center"><i class="bi bi-eye" style="color:var(--azul);font-size:1rem;"></i></td>' +
-                '</tr>';
+        var max = ranking[0].count || 1;
+        cont.innerHTML = ranking.map(function(item, idx) {
+            var rank = idx + 1;
+            var rankClass = rank <= 3 ? ' bio-lb-rank-' + rank : '';
+            var iniciales = _inicialesInmobiliaria(item.inmobiliaria);
+            var avatar = iniciales ? esc(iniciales) : '<i class="bi bi-building"></i>';
+            var pct = Math.max(6, Math.round((item.count / max) * 100));
+            var nombreMostrar = item.inmobiliaria || 'Sin nombre';
+            return '<div class="bio-lb-row" onclick="verDetallePendientesPoliza(\'' + esc(item.poliza) + '\', \'' + esc(item.inmobiliaria) + '\')">' +
+                '<div class="bio-lb-rank' + rankClass + '">' + rank + '</div>' +
+                '<div class="bio-lb-avatar">' + avatar + '</div>' +
+                '<div class="bio-lb-info">' +
+                    '<div class="bio-lb-name" title="' + esc(nombreMostrar) + '">' + esc(nombreMostrar) + '</div>' +
+                    '<div class="bio-lb-meta">Póliza ' + esc(item.poliza) + '</div>' +
+                    '<div class="bio-lb-track"><div class="bio-lb-fill" style="width:' + pct + '%;"></div></div>' +
+                '</div>' +
+                '<div class="bio-lb-count">' + item.count + '</div>' +
+                '<div class="bio-lb-chevron"><i class="bi bi-chevron-right"></i></div>' +
+                '</div>';
         }).join('');
     }).withFailureHandler(function(e) {
         if (spinner) spinner.style.display = 'none';
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3" style="color:var(--rojo);">Error: ' + esc(e.message) + '</td></tr>';
-    }).obtenerTopPolizasPendientesBiometria();
+        cont.innerHTML = '<div class="text-center py-3" style="color:var(--rojo);">Error: ' + esc(e.message) + '</div>';
+    }).obtenerTopPolizasPendientesBiometria(_faseFiltroBio());
 }
 
 function verDetallePendientesPoliza(poliza, inmobiliaria) {
@@ -1745,7 +1797,7 @@ function verDetallePendientesPoliza(poliza, inmobiliaria) {
         });
     }).withFailureHandler(function(e) {
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
-    }).obtenerDetallePendientesPorPoliza(poliza);
+    }).obtenerDetallePendientesPorPoliza(poliza, _faseFiltroBio());
 }
 
 // === PENDIENTES POR RANGO DE CANON ===
@@ -1789,7 +1841,7 @@ function cargarPendientesPorCanon(desde, hasta) {
     }).withFailureHandler(function(e) {
         if (spinner) spinner.style.display = 'none';
         tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3" style="color:var(--rojo);">Error: ' + esc(e.message) + '</td></tr>';
-    }).obtenerPendientesPorRangoCanon(desde, hasta);
+    }).obtenerPendientesPorRangoCanon(desde, hasta, _faseFiltroBio());
 }
 
 function verDetallePendientesCanon(rangoKey, label) {
@@ -1817,7 +1869,7 @@ function verDetallePendientesCanon(rangoKey, label) {
         });
     }).withFailureHandler(function(e) {
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
-    }).obtenerDetallePendientesPorRangoCanon(rangoKey, _ultimoRangoFechasCanon.desde, _ultimoRangoFechasCanon.hasta);
+    }).obtenerDetallePendientesPorRangoCanon(rangoKey, _ultimoRangoFechasCanon.desde, _ultimoRangoFechasCanon.hasta, _faseFiltroBio());
 }
 
 // === ESTADO SAI AL CIERRE ===
@@ -1832,6 +1884,7 @@ function cargarEstadoCierreSAI() {
 
     var desde = document.getElementById('bioFiltroDesde').value || '';
     var hasta = document.getElementById('bioFiltroHasta').value || '';
+    var faseFiltro = document.getElementById('bioCierreFiltroFase') ? document.getElementById('bioCierreFiltroFase').value : '';
 
     var rangoEl = document.getElementById('bioRangoTextoCierre');
     if (rangoEl) rangoEl.textContent = _fmtRangoBio();
@@ -1845,7 +1898,7 @@ function cargarEstadoCierreSAI() {
     }).withFailureHandler(function(e) {
         if (spinner) spinner.style.display = 'none';
         if (contenido) { contenido.style.display = 'block'; contenido.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem;">Error al cargar estado de cierre: ' + esc(e.message) + '</p>'; }
-    }).obtenerResumenEstadoSAICierre(desde, hasta);
+    }).obtenerResumenEstadoSAICierre(desde, hasta, faseFiltro);
 }
 
 // Colores por estado SAI de cierre — compartido entre el desglose total y el gráfico por día
@@ -2080,6 +2133,7 @@ function verDetalleCierrePorEstado(estado, cantidad) {
     Swal.fire({ title: 'Cargando ' + cantidad + ' solicitudes...', didOpen: function() { Swal.showLoading(); } });
     var desde = document.getElementById('bioFiltroDesde').value || '';
     var hasta = document.getElementById('bioFiltroHasta').value || '';
+    var faseFiltro = document.getElementById('bioCierreFiltroFase') ? document.getElementById('bioCierreFiltroFase').value : '';
     google.script.run.withSuccessHandler(function(detalle) {
         detalle = detalle || [];
         var estadoLabel = estado.replace(/_/g, ' ');
@@ -2110,7 +2164,7 @@ function verDetalleCierrePorEstado(estado, cantidad) {
         window._ultimoDetalleCierreEstadoLabel = estadoLabel;
     }).withFailureHandler(function(e) {
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
-    }).obtenerDetalleCierrePorEstado(desde, hasta, estado);
+    }).obtenerDetalleCierrePorEstado(desde, hasta, estado, faseFiltro);
 }
 
 function exportarDetalleCierrePorEstado() {
@@ -2152,7 +2206,7 @@ function cargarEvolucionCierreSAI() {
     }).withFailureHandler(function(e) {
         if (spinner) spinner.style.display = 'none';
         if (contenido) { contenido.style.display = 'block'; contenido.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem;">Error al cargar evolución: ' + esc(e.message) + '</p>'; }
-    }).obtenerEvolucionCierreSAI(desde, hasta, agrupacion);
+    }).obtenerEvolucionCierreSAI(desde, hasta, agrupacion, _faseFiltroBio());
 }
 
 function renderEvolucionCierreSAI(data, agrupacion) {
@@ -2603,7 +2657,7 @@ function drilldownBio(tipo) {
         });
     }).withFailureHandler(function (e) {
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
-    }).obtenerDetalleBiometriaPorTarjeta(tipo, desde, hasta);
+    }).obtenerDetalleBiometriaPorTarjeta(tipo, desde, hasta, _faseFiltroBio());
 }
 
 function limpiarBusquedaBiometria() {
@@ -2621,10 +2675,12 @@ function limpiarBusquedaBiometria() {
 // no están cacheados en cliente) — si lo único activo era la búsqueda, basta con restaurar
 // "Resultados de Gestión" desde _ultimoGestionPeriodo, sin round-trip al servidor.
 function limpiarBusquedaYFiltrosBiometria() {
-    var habiaFiltroFecha = !!(document.getElementById('bioFiltroDesde').value || document.getElementById('bioFiltroHasta').value);
+    var faseEl = document.getElementById('bioCierreFiltroFase');
+    var habiaFiltro = !!(document.getElementById('bioFiltroDesde').value || document.getElementById('bioFiltroHasta').value || (faseEl && faseEl.value));
     document.getElementById('bioFiltroDesde').value = '';
     document.getElementById('bioFiltroHasta').value = '';
-    if (habiaFiltroFecha) {
+    if (faseEl) faseEl.value = '';
+    if (habiaFiltro) {
         cargarDatosBiometria();
     } else {
         limpiarBusquedaBiometria();

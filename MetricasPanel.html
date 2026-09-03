@@ -650,6 +650,19 @@
                     <label for="bioFiltroHasta" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Hasta</label>
                     <input type="date" id="bioFiltroHasta" class="form-control" style="width:auto;padding:6px 12px !important;font-size:0.8rem;">
                 </div>
+                <div class="d-flex align-items-center gap-2">
+                    <label for="bioCierreFiltroFase" style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">Fase de seguimiento</label>
+                    <select id="bioCierreFiltroFase" class="form-select form-select-sm" style="width:auto;font-size:0.8rem;border-radius:8px;" title="Filtra por fase_seguimiento_biometria: Cascada, Actividad del Período, tendencias, Top Pólizas, Canon y ¿Qué pasó en SAI?. NO afecta Cola de Asignación, Esperando Corte ni Resultados de Gestión (vienen de otras hojas sin esta columna).">
+                        <option value="">Todas las fases</option>
+                        <option value="SIN FASE">Recién capturada (sin fase)</option>
+                        <option value="WA_ENVIADO">WA Enviado</option>
+                        <option value="ESCALADA">Escalada</option>
+                        <option value="ASIGNADA">Asignada</option>
+                        <option value="RESUELTA">Resuelta</option>
+                        <option value="RESUELTA_EN_COLA">Resuelta en Cola</option>
+                        <option value="ARCHIVADA">Archivada</option>
+                    </select>
+                </div>
                 <button class="btn-primary-brand" onclick="cargarDatosBiometria()" style="border-radius:10px;padding:8px 18px;">
                     <i class="bi bi-funnel"></i> Aplicar
                 </button>
@@ -740,8 +753,9 @@
                 <div style="width:1px;align-self:stretch;background:rgba(255,255,255,0.3);"></div>
                 <div style="flex:1;text-align:center;">
                     <div class="bio-conversion-label"><i class="bi bi-telephone me-1"></i>Tasa Conversión Llamada</div>
-                    <div class="bio-conversion-sub">De las llamadas exitosas, % que terminó aprobada</div>
+                    <div class="bio-conversion-sub">De las llamadas exitosas ya verificadas en SAI, % aprobada</div>
                     <div class="bio-conversion-value" id="bioTasaConversionLlamada" style="margin-top:4px;">0%</div>
+                    <div class="bio-conv-badge" id="bioTasaConversionLlamadaSub" style="margin-top:6px;font-size:0.68rem;color:rgba(255,255,255,0.75);"></div>
                 </div>
             </div>
 
@@ -768,8 +782,8 @@
             <div id="bioAnclaTopPolizas" class="table-container mb-4" style="border-left:4px solid #d97706;">
                 <div class="table-header">
                     <div>
-                        <div class="table-title"><i class="bi bi-building me-2" style="color:#d97706;"></i>Top 10 Inmobiliarias con Más Pendientes<span class="btn-help-chart" onclick="ayudaGrafico('bioTopPolizas')">?</span></div>
-                        <div class="table-sub">Pólizas con mayor volumen de biometrías sin resolver (en vivo)</div>
+                        <div class="table-title"><i class="bi bi-building me-2" style="color:#d97706;"></i>Top 10 Inmobiliarias con Más Pendientes <span id="bioTopPolizasFaseTexto" class="bio-rango-badge"></span><span class="btn-help-chart" onclick="ayudaGrafico('bioTopPolizas')">?</span></div>
+                        <div class="table-sub" id="bioTopPolizasSub">Pólizas con mayor volumen de biometrías sin resolver (en vivo)</div>
                     </div>
                     <button class="btn-outline-brand" onclick="cargarTopPolizasBiometria()" style="padding:6px 14px;font-size:0.75rem;border-radius:8px;"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
                 </div>
@@ -777,12 +791,7 @@
                     <div class="spinner-border spinner-border-sm" role="status" style="color:#d97706;"></div>
                     <span class="ms-2 text-muted" style="font-size:0.8rem;">Cargando...</span>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle" style="font-size:0.82rem;width:100%;">
-                        <thead><tr><th class="text-center" style="width:40px;">#</th><th>Póliza</th><th>Inmobiliaria</th><th class="text-center">Pendientes</th><th class="text-center" style="width:60px;">Detalle</th></tr></thead>
-                        <tbody id="cuerpoTopPolizasBio"><tr><td colspan="5" class="text-center py-3" style="color:var(--text-light);">Cargando...</td></tr></tbody>
-                    </table>
-                </div>
+                <div id="cuerpoTopPolizasBio" class="bio-lb-list"><div class="text-center py-3" style="color:var(--text-light);">Cargando...</div></div>
             </div>
 
             <!-- Modal detalle por póliza se muestra con SweetAlert2 al hacer click -->
