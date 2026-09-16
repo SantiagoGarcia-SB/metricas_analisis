@@ -110,46 +110,6 @@ var DEFAULT_AGENT_CONFIG = {
 };
 
 // ============================================================================
-// BIGQUERY — Configuración de sincronización
-// ============================================================================
-
-var BQ_CONFIG = {
-  PROJECT_ID: 'proyecto-ia-servicios-bolivar',
-  DATASET_ID: 'analisis_arrendamiento',
-  TABLE_ID: 'gestiones_unificadas'
-};
-
-var BQ_SCHEMA = [
-  'solicitud', 'poliza', 'identificacion', 'tipo_identificacion',
-  'nombre_inquilino', 'correo_inquilino', 'telefono_inquilino',
-  'ingresos', 'fecha_expedicion', 'canon', 'cuota', 'direccion',
-  'destino_inmueble', 'ciudad', 'nombre_asesor', 'correo_asesor',
-  'estado', 'fecha_radicacion', 'fecha_resultado', 'descripcion_resultado',
-  'clase', 'digital_uar', 'biometria', 'observaciones',
-  'fecha_asignacion', 'correo_analista', 'fecha_fin', 'nombre_analista',
-  'motivo_aplazamiento', 'motivo_negacion', 'canal',
-  'minutos_cola', 'minutos_gestion', 'minutos_general',
-  'reasignacion', 'tipo_asignado',
-  'codeudor1_nombre', 'codeudor1_documento', 'codeudor1_tipo_doc',
-  'codeudor1_email', 'codeudor1_telefono', 'codeudor1_estado', 'codeudor1_resultado',
-  'codeudor2_nombre', 'codeudor2_documento', 'codeudor2_tipo_doc',
-  'codeudor2_email', 'codeudor2_telefono', 'codeudor2_estado', 'codeudor2_resultado',
-  'codeudor3_nombre', 'codeudor3_documento', 'codeudor3_tipo_doc',
-  'codeudor3_email', 'codeudor3_telefono', 'codeudor3_estado', 'codeudor3_resultado',
-  'origen', 'sucursal',
-  'tracking', 'fecha_consulta_sai', 'fecha_envio_broadcast', 'estado_broadcast', 'nuevo_estado_sai',
-  'bio_destino_1_rol', 'bio_destino_1_nombre', 'bio_destino_1_telefono',
-  'bio_destino_2_rol', 'bio_destino_2_nombre', 'bio_destino_2_telefono',
-  'bio_destino_3_rol', 'bio_destino_3_nombre', 'bio_destino_3_telefono',
-  'bio_destino_4_rol', 'bio_destino_4_nombre', 'bio_destino_4_telefono',
-  'es_gestionada', 'estado_label', 'fecha_cierre', 'fuera_sla', 'es_backlog',
-  'tipo_solicitud', 'horas_general', 'dentro_sla', 'es_aprobado_num', 'es_rechazado_num', 'es_aplazado_num',
-  'es_estado_definitivo', 'es_rechazado_sai',
-  'inmobiliaria', 'segmento', 'hora_cierre', 'fecha_fin_completa',
-  't_general_fmt', 't_cola_fmt', 't_gestion_fmt'
-];
-
-// ============================================================================
 // SAI — Configuración de consulta de rechazados
 // ============================================================================
 

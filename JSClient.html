@@ -493,29 +493,29 @@ var _ayudaTextos={
     comparativaAnalistas:{t:'Comparativa de Analistas',d:'Una barra por analista, siempre sumando 100%: verde = % Aprobación, rojo = % Negación, ámbar = % Aplazamiento. Ordenadas de mayor a menor % de negación, para que los casos que más llaman la atención queden arriba. Muestra a todos los analistas del rango a la vez — el selector de la sección de abajo (Tendencia y Motivos) es para aislar a uno puntual, este gráfico no se filtra por ese selector.'},
     tendenciaMotivos:{t:'Tendencia y Motivos de Decisión',d:'El selector "Analista" controla los tres gráficos a la vez. Con "Todo el equipo" ves el agregado; al elegir un analista, los tres se filtran solo a sus casos.<br><br><b>Línea de tendencia</b> — %Aprobación, %Negación y %Aplazamiento por día. Útil para ver si una tasa se está moviendo con el tiempo, no solo cuánto vale hoy.<br><br><b>Top motivos</b> — de todos los casos negados/aplazados en el rango, cuáles razones específicas se repiten más. Responde "por qué" está subiendo la tasa, no solo "cuánto".'},
     rendimientoIndividual:{t:'Rendimiento Individual',d:'Tabla de métricas por analista para el rango de fechas seleccionado arriba (mismo filtro que el resto de la pestaña). Cada columna aporta una dimensión de análisis:<br><br><b>Total / % Aprob. / % Neg. / % Aplaz.</b> — volumen gestionado y distribución de resultados. Una tasa alta de negaciones puede reflejar criterio restrictivo o baja calidad en los expedientes recibidos.<br><br><b>T. Gestión</b> — tiempo promedio desde la asignación hasta el cierre. Mide la velocidad real de trabajo del analista una vez tiene la solicitud en mano.<br><br><b>T. General</b> — tiempo desde la radicación hasta el cierre. Si es muy superior al T. Gestión, la solicitud esperó mucho en cola antes de ser asignada.<br><br><b>Ritmo/h</b> — solicitudes por hora calculadas entre la primera y la última gestión del día. Refleja la velocidad cuando el analista está activo. Un valor alto indica trabajo ágil en el tramo productivo.<br><br><b>Prod/h</b> — solicitudes totales divididas entre las horas de turno transcurridas. Si es notablemente menor que el Ritmo/h, el analista tuvo períodos prolongados sin gestionar.<br><br><b>Fuera SLA</b> — solicitudes con T. General mayor a 2 horas. Un número alto en un analista puede indicar casos complejos o tiempos de espera elevados previos a la asignación.<br><br>El botón <i class="bi bi-bar-chart-steps"></i> muestra la distribución de gestiones hora a hora.'},
-    bioTasaConversion:{t:'Tasa de Conversión',d:'% de los WhatsApp enviados que el cliente resolvió solo, sin necesitar un analista.'},
+    bioTasaConversion:{t:'Tasa de Conversión',d:'De las solicitudes consultadas en el rango y que recibieron WhatsApp, qué porcentaje está resuelto sin necesitar un analista.'},
     bioEscaladas:{t:'Cola de Asignación',d:'Solicitudes esperando que un analista las tome, en este momento.'},
     bioEsperandoCorte:{t:'Esperando Próximo Corte',d:'Ya se les envió el WhatsApp. Esperan el corte de las 8am o 12pm para saber si se resolvieron o hay que escalarlas.'},
     bioSeccionEnVivo:{t:'En Vivo',d:'El estado del proceso ahora mismo — no cambia según la fecha que elijas arriba.'},
-    bioSeccionCascada:{t:'Cascada Estricta del Período',d:'Sigue a las solicitudes consultadas en el rango elegido y en qué quedó cada una: <b>Sin Iniciar</b> + <b>Resueltas sin WA</b> + <b>Ya Enviadas</b> siempre suman exactamente el total de <b>Consultadas SAI</b> del mismo período — es la misma torta, dividida en 3.'},
-    bioSeccionCiclo:{t:'Ciclo del Período',d:'Todo lo que pasó en el rango elegido, sin importar cuándo entró cada solicitud (puede incluir casos de días anteriores). No tiene que cuadrar con la Cascada de arriba.'},
+    bioSeccionCascada:{t:'Cohorte del Período',d:'Sigue a las solicitudes consultadas en el rango elegido y en qué quedó cada una: <b>Sin Iniciar</b> + <b>Resueltas sin WA</b> + <b>Ya Enviadas</b> siempre suman exactamente el total de <b>Consultadas SAI</b> del mismo período.'},
+    bioSeccionCiclo:{t:'Resultados de la Cohorte',d:'El estado actual de las solicitudes consultadas en el rango elegido. Todas las tarjetas y gráficas usan <b>fecha_consulta_sai</b>, por lo que son comparables con la cascada.'},
     bioConsultadas:{t:'Consultadas SAI',d:'Solicitudes que trajo el API de SAI en el rango de fechas seleccionado.'},
     bioCascadaSinIniciar:{t:'Sin Iniciar',d:'De lo consultado en el rango, cuántas aún no cumplen las 4 horas para su primer contacto.'},
     bioCascadaResueltasSinWA:{t:'Resueltas sin WA',d:'De lo consultado en el rango, cuántas ya se resolvieron solas, sin necesitar WhatsApp.'},
     bioCascadaEnviadas:{t:'Ya Enviadas',d:'De lo consultado en el rango, cuántas ya tienen el WhatsApp enviado.'},
-    bioActEnviados:{t:'WA Enviados',d:'Mensajes de WhatsApp enviados en el rango, sin importar cuándo entró la solicitud.'},
-    bioActResueltasWA:{t:'Resueltas por WhatsApp',d:'De los WhatsApp enviados en el rango, cuántos ya se resolvieron. Es el numerador de la Tasa de Conversión.'},
-    bioActResueltasSinWA:{t:'Resueltas sin WhatsApp',d:'Cuántas se resolvieron solas en el rango, sin WhatsApp, sin importar cuándo entraron.'},
-    bioActEscaladas:{t:'Escaladas a Análisis',d:'De los WhatsApp enviados en el rango, cuántos siguen sin resolver y pasan a un analista.'},
+    bioActEnviados:{t:'WA Enviados',d:'De las solicitudes consultadas en el rango, cuántas ya tienen un WhatsApp enviado.'},
+    bioActResueltasWA:{t:'Resueltas por WhatsApp',d:'De las solicitudes consultadas en el rango que recibieron WhatsApp, cuántas ya se resolvieron.'},
+    bioActResueltasSinWA:{t:'Resueltas sin WhatsApp',d:'De las solicitudes consultadas en el rango, cuántas se resolvieron sin WhatsApp.'},
+    bioActEscaladas:{t:'Escaladas a Análisis',d:'De las solicitudes consultadas en el rango, cuántas están o estuvieron en cola de análisis.'},
     bioTopPolizas:{t:'Top 10 Inmobiliarias con Más Pendientes',d:'Ranking en vivo (no depende del filtro de fechas) de las pólizas con más casos sin resolver: fase vacía (recién capturada), WA Enviado o Escalada. No incluye casos ya asignados a un analista, resueltos ni archivados.'},
-    bioEfectividad:{t:'Resultado del Broadcast',d:'Qué pasó cada día:<br><b>Resuelta por WA:</b> el cliente completó la biometría tras el mensaje.<br><b>Resuelta sin WhatsApp:</b> se resolvió antes del mensaje.<br><b>Escalada:</b> no funcionó el mensaje, pasa a un analista.'},
-    bioTendencia:{t:'Tendencia Diaria',d:'Evolución día a día de consultadas, enviados, resueltas y escaladas — cada una en su propio día real.'},
-    bioTasaTendencia:{t:'Tasa de Conversión en el Tiempo',d:'% diario de mensajes que terminaron en biometría resuelta. Verde = buena conversión (≥50%), naranja = baja.'},
-    bioResLlamada:{t:'Resultado de Llamada',d:'Cuántas llamadas de analistas lograron contacto con el cliente vs cuántas no contestó.'},
-    bioResFinal:{t:'Resultado Final',d:'Aprobado, Rechazado o Aplazado de lo gestionado. Se actualiza al cierre del día, así que "Hoy" en pleno día puede verse incompleto.'},
+    bioEfectividad:{t:'Resultado de la Cohorte',d:'Estado actual, por fecha de consulta SAI:<br><b>Resuelta por WA:</b> el cliente completó la biometría tras el mensaje.<br><b>Resuelta sin WhatsApp:</b> se resolvió antes del mensaje.<br><b>Escalada:</b> no funcionó el mensaje y pasó a un analista.'},
+    bioTendencia:{t:'Tendencia Diaria',d:'Evolución diaria de la cohorte según fecha de consulta SAI: consultadas, enviadas, resueltas y escaladas.'},
+    bioTasaTendencia:{t:'Tasa de Conversión en el Tiempo',d:'% de solicitudes consultadas cada día que recibieron WhatsApp y terminaron resueltas. Verde = buena conversión (≥50%), naranja = baja.'},
+    bioResLlamada:{t:'Resultado de Llamada',d:'Resultado de las llamadas asociadas a solicitudes consultadas en el rango: contacto con el cliente vs no contestó.'},
+    bioResFinal:{t:'Resultado Final',d:'Aprobado, Rechazado o Aplazado de las gestiones de la cohorte seleccionada. Se actualiza al cierre del día, así que "Hoy" en pleno día puede verse incompleto.'},
     bioMotivos:{t:'Motivos de Aplazamiento',d:'Por qué se aplazaron las solicitudes: agotó intentos, error en la página, cliente no desea continuar, etc.'},
-    bioGestion:{t:'Resultados de Gestión',d:'Casos que el WhatsApp no resolvió y terminaron con un analista: resultado de la llamada y resultado final.'},
-    bioTasaConversionLlamada:{t:'Tasa de Conversión — ¿Sirve la llamada?',d:'De las llamadas donde SÍ se logró contacto (OK Llamada) y que YA tienen un resultado verificado en SAI (aprobado o no), qué % terminó aprobado. Usa el estado real en SAI al cierre, no lo que el analista alcanza a marcar en el momento de la llamada — la biometría toma tiempo en resolverse, así que ese estado inicial casi siempre es "Aplazado". Las llamadas contactadas que SAI todavía no ha verificado no cuentan ni suman ni restan a esta tasa.'},
+    bioGestion:{t:'Resultados de Gestión',d:'Llamadas y resultados de solicitudes de biometría cuya fecha de consulta SAI está en el rango seleccionado.'},
+    bioTasaConversionLlamada:{t:'Tasa de Conversión — ¿Sirve la llamada?',d:'De las llamadas de la cohorte seleccionada donde SÍ se logró contacto (OK Llamada) y que YA tienen un resultado verificado en SAI (aprobado o no), qué % terminó aprobado. Usa el estado real en SAI al cierre, no lo que el analista alcanza a marcar en el momento de la llamada. Las llamadas contactadas que SAI todavía no ha verificado no cuentan ni suman ni restan a esta tasa.'},
     bioEstadoCierrePorDia:{t:'Estado SAI por Día',d:'El mismo desglose de estado en SAI (Aprobado, Pendiente, Rechazado, En Estudio…), pero un día a la vez, agrupado por la fecha en que se consultó cada solicitud. Si no filtras arriba, se muestra la última semana; si eliges un rango, el gráfico se ajusta a ese rango.'},
     bioRangoCanon:{t:'Pendientes por Rango de Canon',d:'Todas las biometrías que llegaron en el rango de fechas elegido arriba, clasificadas por el valor del canon mensual: $0-$4.999.999, $5.000.000-$14.999.999 y mayor a $15.000.000. Incluye el caso sin importar si ya se resolvió, se escaló a un analista o se archivó — sirve para priorizar la revisión por el valor del canon, no solo por lo que sigue sin resolver en este momento.'}
 };
@@ -1686,7 +1686,8 @@ function onDatosBiometriaCargados(d) {
     renderBioDesgloseCascada(d);
     renderBioDesgloseCola(d);
 
-    // Tasa de Conversión = Resueltas por WhatsApp / Enviados, mismo grupo (por fecha de envío).
+    // Todas las tasas del banner usan la cohorte de fecha_consulta_sai.
+    // Tasa de Conversión = Resueltas por WhatsApp / Enviadas dentro de la misma cohorte.
     // Es la única de las 3 tasas del banner con meta de negocio definida en la app (≥50%, mismo
     // umbral que usa la Tendencia diaria), así que es la única que recibe insignia de color —
     // el banner ya no cambia de color completo por un solo KPI de los tres que muestra.
@@ -1696,9 +1697,8 @@ function onDatosBiometriaCargados(d) {
     convBadge.textContent = convOk ? 'Meta ≥50% — cumple' : 'Meta ≥50% — no cumple';
     convBadge.className = 'bio-conv-badge ' + (convOk ? 'bio-conv-badge-good' : 'bio-conv-badge-bad');
 
-    // Tasa Resolución sin WA = de las CONSULTADAS en el rango (cohorte por fecha de consulta),
-    // % que terminó resuelta sin WA — usa cohorteResueltasSinWA, no resueltasSinWA (esa cuenta
-    // por fecha de actualización de fase, una población distinta a totalConsultadas).
+    // Tasa Resolución sin WA = de las CONSULTADAS en el rango, porcentaje que terminó resuelta sin WA.
+    // Los contadores del período comparten la misma cohorte de fecha_consulta_sai.
     var tasaResSinWA = d.totalConsultadas > 0 ? Math.round((d.cohorteResueltasSinWA / d.totalConsultadas) * 1000) / 10 : 0;
     document.getElementById('bioTasaResolucionSinWA').textContent = tasaResSinWA + '%';
 

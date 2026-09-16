@@ -630,8 +630,8 @@ function _construirEmailResumenDiario(diagnostico, datosBio, datosCola, titulo, 
     var ges = bio.gestion || {};
     html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
     html += '<h2 style="margin:0 0 16px;font-size:16px;font-weight:800;color:#253150;border-bottom:2px solid #d1fae5;padding-bottom:10px;">&#129302; Reporte Biometría del Día</h2>';
-    html += '<div style="font-size:13px;font-weight:700;color:#059669;margin-bottom:2px;">Ciclo de Broadcast (WhatsApp)</div>';
-    html += '<div style="font-size:11px;color:#706F6F;margin-bottom:10px;">Cola y Esperando Próximo Corte son en vivo (no dependen del día). El resto es actividad real de hoy — Tasa Conversión = Resueltas por WA ÷ WA Enviados, sin pasar por analista.</div>';
+    html += '<div style="font-size:13px;font-weight:700;color:#059669;margin-bottom:2px;">Cohorte de Biometría (WhatsApp)</div>';
+    html += '<div style="font-size:11px;color:#706F6F;margin-bottom:10px;">Cola y Esperando Próximo Corte son en vivo (no dependen del día). El resto corresponde a las solicitudes consultadas hoy en SAI; Tasa Conversión = Resueltas por WA ÷ WA enviados de esa cohorte.</div>';
     html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
     var bioKpis = [
       { label: "Cola de Asignación (en vivo)", value: bio.colaActual, color: "#d97706", bg: "#fffbeb" },
@@ -979,9 +979,9 @@ function _construirEmailReporteBiometria(bio, fecha, datosCierre, topPolizas, da
   html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="8"><tr>';
   var tasaResSinWA = bio.totalConsultadas > 0 ? Math.round((bio.cohorteResueltasSinWA / bio.totalConsultadas) * 1000) / 10 : 0;
   [
-    { l: "Tasa Conversión WA", v: bio.tasaConversion + "%", c: convColor, b: convBg, s: "De los WA enviados, % que se resolvió solo con el mensaje" },
-    { l: "Tasa Resolución sin WA", v: tasaResSinWA + "%", c: "#059669", b: "#ecfdf5", s: "De las capturadas, % que se resolvió sin necesitar mensaje" },
-    { l: "Conversión Llamada", v: (ges.tasaConversionLlamada || 0) + "%", c: "#253150", b: "#f0f4ff", s: "De las llamadas exitosas ya verificadas en SAI, % aprobada" }
+    { l: "Tasa Conversión WA", v: bio.tasaConversion + "%", c: convColor, b: convBg, s: "De la cohorte consultada que recibió WA, % resuelta solo con el mensaje" },
+    { l: "Tasa Resolución sin WA", v: tasaResSinWA + "%", c: "#059669", b: "#ecfdf5", s: "De la cohorte consultada, % resuelta sin necesitar mensaje" },
+    { l: "Conversión Llamada", v: (ges.tasaConversionLlamada || 0) + "%", c: "#253150", b: "#f0f4ff", s: "De las llamadas exitosas de la cohorte verificadas en SAI, % aprobada" }
   ].forEach(function(ki) {
     html += '<td width="33%" style="text-align:center;padding:16px 8px;background:' + ki.b + ';border-radius:10px;">';
     html += '<div style="font-size:10px;font-weight:700;color:#706F6F;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">' + ki.l + '</div>';
@@ -1003,18 +1003,18 @@ function _construirEmailReporteBiometria(bio, fecha, datosCierre, topPolizas, da
 
   // Narrativa
   html += '<tr><td style="background:#fff;padding:24px 32px;border-bottom:2px solid #f0f2f5;">';
-  html += '<h2 style="margin:0 0 12px;font-size:16px;font-weight:800;color:#253150;">&#128202; Así se movió la biometría hoy</h2>';
+  html += '<h2 style="margin:0 0 12px;font-size:16px;font-weight:800;color:#253150;">&#128202; Estado de la cohorte consultada hoy</h2>';
   html += '<p style="margin:0 0 20px;font-size:13px;color:#334155;line-height:1.7;">';
   html += 'Hoy el sistema consultó <strong>' + bio.totalConsultadas + ' solicitudes</strong> en SAI. ';
-  html += 'De esas, <strong>' + bio.totalSinIniciar + ' están esperando</strong> que se cumplan las 4 horas para enviarles el WhatsApp. ';
-  html += 'Ya <strong>enviamos ' + bio.totalEnviados + ' mensajes</strong> de WhatsApp a clientes pidiéndoles que completen la biometría.</p>';
+  html += 'De esa cohorte, <strong>' + bio.totalSinIniciar + ' están esperando</strong> que se cumplan las 4 horas para enviarles el WhatsApp. ';
+  html += '<strong>' + bio.totalEnviados + ' ya tienen mensaje de WhatsApp enviado</strong>.</p>';
   html += '<p style="margin:0 0 20px;font-size:13px;color:#334155;line-height:1.7;">';
-  html += 'De las capturadas, <strong>' + bio.resueltasSinWA + ' se resolvieron solas</strong> sin necesitar el mensaje de WhatsApp. ';
-  html += 'De las que sí recibieron WA, <strong>' + bio.enviadasYResueltas + ' se resolvieron tras el mensaje</strong> sin necesidad de escalar a un analista (tasa de conversión: ' + bio.tasaConversion + '%).</p>';
+  html += 'De las consultadas hoy, <strong>' + bio.cohorteResueltasSinWA + ' se resolvieron solas</strong> sin necesitar el mensaje de WhatsApp. ';
+  html += 'De las que sí recibieron WA, <strong>' + bio.enviadasYResueltas + ' están resueltas</strong> sin necesidad de escalar a un analista (tasa de conversión: ' + bio.tasaConversion + '%).</p>';
   html += '<p style="margin:0 0 20px;font-size:13px;color:#334155;line-height:1.7;">';
-  html += 'De esos WhatsApp enviados, <strong>' + bio.esperandoCorte + ' están esperando</strong> el próximo corte (8am/12pm) para revisar si el cliente ya hizo la biometría o si toca escalarlo.</p>';
+  html += 'De la misma cohorte, <strong>' + bio.cohorteEnEspera + ' están esperando</strong> el próximo corte (8am/12pm) para revisar si el cliente ya hizo la biometría o si toca escalarlo.</p>';
   html += '<p style="margin:0 0 20px;font-size:13px;color:#334155;line-height:1.7;">';
-  html += 'De las que ya pasaron por el corte: <strong>' + bio.totalEscaladas + ' se enviaron a la cola</strong> de análisis. ';
+  html += 'De las solicitudes consultadas hoy que pasaron por el corte: <strong>' + bio.totalEscaladas + ' están en cola o ya pasaron por ella</strong>. ';
   html += 'De esas, <strong>' + bio.totalAsignadas + ' las tomó un analista</strong>';
   if (bio.totalArchivadas > 0) html += ' y <strong>' + bio.totalArchivadas + ' se archivaron</strong> (más de 12h en cola sin ser asignadas)';
   if (bio.totalResueltasEnCola > 0) html += '. <strong>' + bio.totalResueltasEnCola + ' se resolvieron en cola</strong> sin necesitar analista';

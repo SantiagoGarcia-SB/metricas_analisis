@@ -134,20 +134,16 @@ function _gestionVacia() {
 }
 
 /**
- * Motor común del panel "Resultados de Gestión": agrega Historico_Gestiones
- * filtrado por tipoAsignado=DESAPLAZAMIENTO.
- * `incluirFila(fila, fechaDia)` decide qué filas cuentan.
+ * Agrega Historico_Gestiones de desaplazamiento a la cohorte de fecha de consulta SAI.
+ * Solo se incluyen gestiones cerradas con una solicitud asociada a la cohorte elegida.
  *
  * @param {string[][]} dataH - Datos de Historico_Gestiones (con headers)
- * @param {function} incluirFila - Función filtro (fila, fechaDiaISO) → boolean
- * @param {Object} [mapaEstadoCierre] - Mapa solicitud → estado_sai_cierre normalizado (ver obtenerDatosBiometria).
- *   Se usa para saber el resultado REAL en SAI de las llamadas contactadas (OK LLAMADA), en vez del
- *   estado_general que el analista deja al cerrar la gestión — que casi siempre es "APLAZADO" porque
- *   la biometría física/digital todavía no se ha hecho en ese momento.
- * @returns {Object} Objeto de gestión con KPIs y tendencia
+ * @param {function} obtenerFechaConsulta - Retorna la fecha ISO de cohorte para una fila o cadena vacía.
+ * @param {Object} [mapaEstadoCierre] - Mapa solicitud → estado_sai_cierre normalizado.
+ * @returns {Object} Objeto de gestión con KPIs y tendencia por fecha de consulta SAI.
  * @private
  */
-function _agregarGestionBiometria(dataH, incluirFila, mapaEstadoCierre) {
+function _agregarGestionBiometria(dataH, obtenerFechaConsulta, mapaEstadoCierre) {
   var gestion = _gestionVacia();
   var gesTendMap = {};
   mapaEstadoCierre = mapaEstadoCierre || {};
@@ -161,25 +157,21 @@ function _agregarGestionBiometria(dataH, incluirFila, mapaEstadoCierre) {
     var fechaFinH = String(dataH[g][COL_HISTORICO.FECHA_FIN] || "").trim();
     if (!fechaFinH) continue;
 
-    var fechaFinParte = fechaFinH.split(" ")[0];
-    var fechaDia = normalizarFechaISO(fechaFinParte);
-    if (!fechaDia) continue;
-
-    if (!incluirFila(dataH[g], fechaDia)) continue;
+    var solicitudH = String(dataH[g][COL_HISTORICO.SOLICITUD] || "").trim();
+    var fechaConsulta = obtenerFechaConsulta(dataH[g], solicitudH);
+    if (!fechaConsulta) continue;
 
     gestion.total++;
 
-    if (!gesTendMap[fechaDia]) gesTendMap[fechaDia] = { okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0 };
+    if (!gesTendMap[fechaConsulta]) gesTendMap[fechaConsulta] = { okLlamada: 0, noContesto: 0, aprobadas: 0, negadas: 0, aplazadas: 0 };
 
     // Columna 38 es resultado de llamada (no está en COL_HISTORICO por ser específica de biometría)
     var resLlamada = String(dataH[g][38] || "").toUpperCase().trim();
-    if (resLlamada === "OK LLAMADA") { gestion.okLlamada++; gesTendMap[fechaDia].okLlamada++; }
-    else if (resLlamada === "NO CONTESTO") { gestion.noContesto++; gesTendMap[fechaDia].noContesto++; }
+    if (resLlamada === "OK LLAMADA") { gestion.okLlamada++; gesTendMap[fechaConsulta].okLlamada++; }
+    else if (resLlamada === "NO CONTESTO") { gestion.noContesto++; gesTendMap[fechaConsulta].noContesto++; }
 
-    // Resultado real en SAI (al cierre) de las llamadas contactadas — no el estado_general
-    // que queda al cerrar la gestión, que todavía no refleja la biometría (aún no hecha).
+    // Resultado real en SAI al cierre de las llamadas contactadas.
     if (resLlamada === "OK LLAMADA") {
-      var solicitudH = String(dataH[g][COL_HISTORICO.SOLICITUD] || "").trim();
       var estadoCierreH = mapaEstadoCierre[solicitudH];
       if (!estadoCierreH) gestion.llamadaSinVerificarSAI++;
       else if (estadoCierreH === "APROBADO") gestion.llamadaAprobadaSAI++;
@@ -187,10 +179,10 @@ function _agregarGestionBiometria(dataH, incluirFila, mapaEstadoCierre) {
     }
 
     var resFinal = String(dataH[g][COL_HISTORICO.ESTADO_GENERAL] || "").toUpperCase().trim();
-    if (resFinal === "APROBADO") { gestion.aprobadas++; gesTendMap[fechaDia].aprobadas++; }
-    else if (resFinal === "RECHAZADO") { gestion.negadas++; gesTendMap[fechaDia].negadas++; }
+    if (resFinal === "APROBADO") { gestion.aprobadas++; gesTendMap[fechaConsulta].aprobadas++; }
+    else if (resFinal === "RECHAZADO") { gestion.negadas++; gesTendMap[fechaConsulta].negadas++; }
     else if (resFinal === "APLAZADO") {
-      gestion.aplazadas++; gesTendMap[fechaDia].aplazadas++;
+      gestion.aplazadas++; gesTendMap[fechaConsulta].aplazadas++;
       var motivo = String(dataH[g][COL_HISTORICO.MOTIVO_APLAZAMIENTO] || "").trim();
       if (motivo) gestion.motivos[motivo] = (gestion.motivos[motivo] || 0) + 1;
     }
@@ -348,16 +340,14 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta, faseFiltro) {
     var colMap = _construirColMapBiometria(headers);
 
     var cFC = colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_CONSULTA_SAI] : -1;
-    var cFE = colMap[COL_BIOMETRIA.HEADER_FECHA_ENVIO_BROADCAST] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_ENVIO_BROADCAST] : -1;
-    var cFA = colMap[COL_BIOMETRIA.HEADER_FECHA_ACTUALIZACION_FASE] != null ? colMap[COL_BIOMETRIA.HEADER_FECHA_ACTUALIZACION_FASE] : -1;
     var cEB = colMap[COL_BIOMETRIA.HEADER_ESTADO_BROADCAST] != null ? colMap[COL_BIOMETRIA.HEADER_ESTADO_BROADCAST] : -1;
     var cFS = colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] != null ? colMap[COL_BIOMETRIA.HEADER_FASE_SEGUIMIENTO] : -1;
     var cEstadoCierre = colMap['estado_sai_cierre'] != null ? colMap['estado_sai_cierre'] : -1;
 
-    // Mapa solicitud → estado real en SAI al cierre (reconsulta diaria). Se arma aquí,
-    // reutilizando esta misma lectura de la hoja, para cruzarlo luego contra
-    // Historico_Gestiones sin tener que releer la hoja de biometría.
+    // Mapas de la fuente maestra para cruzar la gestión con la misma cohorte
+    // temporal que usa todo el panel: fecha_consulta_sai.
     var mapaEstadoCierre = {};
+    var mapaConsultaPorSolicitud = {};
 
     var totalConsultadas = 0, totalEnviados = 0, totalNoEnviados = 0;
     var totalSinIniciar = 0, totalEnEspera = 0, totalEscaladas = 0;
@@ -396,63 +386,83 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta, faseFiltro) {
       }
 
       var consultaParte = cFC >= 0 ? _fechaParteISO(String(data[i][cFC] || "").trim()) : "";
-      var envioParte = cFE >= 0 ? _fechaParteISO(String(data[i][cFE] || "").trim()) : "";
-      var faseParte = cFA >= 0 ? _fechaParteISO(String(data[i][cFA] || "").trim()) : "";
+      if (consultaParte && !mapaConsultaPorSolicitud[solicitud]) mapaConsultaPorSolicitud[solicitud] = consultaParte;
+
       var estadoBrod = cEB >= 0 ? String(data[i][cEB] || "").toUpperCase().trim() : "";
       var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
       var fueEnviado = _fueEnviadoBio(estadoBrod);
 
-      // Conteos en vivo (sin filtro de fecha NI de fase — son el estado actual real,
-      // independiente de cualquier filtro que el usuario aplique arriba)
+      // Conteos en vivo: conservan su naturaleza operativa y no dependen del rango.
       if (fase === "") liveFaltanRevisar++;
       else if (fase === "WA_ENVIADO") liveEsperandoCorte++;
 
-      // Filtro de fase (opcional) — de aquí en adelante todo (cascada, ciclo, tendencia)
-      // respeta la fase elegida. mapaEstadoCierre ya se armó arriba sin este filtro,
-      // porque lo usa también la sección "¿Qué pasó en SAI?", que tiene su propio filtro.
       if (filtroFaseNorm && (fase || 'SIN FASE') !== filtroFaseNorm) continue;
 
-      // --- Métricas por fecha de consulta (cohorte) ---
+      // Todas las métricas de período se anclan a fecha_consulta_sai.
       var consultaNorm = consultaParte.replace(/-/g, '');
-      if (_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) {
-        totalConsultadas++;
-        _bucket(consultaParte, 'consultadas');
-        if (fase === "") { totalSinIniciar++; _bucket(consultaParte, 'sinIniciar'); }
-        else if (fase === "RESUELTA" && !fueEnviado) { cohorteResueltasSinWA++; }
-        else {
-          cohorteEnviadas++;
-          if (fase === "WA_ENVIADO") cohorteEnEspera++;
-          else if (fase === "RESUELTA") cohorteResueltasConWA++;
-          else if (fase === "ESCALADA") cohorteEscaladas++;
-          else if (fase === "ASIGNADA") { cohorteEscaladas++; cohorteAsignadas++; }
-          else if (fase === "RESUELTA_EN_COLA") { cohorteEscaladas++; cohorteResueltasEnCola++; }
-          else if (fase === "ARCHIVADA") { cohorteEscaladas++; cohorteArchivadas++; }
-        }
+      if (!_enRangoBio(consultaNorm, filtroDesde, filtroHasta)) continue;
+
+      totalConsultadas++;
+      _bucket(consultaParte, 'consultadas');
+
+      if (fase === "") {
+        totalSinIniciar++;
+        _bucket(consultaParte, 'sinIniciar');
+      } else if (fase === "RESUELTA" && !fueEnviado) {
+        cohorteResueltasSinWA++;
+      } else {
+        cohorteEnviadas++;
+        if (fase === "WA_ENVIADO") cohorteEnEspera++;
+        else if (fase === "RESUELTA") cohorteResueltasConWA++;
+        else if (fase === "ESCALADA") cohorteEscaladas++;
+        else if (fase === "ASIGNADA") { cohorteEscaladas++; cohorteAsignadas++; }
+        else if (fase === "RESUELTA_EN_COLA") { cohorteEscaladas++; cohorteResueltasEnCola++; }
+        else if (fase === "ARCHIVADA") { cohorteEscaladas++; cohorteArchivadas++; }
       }
 
-      // --- Métricas por fecha de envío ---
-      var envioNorm = envioParte.replace(/-/g, '');
-      if (_enRangoBio(envioNorm, filtroDesde, filtroHasta)) {
+      if (fueEnviado) {
+        totalEnviados++;
+        _bucket(consultaParte, 'enviados');
+      } else {
+        totalNoEnviados++;
+      }
+
+      if (fase === "WA_ENVIADO") {
+        totalEnEspera++;
+        _bucket(consultaParte, 'enEspera');
+      } else if (fase === "ESCALADA") {
+        totalEscaladas++;
+        totalEnColaPendiente++;
+        _bucket(consultaParte, 'escaladas');
+      } else if (fase === "ASIGNADA") {
+        totalEscaladas++;
+        totalAsignadas++;
+        _bucket(consultaParte, 'escaladas');
+        _bucket(consultaParte, 'asignadas');
+      } else if (fase === "RESUELTA_EN_COLA") {
+        totalEscaladas++;
+        totalResueltasEnCola++;
+        _bucket(consultaParte, 'escaladas');
+        _bucket(consultaParte, 'resueltasEnCola');
+      } else if (fase === "ARCHIVADA") {
+        totalEscaladas++;
+        totalArchivadas++;
+        _bucket(consultaParte, 'escaladas');
+        _bucket(consultaParte, 'archivadas');
+      } else if (fase === "RESUELTA") {
         if (fueEnviado) {
-          totalEnviados++; _bucket(envioParte, 'enviados');
-          if (fase === "RESUELTA") { enviadasYResueltas++; _bucket(envioParte, 'enviadasYResueltas'); }
-          else if (fase === "ESCALADA" || fase === "ASIGNADA" || fase === "RESUELTA_EN_COLA" || fase === "ARCHIVADA") { enviadasYEscaladas++; }
+          resueltasConWA++;
+          enviadasYResueltas++;
+          _bucket(consultaParte, 'resueltasConWA');
+          _bucket(consultaParte, 'enviadasYResueltas');
+        } else {
+          resueltasSinWA++;
+          _bucket(consultaParte, 'resueltasSinWA');
         }
-        else totalNoEnviados++;
       }
 
-      // --- Métricas por fecha de actualización de fase ---
-      var faseNorm = faseParte.replace(/-/g, '');
-      if (_enRangoBio(faseNorm, filtroDesde, filtroHasta)) {
-        if (fase === "WA_ENVIADO") { totalEnEspera++; _bucket(faseParte, 'enEspera'); }
-        else if (fase === "ESCALADA") { totalEscaladas++; totalEnColaPendiente++; _bucket(faseParte, 'escaladas'); }
-        else if (fase === "ASIGNADA") { totalEscaladas++; totalAsignadas++; _bucket(faseParte, 'escaladas'); _bucket(faseParte, 'asignadas'); }
-        else if (fase === "RESUELTA_EN_COLA") { totalEscaladas++; totalResueltasEnCola++; _bucket(faseParte, 'escaladas'); _bucket(faseParte, 'resueltasEnCola'); }
-        else if (fase === "ARCHIVADA") { totalEscaladas++; totalArchivadas++; _bucket(faseParte, 'escaladas'); _bucket(faseParte, 'archivadas'); }
-        else if (fase === "RESUELTA") {
-          if (fueEnviado) { resueltasConWA++; _bucket(faseParte, 'resueltasConWA'); }
-          else { resueltasSinWA++; _bucket(faseParte, 'resueltasSinWA'); }
-        }
+      if (fueEnviado && (fase === "ESCALADA" || fase === "ASIGNADA" || fase === "RESUELTA_EN_COLA" || fase === "ARCHIVADA")) {
+        enviadasYEscaladas++;
       }
     }
 
@@ -476,12 +486,11 @@ function obtenerDatosBiometria(fechaDesde, fechaHasta, faseFiltro) {
     try {
       var dataH = obtenerHistoricoGestiones();
       if (dataH && dataH.length > 1) {
-        gestion = _agregarGestionBiometria(dataH, function(fila, fechaDia) {
-          if (!filtroDesde && !filtroHasta) return true;
-          var fechaFinNorm = fechaDia.replace(/-/g, '');
-          if (filtroDesde && fechaFinNorm < filtroDesde) return false;
-          if (filtroHasta && fechaFinNorm > filtroHasta) return false;
-          return true;
+        gestion = _agregarGestionBiometria(dataH, function(fila, solicitud) {
+          var fechaConsulta = mapaConsultaPorSolicitud[solicitud] || '';
+          if (!fechaConsulta) return '';
+          var fechaConsultaNorm = fechaConsulta.replace(/-/g, '');
+          return _enRangoBio(fechaConsultaNorm, filtroDesde, filtroHasta) ? fechaConsulta : '';
         }, mapaEstadoCierre);
       }
     } catch (e) {
@@ -782,33 +791,32 @@ function obtenerDetalleBiometriaPorTarjeta(tipo, fechaDesde, fechaHasta, faseFil
       var fase = cFS >= 0 ? String(data[i][cFS] || "").toUpperCase().trim() : "";
       var fueEnviado = _fueEnviadoBio(estadoBrod);
 
+      var consultaEnRango = _enRangoBio(consultaParte.replace(/-/g, ''), filtroDesde, filtroHasta);
       var incluir = false;
       if (tipo === "esperandoCorte") {
         incluir = (fase === "WA_ENVIADO");
       } else if (tipo === "cascadaSinIniciar") {
-        incluir = _enRangoBio(consultaParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fase === "";
-      } else if (tipo === "cascadaResueltasSinWA") {
-        incluir = _enRangoBio(consultaParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fase === "RESUELTA" && !fueEnviado;
+        incluir = consultaEnRango && fase === "";
+      } else if (tipo === "cascadaResueltasSinWA" || tipo === "cicloResueltasSinWA") {
+        incluir = consultaEnRango && fase === "RESUELTA" && !fueEnviado;
       } else if (tipo === "cascadaEnviadas") {
-        incluir = _enRangoBio(consultaParte.replace(/-/g, ''), filtroDesde, filtroHasta) && !(fase === "") && !(fase === "RESUELTA" && !fueEnviado);
+        incluir = consultaEnRango && !(fase === "") && !(fase === "RESUELTA" && !fueEnviado);
       } else if (tipo === "cicloConsultadas") {
-        incluir = _enRangoBio(consultaParte.replace(/-/g, ''), filtroDesde, filtroHasta);
-      } else if (tipo === "cicloResueltasSinWA") {
-        incluir = _enRangoBio(faseParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fase === "RESUELTA" && !fueEnviado;
+        incluir = consultaEnRango;
       } else if (tipo === "cicloEnviados") {
-        incluir = _enRangoBio(envioParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fueEnviado;
+        incluir = consultaEnRango && fueEnviado;
       } else if (tipo === "cicloResueltasConWA") {
-        incluir = _enRangoBio(faseParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fueEnviado && fase === "RESUELTA";
+        incluir = consultaEnRango && fueEnviado && fase === "RESUELTA";
       } else if (tipo === "cicloEscaladas") {
-        incluir = _enRangoBio(faseParte.replace(/-/g, ''), filtroDesde, filtroHasta) && (fase === "ESCALADA" || fase === "ASIGNADA" || fase === "RESUELTA_EN_COLA" || fase === "ARCHIVADA");
+        incluir = consultaEnRango && (fase === "ESCALADA" || fase === "ASIGNADA" || fase === "RESUELTA_EN_COLA" || fase === "ARCHIVADA");
       } else if (tipo === "asignadas") {
-        incluir = _enRangoBio(faseParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fase === "ASIGNADA";
+        incluir = consultaEnRango && fase === "ASIGNADA";
       } else if (tipo === "enColaPendiente") {
-        incluir = _enRangoBio(faseParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fase === "ESCALADA";
+        incluir = consultaEnRango && fase === "ESCALADA";
       } else if (tipo === "resueltasEnCola") {
-        incluir = _enRangoBio(faseParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fase === "RESUELTA_EN_COLA";
+        incluir = consultaEnRango && fase === "RESUELTA_EN_COLA";
       } else if (tipo === "archivadas") {
-        incluir = _enRangoBio(faseParte.replace(/-/g, ''), filtroDesde, filtroHasta) && fase === "ARCHIVADA";
+        incluir = consultaEnRango && fase === "ARCHIVADA";
       }
       // El filtro de fase no aplica a "esperandoCorte" (ya es intrínsecamente WA_ENVIADO,
       // igual que la tarjeta En Vivo de la que sale este drill-down).

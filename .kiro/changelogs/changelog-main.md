@@ -28,3 +28,9 @@
 - Se amplió el detalle de solicitudes por analista (modal) para mostrar columnas: Radicación, Asignación, Resultado, T. Gestión y T. General por cada solicitud gestionada
 - Se amplió la tabla de pendientes por analista para incluir hora de radicación y asignación
 - Se amplió el modal a 900px para acomodar las nuevas columnas
+### Cambiado
+- Se unificaron las tasas, tarjetas, tendencias, gráficas, drill-downs y resultados de gestión de biometría bajo la cohorte `fecha_consulta_sai`, eliminando filtros por fecha de envío, actualización de fase y cierre de llamada.
+- Se ajustaron el panel, correos y la documentación del flujo de biometría para describir la cohorte única de solicitudes consultadas.
+
+### Eliminado
+- Se eliminó el proceso local de sincronización BigQuery, su configuración y sus scopes OAuth del manifiesto de Apps Script.

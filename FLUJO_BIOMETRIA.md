@@ -127,39 +127,39 @@ Una solicitud de arrendamiento que fue aprobada por SAI pero requiere que el inq
 
 ---
 
-## Fecha de anclaje por métrica
+## Fecha de anclaje de las métricas de período
+
+Todas las métricas, tasas, tendencias, gráficas y detalles del panel de biometría se filtran por `fecha_consulta_sai`. Las fechas de envío de WhatsApp, actualización de fase y cierre de gestión se conservan para trazabilidad, pero no determinan la población del período.
 
 | Métrica | Filtrar por |
 |---------|-------------|
 | Consultadas SAI | `fecha_consulta_sai` |
-| WA Enviados | `fecha_envio_brodcast` |
-| Resueltas (todas) | `fecha_actualizacion_fase` |
-| Escaladas | `fecha_actualizacion_fase` |
-| Asignadas | `fecha_actualizacion_fase` |
-| Archivadas | `fecha_actualizacion_fase` |
-| Resueltas en cola | `fecha_actualizacion_fase` |
+| WA Enviados | `fecha_consulta_sai` |
+| Resueltas (todas) | `fecha_consulta_sai` |
+| Escaladas | `fecha_consulta_sai` |
+| Asignadas | `fecha_consulta_sai` |
+| Archivadas | `fecha_consulta_sai` |
+| Resueltas en cola | `fecha_consulta_sai` |
+| Gestión de llamadas | `fecha_consulta_sai` de la solicitud asociada |
 | En vivo (cola, esperando corte, sin iniciar) | Sin filtro de fecha |
 
 ---
 
-## Cascadas que siempre cierran
+## Cohortes que siempre cierran
 
-### Cascada de Consultadas (anclada a `fecha_consulta_sai`)
+### Cohorte de solicitudes consultadas
 ```
-Consultadas = Sin Iniciar + Resueltas sin WA (cohorte) + Ya Enviadas (cohorte)
+Consultadas = Sin Iniciar + Resueltas sin WA + Ya Enviadas
 ```
-> Pregunta: "De lo que ENTRÓ en este período, ¿en qué estado está ahora?"
+> Pregunta: "De lo que se consultó en este período, ¿en qué estado está ahora?"
 
-### Desglose de Escaladas (anclado a `fecha_actualizacion_fase`)
+### Desglose de casos en cola de la cohorte
 ```
 Escaladas = Aún en Cola + Asignadas + Resueltas en Cola + Archivadas
 ```
-> Pregunta: "De lo que PASÓ POR LA COLA en este período, ¿qué pasó con cada una?"
+> Pregunta: "De las solicitudes consultadas en este período que llegaron a cola, ¿en qué estado están ahora?"
 
-### ¿Por qué las filas de "Actividad del Período" no suman entre sí?
-Cada tarjeta usa su propia fecha real. Una solicitud detectada ayer que se escaló hoy
-aparece en "Escaladas" de hoy pero NO en "Consultadas" de hoy.
-Esto es intencional: cada evento queda en el día real en que ocurrió.
+Todas las tarjetas usan la misma cohorte; por tanto, sus cantidades y tasas son comparables entre sí.
 
 ---
 

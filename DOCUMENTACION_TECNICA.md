@@ -275,7 +275,7 @@ El **dashboard de métricas** (`Código.js` / `MetricasPanel.html`) no dispara t
 - Cambia el rango de fechas
 - Navega a la pestaña de Rendimiento por día
 
-Pero las hojas de cálculo que ese dashboard lee sí se alimentan mediante triggers de tiempo, definidos en otros archivos del proyecto (`BigQuerySync.js`, `ConsultaSAIRechazados.js`, `Biometria.js`).
+Pero las hojas de cálculo que ese dashboard lee sí se alimentan mediante triggers de tiempo, definidos en los módulos operativos de consulta y biometría del proyecto.
 
 ### 5.1 Triggers de Biometría
 
