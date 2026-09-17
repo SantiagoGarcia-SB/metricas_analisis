@@ -2372,11 +2372,33 @@ function renderBioTasaTendencia(tend) {
     });
 }
 
+function _renderizarBadgesGestion(elementId, total, items) {
+    var el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = items.map(function(item) {
+        var porcentaje = total > 0 ? Math.round((item.valor / total) * 1000) / 10 : 0;
+        return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + item.color + ';color:#fff;padding:4px 8px;border-radius:7px;font-size:0.68rem;font-weight:700;white-space:nowrap;">' +
+            esc(item.label) + ' <strong style="font-size:0.72rem;">' + item.valor + ' · ' + porcentaje + '%</strong></span>';
+    }).join('');
+}
+
 function renderBioGestion(g) {
     document.getElementById('bioGesTotal').textContent = g.total;
     document.getElementById('bioGesOk').textContent = g.okLlamada;
     document.getElementById('bioGesNoContesto').textContent = g.noContesto;
     document.getElementById('bioGesTasaContacto').textContent = g.tasaContacto + '%';
+
+    var totalLlamadasClasificadas = g.okLlamada + g.noContesto;
+    var totalResultadosFinales = g.aprobadas + g.negadas + g.aplazadas;
+    _renderizarBadgesGestion('bioLeyendaResLlamada', totalLlamadasClasificadas, [
+        { label: 'OK Llamada', valor: g.okLlamada, color: '#059669' },
+        { label: 'No Contestó', valor: g.noContesto, color: '#d97706' }
+    ]);
+    _renderizarBadgesGestion('bioLeyendaResFinal', totalResultadosFinales, [
+        { label: 'Aprobado', valor: g.aprobadas, color: '#059669' },
+        { label: 'Rechazado', valor: g.negadas, color: '#BD0F14' },
+        { label: 'Aplazado', valor: g.aplazadas, color: '#d97706' }
+    ]);
 
     if (chartBioResLlamada) chartBioResLlamada.destroy();
     var ctx1 = document.getElementById('chartBioResLlamada').getContext('2d');
@@ -2386,7 +2408,10 @@ function renderBioGestion(g) {
             labels: ['OK Llamada', 'No Contestó'],
             datasets: [{ data: [g.okLlamada, g.noContesto], backgroundColor: ['#059669', '#d97706'], borderWidth: 0 }]
         },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { datalabels: { color: '#fff', font: { weight: 'bold', size: 11 }, formatter: function(v) { return v > 0 ? v : ''; } } } }
+        options: {
+            responsive: true, maintainAspectRatio: false, cutout: '55%',
+            plugins: { legend: { display: false }, datalabels: { display: false } }
+        }
     });
 
     if (chartBioResFinal) chartBioResFinal.destroy();
@@ -2397,7 +2422,10 @@ function renderBioGestion(g) {
             labels: ['Aprobado', 'Rechazado', 'Aplazado'],
             datasets: [{ data: [g.aprobadas, g.negadas, g.aplazadas], backgroundColor: ['#059669', '#BD0F14', '#d97706'], borderWidth: 0 }]
         },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { datalabels: { color: '#fff', font: { weight: 'bold', size: 11 }, formatter: function(v) { return v > 0 ? v : ''; } } } }
+        options: {
+            responsive: true, maintainAspectRatio: false, cutout: '55%',
+            plugins: { legend: { display: false }, datalabels: { display: false } }
+        }
     });
 
     // Gráficos diarios de gestión
@@ -2448,8 +2476,20 @@ function renderBioGestion(g) {
             },
             options: {
                 indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                layout: { padding: { right: 72 } },
                 scales: { x: { beginAtZero: true } },
-                plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'start', color: '#fff', font: { weight: 'bold', size: 10 }, formatter: function(v) { return v; } } }
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        anchor: 'end', align: 'right', color: '#334155', clip: false,
+                        font: { weight: 'bold', size: 10 },
+                        formatter: function(v) {
+                            if (v <= 0) return '';
+                            var porcentaje = g.aplazadas > 0 ? Math.round((v / g.aplazadas) * 1000) / 10 : 0;
+                            return v + ' (' + porcentaje + '%)';
+                        }
+                    }
+                }
             }
         });
     }

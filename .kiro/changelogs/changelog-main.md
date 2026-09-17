@@ -34,3 +34,9 @@
 
 ### Eliminado
 - Se eliminó el proceso local de sincronización BigQuery, su configuración y sus scopes OAuth del manifiesto de Apps Script.
+### Cambiado
+- Se actualizaron las gráficas de Resultado Llamada, Resultado Final y Motivos de Aplazamiento para mostrar la cantidad y su porcentaje correspondiente en cada etiqueta.
+### Cambiado
+- Se movieron al exterior de los donuts las etiquetas de cantidad y porcentaje de Resultado Llamada y Resultado Final, reservando espacio para mantener su legibilidad.
+### Cambiado
+- Se reemplazaron las leyendas nativas de Resultado Llamada y Resultado Final por badges superiores de color con nombre, cantidad y porcentaje; los donuts quedaron sin etiquetas internas.
