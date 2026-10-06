@@ -1258,6 +1258,13 @@ var _MAX_RUNTIME_MS = 300000;
  *   Solo se usa en la primera ejecución; las continuaciones leen el estado guardado.
  */
 function reconsultarEstadoSAICierre(diasAtras) {
+  return _conLockReconsulta('reconsultarEstadoSAICierre', function() {
+    return _reconsultarEstadoSAICierreImpl(diasAtras);
+  });
+}
+
+/** @private Cuerpo de reconsultarEstadoSAICierre; se ejecuta con el candado tomado. */
+function _reconsultarEstadoSAICierreImpl(diasAtras) {
   var SLEEP_MS = 500;
   var BATCH_SIZE = 30;
 
@@ -1372,7 +1379,7 @@ function reconsultarEstadoSAICierre(diasAtras) {
   var errores = 0;
   var ultimoProcesado = startIndex - 1;
 
-  for (var j = startIndex; j < filasReconsultar.length; j++) {
+  for (var j = startIndex; j < filasReconsultar.length; j += _SAI_FETCH_LOTE) {
     // Verificar si nos acercamos al límite de tiempo
     if (Date.now() - inicio > _MAX_RUNTIME_MS) {
       Logger.log('reconsultarEstadoSAICierre: Límite de tiempo alcanzado en índice ' + j + '. Guardando progreso...');
@@ -1388,12 +1395,15 @@ function reconsultarEstadoSAICierre(diasAtras) {
       return;
     }
 
-    var item = filasReconsultar[j];
-    var resultado = _consultarEstadoSAICierre(item.consecutivo, apiKey);
-    escrituras.push({ fila: item.fila, estado: resultado.estado, fechaResultado: resultado.fechaResultado });
-    if (resultado.error) errores++;
+    var fin = Math.min(j + _SAI_FETCH_LOTE, filasReconsultar.length);
+    var lote = filasReconsultar.slice(j, fin);
+    var resultados = _consultarEstadosSAICierreLote(lote.map(function(c) { return c.consecutivo; }), apiKey, SLEEP_MS);
+    for (var r = 0; r < lote.length; r++) {
+      escrituras.push({ fila: lote[r].fila, estado: resultados[r].estado, fechaResultado: resultados[r].fechaResultado });
+      if (resultados[r].error) errores++;
+    }
 
-    ultimoProcesado = j;
+    ultimoProcesado = fin - 1;
 
     // Escribir en lotes
     if (escrituras.length >= BATCH_SIZE) {
@@ -1401,8 +1411,8 @@ function reconsultarEstadoSAICierre(diasAtras) {
       escrituras = [];
     }
 
-    // Pausa entre llamadas
-    if (j < filasReconsultar.length - 1) {
+    // Pausa entre grupos de llamadas
+    if (fin < filasReconsultar.length) {
       Utilities.sleep(SLEEP_MS);
     }
   }
@@ -1468,6 +1478,13 @@ var _ESTADOS_PENDIENTES_RECONSULTA_NOCTURNA = {
  * estado y su propio trigger de continuación para no interferir con el job de las 17:00.
  */
 function reconsultarPendientesBiometriaSAICierre() {
+  return _conLockReconsulta('reconsultarPendientesBiometriaSAICierre', function() {
+    return _reconsultarPendientesBiometriaSAICierreImpl();
+  });
+}
+
+/** @private Cuerpo de reconsultarPendientesBiometriaSAICierre; se ejecuta con el candado tomado. */
+function _reconsultarPendientesBiometriaSAICierreImpl() {
   var SLEEP_MS = 500;
   var BATCH_SIZE = 30;
 
@@ -1559,7 +1576,7 @@ function reconsultarPendientesBiometriaSAICierre() {
   var cambios = 0;
   var ultimoProcesado = startIndex - 1;
 
-  for (var j = startIndex; j < filasReconsultar.length; j++) {
+  for (var j = startIndex; j < filasReconsultar.length; j += _SAI_FETCH_LOTE) {
     if (Date.now() - inicio > _MAX_RUNTIME_MS) {
       Logger.log('reconsultarPendientesBiometriaSAICierre: Límite de tiempo alcanzado en índice ' + j + '. Guardando progreso...');
       if (escrituras.length > 0) {
@@ -1572,26 +1589,31 @@ function reconsultarPendientesBiometriaSAICierre() {
       return;
     }
 
-    var item = filasReconsultar[j];
-    var estadoPrevio = String(data[item.fila - 1][cEstadoCierre] || '').trim().toUpperCase().replace(/\s+/g, '_');
-    var resultado = _consultarEstadoSAICierre(item.consecutivo, apiKey);
+    var fin = Math.min(j + _SAI_FETCH_LOTE, filasReconsultar.length);
+    var lote = filasReconsultar.slice(j, fin);
+    var resultados = _consultarEstadosSAICierreLote(lote.map(function(c) { return c.consecutivo; }), apiKey, SLEEP_MS);
 
-    if (resultado.error) {
-      // Falla transitoria: no se escribe nada, el caso sigue "pendiente" y se reintenta mañana.
-      errores++;
-    } else {
-      escrituras.push({ fila: item.fila, estado: resultado.estado, fechaResultado: resultado.fechaResultado });
-      if (resultado.estado !== estadoPrevio) cambios++;
+    for (var r = 0; r < lote.length; r++) {
+      var item = lote[r];
+      var resultado = resultados[r];
+      if (resultado.error) {
+        // Falla transitoria: no se escribe nada, el caso sigue "pendiente" y se reintenta mañana.
+        errores++;
+      } else {
+        var estadoPrevio = String(data[item.fila - 1][cEstadoCierre] || '').trim().toUpperCase().replace(/\s+/g, '_');
+        escrituras.push({ fila: item.fila, estado: resultado.estado, fechaResultado: resultado.fechaResultado });
+        if (resultado.estado !== estadoPrevio) cambios++;
+      }
     }
 
-    ultimoProcesado = j;
+    ultimoProcesado = fin - 1;
 
     if (escrituras.length >= BATCH_SIZE) {
       _escribirLoteCierre(hoja, escrituras, cEstadoCierre, cFechaResultado);
       escrituras = [];
     }
 
-    if (j < filasReconsultar.length - 1) {
+    if (fin < filasReconsultar.length) {
       Utilities.sleep(SLEEP_MS);
     }
   }
@@ -1726,34 +1748,111 @@ var _ENDPOINT_SAI_STUDY = 'https://2n7hb4m6v7.execute-api.us-east-1.amazonaws.co
  */
 function _consultarEstadoSAICierre(consecutivo, apiKey) {
   try {
-    var url = _ENDPOINT_SAI_STUDY + '?consecutive=' + encodeURIComponent(consecutivo);
-    var response = UrlFetchApp.fetch(url, {
-      method: 'get',
-      headers: { 'x-api-key': apiKey, 'Accept': 'application/json' },
-      muteHttpExceptions: true
-    });
-
-    var code = response.getResponseCode();
-    if (code === 200) {
-      var respData = JSON.parse(response.getContentText());
-      var registro = null;
-      if (respData && respData.content && respData.content.length > 0) {
-        registro = respData.content[0];
-      } else if (respData && respData.studyStatus) {
-        registro = respData;
-      }
-      return {
-        estado: registro ? String(registro.studyStatus || 'SIN_DATO') : 'SIN_DATO',
-        fechaResultado: registro ? String(registro.lastResultDate || '') : '',
-        error: false
-      };
-    } else if (code === 404) {
-      return { estado: 'NO_ENCONTRADA', fechaResultado: '', error: false };
-    }
-    return { estado: 'ERROR_HTTP_' + code, fechaResultado: '', error: true };
+    var response = UrlFetchApp.fetch(_requestEstadoSAICierre(consecutivo, apiKey));
+    return _parsearRespuestaSAICierre(response);
   } catch (e) {
     return { estado: 'ERROR_' + e.message.substring(0, 30), fechaResultado: '', error: true };
   }
+}
+
+/**
+ * Cuántas consultas a SAI se lanzan en paralelo con fetchAll. Es el único mando para ajustar
+ * la velocidad si SAI empieza a responder 429/5xx: bajarlo (1 = comportamiento anterior).
+ * @private
+ */
+var _SAI_FETCH_LOTE = 5;
+
+/** @private Request de UrlFetchApp para consultar un consecutivo (sirve para fetch y fetchAll). */
+function _requestEstadoSAICierre(consecutivo, apiKey) {
+  return {
+    url: _ENDPOINT_SAI_STUDY + '?consecutive=' + encodeURIComponent(consecutivo),
+    method: 'get',
+    headers: { 'x-api-key': apiKey, 'Accept': 'application/json' },
+    muteHttpExceptions: true
+  };
+}
+
+/**
+ * Consulta varios consecutivos a la vez con UrlFetchApp.fetchAll y devuelve un resultado por
+ * cada uno, en el mismo orden y con la misma forma que _consultarEstadoSAICierre. Los que
+ * fallen de forma transitoria (error: true) se reintentan una vez, de a uno, tras una pausa:
+ * así un exceso de velocidad (p. ej. 429) no deja un estado de error escrito en la hoja.
+ * Si fetchAll mismo lanza excepción, se cae a consultas individuales para ese grupo.
+ *
+ * @param {string[]} consecutivos
+ * @param {string} apiKey
+ * @param {number} pausaMs - Espera antes de reintentar los que fallaron
+ * @returns {Array<{estado:string, fechaResultado:string, error:boolean}>}
+ * @private
+ */
+function _consultarEstadosSAICierreLote(consecutivos, apiKey, pausaMs) {
+  var resultados = [];
+  try {
+    var respuestas = UrlFetchApp.fetchAll(consecutivos.map(function(c) { return _requestEstadoSAICierre(c, apiKey); }));
+    for (var i = 0; i < respuestas.length; i++) {
+      try {
+        resultados.push(_parsearRespuestaSAICierre(respuestas[i]));
+      } catch (e) {
+        resultados.push({ estado: 'ERROR_' + e.message.substring(0, 30), fechaResultado: '', error: true });
+      }
+    }
+  } catch (e) {
+    Logger.log('_consultarEstadosSAICierreLote: fetchAll falló (' + e.message + '). Se consulta de a uno.');
+    return consecutivos.map(function(c) { return _consultarEstadoSAICierre(c, apiKey); });
+  }
+
+  var hayError = resultados.some(function(r) { return r.error; });
+  if (hayError) {
+    Utilities.sleep(pausaMs);
+    for (var k = 0; k < resultados.length; k++) {
+      if (resultados[k].error) resultados[k] = _consultarEstadoSAICierre(consecutivos[k], apiKey);
+    }
+  }
+  return resultados;
+}
+
+/**
+ * Candado compartido por los dos jobs de reconsulta y sus continuaciones: todos escriben las
+ * mismas columnas de pendiente_biometria (y pueden crearlas), así que no deben correr a la vez.
+ * Si el candado sigue ocupado tras 30 s, esta ejecución se omite y queda el aviso en el log.
+ * @private
+ */
+function _conLockReconsulta(nombre, fn) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    Logger.log(nombre + ': hay otra reconsulta en curso (candado ocupado). Se omite esta ejecución.');
+    return;
+  }
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Interpreta la respuesta HTTP de SAI. `error: true` marca fallas transitorias (HTTP distinto
+ * de 200/404). @private
+ */
+function _parsearRespuestaSAICierre(response) {
+  var code = response.getResponseCode();
+  if (code === 200) {
+    var respData = JSON.parse(response.getContentText());
+    var registro = null;
+    if (respData && respData.content && respData.content.length > 0) {
+      registro = respData.content[0];
+    } else if (respData && respData.studyStatus) {
+      registro = respData;
+    }
+    return {
+      estado: registro ? String(registro.studyStatus || 'SIN_DATO') : 'SIN_DATO',
+      fechaResultado: registro ? String(registro.lastResultDate || '') : '',
+      error: false
+    };
+  } else if (code === 404) {
+    return { estado: 'NO_ENCONTRADA', fechaResultado: '', error: false };
+  }
+  return { estado: 'ERROR_HTTP_' + code, fechaResultado: '', error: true };
 }
 
 // ── Triggers de reconsulta ──
