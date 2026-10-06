@@ -31,6 +31,16 @@ var _hojaSolicitud = null;
 var _hojaUsuarios = null;
 var _ssReestudios = null; // instancia del spreadsheet compartida entre Reestudios y ORIGEN
 
+// El cache entre ejecuciones (CacheService) es opt-in por ejecución: solo lo activan los
+// puntos de entrada del tablero de Biometría (ver _activarCacheHojas). Alertas, correos y
+// métricas siguen leyendo siempre datos frescos.
+var _usarCacheHojas = false;
+
+/** Activa el cache de hojas durante esta ejecución del servidor. */
+function _activarCacheHojas() {
+  _usarCacheHojas = true;
+}
+
 // ============================================================================
 // FUNCIONES DE LECTURA MEMOIZADAS
 // ============================================================================
@@ -45,13 +55,14 @@ var _ssReestudios = null; // instancia del spreadsheet compartida entre Reestudi
 function obtenerHistoricoGestiones() {
   if (_historicoGestiones !== null) return _historicoGestiones;
 
-  var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
-  var hoja = ss.getSheetByName(SHEET_NAME_SOLICITUDES);
-  if (!hoja) {
-    throw new Error("Hoja " + SHEET_NAME_SOLICITUDES + " no encontrada en spreadsheet " + TARGET_SOLICITUDES_SS_ID);
-  }
-
-  _historicoGestiones = hoja.getDataRange().getDisplayValues();
+  _historicoGestiones = _leerHojaCacheada(CACHE_CLAVE_HOJA_HISTORICO, function() {
+    var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+    var hoja = ss.getSheetByName(SHEET_NAME_SOLICITUDES);
+    if (!hoja) {
+      throw new Error("Hoja " + SHEET_NAME_SOLICITUDES + " no encontrada en spreadsheet " + TARGET_SOLICITUDES_SS_ID);
+    }
+    return hoja.getDataRange().getDisplayValues();
+  });
   return _historicoGestiones;
 }
 
@@ -135,20 +146,16 @@ function obtenerHojaBiometria() {
   if (_hojaBiometria !== null) return _hojaBiometria;
 
   try {
-    var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
-    var hoja = ss.getSheetByName("pendiente_biometria");
-    if (!hoja) {
-      Logger.log("Pestaña pendiente_biometria no encontrada en spreadsheet " + ID_HOJA_BIOMETRIA);
-      _hojaBiometria = [];
-      return _hojaBiometria;
-    }
-
-    if (hoja.getLastRow() < 2) {
-      _hojaBiometria = [];
-      return _hojaBiometria;
-    }
-
-    _hojaBiometria = hoja.getDataRange().getDisplayValues();
+    _hojaBiometria = _leerHojaCacheada(CACHE_CLAVE_HOJA_BIOMETRIA, function() {
+      var ss = SpreadsheetApp.openById(ID_HOJA_BIOMETRIA);
+      var hoja = ss.getSheetByName("pendiente_biometria");
+      if (!hoja) {
+        Logger.log("Pestaña pendiente_biometria no encontrada en spreadsheet " + ID_HOJA_BIOMETRIA);
+        return [];
+      }
+      if (hoja.getLastRow() < 2) return [];
+      return hoja.getDataRange().getDisplayValues();
+    });
     return _hojaBiometria;
   } catch (e) {
     Logger.log("Error leyendo pendiente_biometria (" + ID_HOJA_BIOMETRIA + "): " + e.message);
@@ -167,20 +174,16 @@ function obtenerHojaSolicitud() {
   if (_hojaSolicitud !== null) return _hojaSolicitud;
 
   try {
-    var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
-    var hoja = ss.getSheetByName("solicitud");
-    if (!hoja) {
-      Logger.log("Pestaña solicitud no encontrada en spreadsheet " + TARGET_SOLICITUDES_SS_ID);
-      _hojaSolicitud = [];
-      return _hojaSolicitud;
-    }
-
-    if (hoja.getLastRow() <= 1) {
-      _hojaSolicitud = [];
-      return _hojaSolicitud;
-    }
-
-    _hojaSolicitud = hoja.getDataRange().getDisplayValues();
+    _hojaSolicitud = _leerHojaCacheada(CACHE_CLAVE_HOJA_SOLICITUD, function() {
+      var ss = SpreadsheetApp.openById(TARGET_SOLICITUDES_SS_ID);
+      var hoja = ss.getSheetByName("solicitud");
+      if (!hoja) {
+        Logger.log("Pestaña solicitud no encontrada en spreadsheet " + TARGET_SOLICITUDES_SS_ID);
+        return [];
+      }
+      if (hoja.getLastRow() <= 1) return [];
+      return hoja.getDataRange().getDisplayValues();
+    });
     return _hojaSolicitud;
   } catch (e) {
     Logger.log("Error leyendo solicitud (" + TARGET_SOLICITUDES_SS_ID + "): " + e.message);
@@ -289,17 +292,20 @@ function cargarDiccionarioScore() {
  *
  * @param {string} claveBase - Clave base (ej. "metricas_01/01/2024_31/01/2024")
  * @param {object} datos - Objeto serializable a JSON
+ * @param {number} [ttl] - Segundos de vida. Por defecto CACHE_TTL_SEGUNDOS.
+ * @returns {boolean} true si quedó guardado, false si no cupo o hubo error.
  */
-function _cachePut(claveBase, datos) {
+function _cachePut(claveBase, datos, ttl) {
+  ttl = ttl || CACHE_TTL_SEGUNDOS;
   try {
     var json = JSON.stringify(datos);
     var cache = CacheService.getScriptCache();
 
     if (json.length <= 100000) {
       // Cabe en una sola clave (≤100KB)
-      cache.put(claveBase, json, CACHE_TTL_SEGUNDOS);
-      cache.put(claveBase + "_idx", "1", CACHE_TTL_SEGUNDOS);
-      return;
+      cache.put(claveBase, json, ttl);
+      cache.put(claveBase + "_idx", "1", ttl);
+      return true;
     }
 
     // Particionar en fragmentos de ≤95KB
@@ -311,7 +317,7 @@ function _cachePut(claveBase, datos) {
 
     if (fragmentos.length > CACHE_MAX_FRAGMENTOS) {
       Logger.log("Dataset excede límite de fragmentos (" + fragmentos.length + " > " + CACHE_MAX_FRAGMENTOS + "), no se cachea: " + claveBase);
-      return;
+      return false;
     }
 
     // Construir mapa de pares clave-valor para putAll
@@ -321,10 +327,54 @@ function _cachePut(claveBase, datos) {
     }
     pares[claveBase + "_idx"] = String(fragmentos.length);
 
-    cache.putAll(pares, CACHE_TTL_SEGUNDOS);
+    cache.putAll(pares, ttl);
+    return true;
   } catch (e) {
     Logger.log("Error escribiendo cache " + claveBase + ": " + e.message);
+    return false;
   }
+}
+
+/**
+ * Lee una hoja completa pasando primero por CacheService, para que varias invocaciones
+ * seguidas del servidor (cada google.script.run es una ejecución nueva y pierde las
+ * variables de módulo) no relean el spreadsheet. Si el dataset no cabe en el cache se
+ * deja una marca corta para no volver a serializarlo en cada llamada. Solo se cachean
+ * resultados con datos (más de la fila de encabezados). Sin _activarCacheHojas() lee directo.
+ *
+ * @param {string} clave - Clave base del cache
+ * @param {function(): string[][]} leerFn - Lectura directa del spreadsheet
+ * @returns {string[][]}
+ * @private
+ */
+function _leerHojaCacheada(clave, leerFn) {
+  if (!_usarCacheHojas) return leerFn();
+  var cache = null;
+  try {
+    cache = CacheService.getScriptCache();
+    if (cache.get(clave + "_nocache")) return leerFn();
+  } catch (e) {
+    return leerFn();
+  }
+
+  var cacheado = _cacheGet(clave);
+  if (cacheado) return cacheado;
+
+  var datos = leerFn();
+  if (datos && datos.length > 1) {
+    if (!_cachePut(clave, datos, CACHE_TTL_HOJAS_SEGUNDOS)) {
+      try { cache.put(clave + "_nocache", "1", CACHE_TTL_HOJAS_SEGUNDOS); } catch (e) { /* no-op */ }
+    }
+  }
+  return datos;
+}
+
+/**
+ * Descarta el cache de la hoja pendiente_biometria. Llamar después de escribir en ella
+ * desde este proyecto, para que el tablero no muestre datos anteriores a la escritura.
+ */
+function invalidarCacheHojaBiometria() {
+  invalidarCache(CACHE_CLAVE_HOJA_BIOMETRIA);
 }
 
 /**

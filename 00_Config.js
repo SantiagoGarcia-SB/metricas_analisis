@@ -36,6 +36,13 @@ const NOMBRE_REMITENTE_AGENTE = "Análisis · El Libertador";
 // ============================================================================
 
 const CACHE_TTL_SEGUNDOS = 300;
+// TTL de las hojas que lee el tablero de Biometría (pendiente_biometria, solicitud,
+// Historico_Gestiones). Corto a propósito: los datos cambian durante el día y lo escriben
+// procesos externos que no pueden invalidar este cache.
+const CACHE_TTL_HOJAS_SEGUNDOS = 120;
+const CACHE_CLAVE_HOJA_BIOMETRIA = "hoja_pendiente_biometria";
+const CACHE_CLAVE_HOJA_SOLICITUD = "hoja_solicitud";
+const CACHE_CLAVE_HOJA_HISTORICO = "hoja_historico_gestiones";
 const CACHE_MAX_FRAGMENTO_KB = 95;
 const CACHE_MAX_FRAGMENTOS = 20;
 

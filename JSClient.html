@@ -1623,15 +1623,26 @@ function _fmtRangoBio() {
     var desde = document.getElementById('bioFiltroDesde').value || '';
     var hasta = document.getElementById('bioFiltroHasta').value || '';
     var rango = !desde && !hasta ? '(todo el histórico)' : (desde === hasta ? '(' + fmtDB(desde) + ')' : '(' + fmtDB(desde) + ' → ' + fmtDB(hasta) + ')');
+    var f = _faseFiltroBio();
     var faseLabel = _labelFaseFiltroBio();
-    return faseLabel ? rango + ' · Fase: ' + faseLabel : rango;
+    if (faseLabel) rango += ' · Fase: ' + faseLabel;
+    if (f.poliza) rango += ' · Póliza: ' + f.poliza;
+    if (f.sucursal) rango += ' · Sucursal: ' + f.sucursal;
+    return rango;
 }
 
-// Fase seleccionada en el filtro general (barra de arriba). Ver el select
-// bioCierreFiltroFase en MetricasPanel.html para el detalle de qué secciones respeta.
+// Filtro general de la sección (barra de arriba): {fase, poliza, sucursal}. La fase no aplica
+// a todas las tarjetas (ver el select bioCierreFiltroFase en MetricasPanel.html); póliza y
+// sucursal sí aplican a toda la sección.
 function _faseFiltroBio() {
-    var el = document.getElementById('bioCierreFiltroFase');
-    return el ? el.value : '';
+    var fase = document.getElementById('bioCierreFiltroFase');
+    var poliza = document.getElementById('bioFiltroPoliza');
+    var sucursal = document.getElementById('bioFiltroSucursal');
+    return {
+        fase: fase ? fase.value : '',
+        poliza: poliza ? poliza.value.trim() : '',
+        sucursal: sucursal ? sucursal.value : ''
+    };
 }
 
 function cargarDatosBiometria() {
@@ -1640,11 +1651,15 @@ function cargarDatosBiometria() {
     limpiarBusquedaBiometria();
     var desde = document.getElementById('bioFiltroDesde').value || '';
     var hasta = document.getElementById('bioFiltroHasta').value || '';
-    google.script.run.withSuccessHandler(onDatosBiometriaCargados).withFailureHandler(function(e) {
+    // Una sola llamada trae todos los bloques; así el servidor lee las hojas una vez en lugar de
+    // una por bloque (ver obtenerTodoBiometria en 04_Biometria.js).
+    google.script.run.withSuccessHandler(function(res) {
+        onDatosBiometriaCargados(res.datos, res);
+    }).withFailureHandler(function(e) {
         document.getElementById('biometriaSpinner').style.display = 'none';
         if (_splashActivo) _splashError('No se pudieron cargar los datos: ' + e.message);
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
-    }).obtenerDatosBiometria(desde, hasta, _faseFiltroBio());
+    }).obtenerTodoBiometria(desde, hasta, _faseFiltroBio(), _agrupacionEvolucionBio());
 }
 
 function setBioRangoRapido(tipo) {
@@ -1654,7 +1669,9 @@ function setBioRangoRapido(tipo) {
     cargarDatosBiometria();
 }
 
-function onDatosBiometriaCargados(d) {
+// `bloques` trae topPolizas, canon, cierre y evolucion ya calculados por el servidor (carga
+// completa). Sin él, cada bloque se pide por separado, como hacen sus botones "Actualizar".
+function onDatosBiometriaCargados(d, bloques) {
     _biometriaCargada = true;
     document.getElementById('biometriaSpinner').style.display = 'none';
     document.getElementById('biometriaContenido').style.display = 'block';
@@ -1719,9 +1736,22 @@ function onDatosBiometriaCargados(d) {
         renderBioGestion(d.gestion);
         _setBioGestionScope('');
     }
-    cargarTopPolizasBiometria();
-    cargarPendientesPorCanon(document.getElementById('bioFiltroDesde').value || '', document.getElementById('bioFiltroHasta').value || '');
-    cargarEstadoCierreSAI();
+    var _desde = document.getElementById('bioFiltroDesde').value || '';
+    var _hasta = document.getElementById('bioFiltroHasta').value || '';
+    if (bloques) {
+        _prepararTopPolizasBio();
+        renderTopPolizasBio(bloques.topPolizas);
+        _prepararPendientesPorCanon(_desde, _hasta);
+        renderPendientesPorCanon(bloques.canon);
+        _prepararEstadoCierreSAI();
+        renderBloqueCierreSAI(bloques.cierre);
+        _prepararEvolucionCierreSAI();
+        renderBloqueEvolucionCierreSAI(bloques.evolucion, _agrupacionEvolucionBio());
+    } else {
+        cargarTopPolizasBiometria();
+        cargarPendientesPorCanon(_desde, _hasta);
+        cargarEstadoCierreSAI();
+    }
 }
 
 // === TOP 10 PÓLIZAS PENDIENTES DE BIOMETRÍA ===
@@ -1736,9 +1766,8 @@ function _inicialesInmobiliaria(nombre) {
     return palabras[0].charAt(0) + palabras[1].charAt(0);
 }
 
-function cargarTopPolizasBiometria() {
+function _prepararTopPolizasBio() {
     var spinner = document.getElementById('topPolizasBioSpinner');
-    var cont = document.getElementById('cuerpoTopPolizasBio');
     var faseTextoEl = document.getElementById('bioTopPolizasFaseTexto');
     var faseLabel = _labelFaseFiltroBio();
     if (faseTextoEl) faseTextoEl.textContent = faseLabel ? 'Fase: ' + faseLabel : '';
@@ -1747,36 +1776,45 @@ function cargarTopPolizasBiometria() {
         ? 'Pólizas con más casos en fase "' + faseLabel + '" (en vivo)'
         : 'Pólizas con mayor volumen de biometrías sin resolver (en vivo)';
     if (spinner) spinner.style.display = 'block';
-    google.script.run.withSuccessHandler(function(ranking) {
+}
+
+function cargarTopPolizasBiometria() {
+    _prepararTopPolizasBio();
+    google.script.run.withSuccessHandler(renderTopPolizasBio).withFailureHandler(function(e) {
+        var spinner = document.getElementById('topPolizasBioSpinner');
         if (spinner) spinner.style.display = 'none';
-        if (!ranking || ranking.length === 0) {
-            cont.innerHTML = '<div class="text-center py-3" style="color:var(--text-light);">No hay pólizas con casos pendientes.</div>';
-            return;
-        }
-        var max = ranking[0].count || 1;
-        cont.innerHTML = ranking.map(function(item, idx) {
-            var rank = idx + 1;
-            var rankClass = rank <= 3 ? ' bio-lb-rank-' + rank : '';
-            var iniciales = _inicialesInmobiliaria(item.inmobiliaria);
-            var avatar = iniciales ? esc(iniciales) : '<i class="bi bi-building"></i>';
-            var pct = Math.max(6, Math.round((item.count / max) * 100));
-            var nombreMostrar = item.inmobiliaria || 'Sin nombre';
-            return '<div class="bio-lb-row" onclick="verDetallePendientesPoliza(\'' + esc(item.poliza) + '\', \'' + esc(item.inmobiliaria) + '\')">' +
-                '<div class="bio-lb-rank' + rankClass + '">' + rank + '</div>' +
-                '<div class="bio-lb-avatar">' + avatar + '</div>' +
-                '<div class="bio-lb-info">' +
-                    '<div class="bio-lb-name" title="' + esc(nombreMostrar) + '">' + esc(nombreMostrar) + '</div>' +
-                    '<div class="bio-lb-meta">Póliza ' + esc(item.poliza) + '</div>' +
-                    '<div class="bio-lb-track"><div class="bio-lb-fill" style="width:' + pct + '%;"></div></div>' +
-                '</div>' +
-                '<div class="bio-lb-count">' + item.count + '</div>' +
-                '<div class="bio-lb-chevron"><i class="bi bi-chevron-right"></i></div>' +
-                '</div>';
-        }).join('');
-    }).withFailureHandler(function(e) {
-        if (spinner) spinner.style.display = 'none';
-        cont.innerHTML = '<div class="text-center py-3" style="color:var(--rojo);">Error: ' + esc(e.message) + '</div>';
+        document.getElementById('cuerpoTopPolizasBio').innerHTML = '<div class="text-center py-3" style="color:var(--rojo);">Error: ' + esc(e.message) + '</div>';
     }).obtenerTopPolizasPendientesBiometria(_faseFiltroBio());
+}
+
+function renderTopPolizasBio(ranking) {
+    var spinner = document.getElementById('topPolizasBioSpinner');
+    var cont = document.getElementById('cuerpoTopPolizasBio');
+    if (spinner) spinner.style.display = 'none';
+    if (!ranking || ranking.length === 0) {
+        cont.innerHTML = '<div class="text-center py-3" style="color:var(--text-light);">No hay pólizas con casos pendientes.</div>';
+        return;
+    }
+    var max = ranking[0].count || 1;
+    cont.innerHTML = ranking.map(function(item, idx) {
+        var rank = idx + 1;
+        var rankClass = rank <= 3 ? ' bio-lb-rank-' + rank : '';
+        var iniciales = _inicialesInmobiliaria(item.inmobiliaria);
+        var avatar = iniciales ? esc(iniciales) : '<i class="bi bi-building"></i>';
+        var pct = Math.max(6, Math.round((item.count / max) * 100));
+        var nombreMostrar = item.inmobiliaria || 'Sin nombre';
+        return '<div class="bio-lb-row" onclick="verDetallePendientesPoliza(\'' + esc(item.poliza) + '\', \'' + esc(item.inmobiliaria) + '\')">' +
+            '<div class="bio-lb-rank' + rankClass + '">' + rank + '</div>' +
+            '<div class="bio-lb-avatar">' + avatar + '</div>' +
+            '<div class="bio-lb-info">' +
+                '<div class="bio-lb-name" title="' + esc(nombreMostrar) + '">' + esc(nombreMostrar) + '</div>' +
+                '<div class="bio-lb-meta">Póliza ' + esc(item.poliza) + '</div>' +
+                '<div class="bio-lb-track"><div class="bio-lb-fill" style="width:' + pct + '%;"></div></div>' +
+            '</div>' +
+            '<div class="bio-lb-count">' + item.count + '</div>' +
+            '<div class="bio-lb-chevron"><i class="bi bi-chevron-right"></i></div>' +
+            '</div>';
+    }).join('');
 }
 
 function verDetallePendientesPoliza(poliza, inmobiliaria) {
@@ -1806,42 +1844,49 @@ var _CANON_RANGO_COLOR = { bajo: '#059669', medio: '#d97706', alto: 'var(--rojo)
 
 var _ultimoRangoFechasCanon = { desde: '', hasta: '' };
 
-function cargarPendientesPorCanon(desde, hasta) {
-    desde = desde !== undefined ? desde : (document.getElementById('bioFiltroDesde').value || '');
-    hasta = hasta !== undefined ? hasta : (document.getElementById('bioFiltroHasta').value || '');
+function _prepararPendientesPorCanon(desde, hasta) {
     _ultimoRangoFechasCanon = { desde: desde, hasta: hasta };
-
     var spinner = document.getElementById('canonBioSpinner');
-    var tbody = document.getElementById('cuerpoCanonBio');
-    var sinDatoEl = document.getElementById('canonBioSinDato');
     var badgeEl = document.getElementById('bioRangoTextoCanon');
     if (badgeEl) badgeEl.textContent = _fmtRangoBio();
     if (spinner) spinner.style.display = 'block';
-    google.script.run.withSuccessHandler(function(res) {
+}
+
+function cargarPendientesPorCanon(desde, hasta) {
+    desde = desde !== undefined ? desde : (document.getElementById('bioFiltroDesde').value || '');
+    hasta = hasta !== undefined ? hasta : (document.getElementById('bioFiltroHasta').value || '');
+    _prepararPendientesPorCanon(desde, hasta);
+    google.script.run.withSuccessHandler(renderPendientesPorCanon).withFailureHandler(function(e) {
+        var spinner = document.getElementById('canonBioSpinner');
         if (spinner) spinner.style.display = 'none';
-        res = res || { rangos: [], sinDato: 0, total: 0 };
-        if (!res.rangos || res.rangos.length === 0 || res.total === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3" style="color:var(--text-light);">No hay casos APROBADO_PENDIENTE_BIOMETRIA en el período seleccionado.</td></tr>';
-            if (sinDatoEl) sinDatoEl.style.display = 'none';
-            return;
-        }
-        tbody.innerHTML = res.rangos.map(function(r) {
-            var color = _CANON_RANGO_COLOR[r.key] || 'var(--azul)';
-            return '<tr style="cursor:pointer;" onclick="verDetallePendientesCanon(\'' + esc(r.key) + '\', \'' + esc(r.label) + '\')">' +
-                '<td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';margin-right:8px;"></span>' + esc(r.label) + '</td>' +
-                '<td class="text-center"><span class="badge" style="background:' + color + ';color:#fff;font-size:0.8rem;padding:4px 10px;border-radius:8px;">' + r.count + '</span></td>' +
-                '<td class="text-center fw-bold" style="color:' + color + ';">' + r.pct + '%</td>' +
-                '<td class="text-center"><i class="bi bi-eye" style="color:var(--azul);font-size:1rem;"></i></td>' +
-                '</tr>';
-        }).join('');
-        if (sinDatoEl) {
-            sinDatoEl.style.display = 'block';
-            sinDatoEl.textContent = 'Total del período: ' + res.total + '.' + (res.sinDato > 0 ? ' ' + res.sinDato + ' caso(s) sin canon registrado, no incluido(s) en la tabla.' : '');
-        }
-    }).withFailureHandler(function(e) {
-        if (spinner) spinner.style.display = 'none';
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3" style="color:var(--rojo);">Error: ' + esc(e.message) + '</td></tr>';
+        document.getElementById('cuerpoCanonBio').innerHTML = '<tr><td colspan="4" class="text-center py-3" style="color:var(--rojo);">Error: ' + esc(e.message) + '</td></tr>';
     }).obtenerPendientesPorRangoCanon(desde, hasta, _faseFiltroBio());
+}
+
+function renderPendientesPorCanon(res) {
+    var spinner = document.getElementById('canonBioSpinner');
+    var tbody = document.getElementById('cuerpoCanonBio');
+    var sinDatoEl = document.getElementById('canonBioSinDato');
+    if (spinner) spinner.style.display = 'none';
+    res = res || { rangos: [], sinDato: 0, total: 0 };
+    if (!res.rangos || res.rangos.length === 0 || res.total === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3" style="color:var(--text-light);">No hay casos APROBADO_PENDIENTE_BIOMETRIA en el período seleccionado.</td></tr>';
+        if (sinDatoEl) sinDatoEl.style.display = 'none';
+        return;
+    }
+    tbody.innerHTML = res.rangos.map(function(r) {
+        var color = _CANON_RANGO_COLOR[r.key] || 'var(--azul)';
+        return '<tr style="cursor:pointer;" onclick="verDetallePendientesCanon(\'' + esc(r.key) + '\', \'' + esc(r.label) + '\')">' +
+            '<td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';margin-right:8px;"></span>' + esc(r.label) + '</td>' +
+            '<td class="text-center"><span class="badge" style="background:' + color + ';color:#fff;font-size:0.8rem;padding:4px 10px;border-radius:8px;">' + r.count + '</span></td>' +
+            '<td class="text-center fw-bold" style="color:' + color + ';">' + r.pct + '%</td>' +
+            '<td class="text-center"><i class="bi bi-eye" style="color:var(--azul);font-size:1rem;"></i></td>' +
+            '</tr>';
+    }).join('');
+    if (sinDatoEl) {
+        sinDatoEl.style.display = 'block';
+        sinDatoEl.textContent = 'Total del período: ' + res.total + '.' + (res.sinDato > 0 ? ' ' + res.sinDato + ' caso(s) sin canon registrado, no incluido(s) en la tabla.' : '');
+    }
 }
 
 function verDetallePendientesCanon(rangoKey, label) {
@@ -1876,29 +1921,38 @@ function verDetallePendientesCanon(rangoKey, label) {
 
 var _ultimoCierreData = null;
 
-function cargarEstadoCierreSAI() {
+function _prepararEstadoCierreSAI() {
     var spinner = document.getElementById('bioEstadoCierreSpinner');
     var contenido = document.getElementById('bioEstadoCierreContenido');
     if (spinner) spinner.style.display = 'block';
     if (contenido) contenido.style.display = 'none';
-
-    var desde = document.getElementById('bioFiltroDesde').value || '';
-    var hasta = document.getElementById('bioFiltroHasta').value || '';
-    var faseFiltro = document.getElementById('bioCierreFiltroFase') ? document.getElementById('bioCierreFiltroFase').value : '';
-
     var rangoEl = document.getElementById('bioRangoTextoCierre');
     if (rangoEl) rangoEl.textContent = _fmtRangoBio();
+}
+
+function renderBloqueCierreSAI(data) {
+    var spinner = document.getElementById('bioEstadoCierreSpinner');
+    var contenido = document.getElementById('bioEstadoCierreContenido');
+    if (spinner) spinner.style.display = 'none';
+    if (contenido) contenido.style.display = 'block';
+    _ultimoCierreData = data;
+    renderEstadoCierreSAI(data);
+}
+
+function cargarEstadoCierreSAI() {
+    _prepararEstadoCierreSAI();
+    var desde = document.getElementById('bioFiltroDesde').value || '';
+    var hasta = document.getElementById('bioFiltroHasta').value || '';
 
     google.script.run.withSuccessHandler(function(data) {
-        if (spinner) spinner.style.display = 'none';
-        if (contenido) contenido.style.display = 'block';
-        _ultimoCierreData = data;
-        renderEstadoCierreSAI(data);
+        renderBloqueCierreSAI(data);
         cargarEvolucionCierreSAI();
     }).withFailureHandler(function(e) {
+        var spinner = document.getElementById('bioEstadoCierreSpinner');
+        var contenido = document.getElementById('bioEstadoCierreContenido');
         if (spinner) spinner.style.display = 'none';
         if (contenido) { contenido.style.display = 'block'; contenido.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem;">Error al cargar estado de cierre: ' + esc(e.message) + '</p>'; }
-    }).obtenerResumenEstadoSAICierre(desde, hasta, faseFiltro);
+    }).obtenerResumenEstadoSAICierre(desde, hasta, _faseFiltroBio());
 }
 
 // Colores por estado SAI de cierre — compartido entre el desglose total y el gráfico por día
@@ -2133,7 +2187,7 @@ function verDetalleCierrePorEstado(estado, cantidad) {
     Swal.fire({ title: 'Cargando ' + cantidad + ' solicitudes...', didOpen: function() { Swal.showLoading(); } });
     var desde = document.getElementById('bioFiltroDesde').value || '';
     var hasta = document.getElementById('bioFiltroHasta').value || '';
-    var faseFiltro = document.getElementById('bioCierreFiltroFase') ? document.getElementById('bioCierreFiltroFase').value : '';
+    var faseFiltro = _faseFiltroBio();
     google.script.run.withSuccessHandler(function(detalle) {
         detalle = detalle || [];
         var estadoLabel = estado.replace(/_/g, ' ');
@@ -2188,22 +2242,38 @@ function exportarDetalleCierrePorEstado() {
 
 var _ultimaEvolucionData = null;
 
-function cargarEvolucionCierreSAI() {
+function _agrupacionEvolucionBio() {
+    var t = document.getElementById('bioEvolucionToggle');
+    return t && t.value === 'mensual' ? 'mensual' : 'diario';
+}
+
+function _prepararEvolucionCierreSAI() {
     var spinner = document.getElementById('bioEvolucionSpinner');
     var contenido = document.getElementById('bioEvolucionContenido');
     if (spinner) spinner.style.display = 'block';
     if (contenido) contenido.style.display = 'none';
+}
 
+function renderBloqueEvolucionCierreSAI(data, agrupacion) {
+    var spinner = document.getElementById('bioEvolucionSpinner');
+    var contenido = document.getElementById('bioEvolucionContenido');
+    if (spinner) spinner.style.display = 'none';
+    if (contenido) contenido.style.display = 'block';
+    _ultimaEvolucionData = data;
+    renderEvolucionCierreSAI(data, agrupacion);
+}
+
+function cargarEvolucionCierreSAI() {
+    _prepararEvolucionCierreSAI();
     var desde = document.getElementById('bioFiltroDesde').value || '';
     var hasta = document.getElementById('bioFiltroHasta').value || '';
-    var agrupacion = document.getElementById('bioEvolucionToggle') && document.getElementById('bioEvolucionToggle').value === 'mensual' ? 'mensual' : 'diario';
+    var agrupacion = _agrupacionEvolucionBio();
 
     google.script.run.withSuccessHandler(function(data) {
-        if (spinner) spinner.style.display = 'none';
-        if (contenido) contenido.style.display = 'block';
-        _ultimaEvolucionData = data;
-        renderEvolucionCierreSAI(data, agrupacion);
+        renderBloqueEvolucionCierreSAI(data, agrupacion);
     }).withFailureHandler(function(e) {
+        var spinner = document.getElementById('bioEvolucionSpinner');
+        var contenido = document.getElementById('bioEvolucionContenido');
         if (spinner) spinner.style.display = 'none';
         if (contenido) { contenido.style.display = 'block'; contenido.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem;">Error al cargar evolución: ' + esc(e.message) + '</p>'; }
     }).obtenerEvolucionCierreSAI(desde, hasta, agrupacion, _faseFiltroBio());
@@ -2497,7 +2567,7 @@ function renderBioGestion(g) {
 
 function ejecutarBusquedaBiometria() {
     var q = (document.getElementById('buscarBioSolicitud').value || '').trim();
-    if (!q) { Swal.fire({ icon: 'warning', title: 'Búsqueda vacía', text: 'Escribe un número de solicitud o póliza' }); return; }
+    if (!q) { Swal.fire({ icon: 'warning', title: 'Búsqueda vacía', text: 'Escribe un número de solicitud' }); return; }
     ['resultadosBioBusquedaBroadcast', 'resultadosBioBusquedaCola', 'resultadosBioBusquedaGestion'].forEach(function(id) {
         document.getElementById(id).style.display = 'none';
     });
@@ -2509,7 +2579,7 @@ function ejecutarBusquedaBiometria() {
         Swal.fire({ icon: 'error', title: 'Error', text: e.message });
     }).buscarBiometriaSolicitud(q);
 
-    // "Resultados de Gestión" usa la misma llave (Solicitud/Póliza) — se actualiza en paralelo
+    // "Resultados de Gestión" usa la misma llave (Solicitud) — se actualiza en paralelo
     // para reflejar SOLO esta solicitud mientras dure la búsqueda.
     google.script.run.withSuccessHandler(function(g) {
         renderBioGestion(g);
@@ -2716,10 +2786,14 @@ function limpiarBusquedaBiometria() {
 // "Resultados de Gestión" desde _ultimoGestionPeriodo, sin round-trip al servidor.
 function limpiarBusquedaYFiltrosBiometria() {
     var faseEl = document.getElementById('bioCierreFiltroFase');
-    var habiaFiltro = !!(document.getElementById('bioFiltroDesde').value || document.getElementById('bioFiltroHasta').value || (faseEl && faseEl.value));
+    var polizaEl = document.getElementById('bioFiltroPoliza');
+    var sucursalEl = document.getElementById('bioFiltroSucursal');
+    var habiaFiltro = !!(document.getElementById('bioFiltroDesde').value || document.getElementById('bioFiltroHasta').value || (faseEl && faseEl.value) || (polizaEl && polizaEl.value.trim()) || (sucursalEl && sucursalEl.value));
     document.getElementById('bioFiltroDesde').value = '';
     document.getElementById('bioFiltroHasta').value = '';
     if (faseEl) faseEl.value = '';
+    if (polizaEl) polizaEl.value = '';
+    if (sucursalEl) sucursalEl.value = '';
     if (habiaFiltro) {
         cargarDatosBiometria();
     } else {
