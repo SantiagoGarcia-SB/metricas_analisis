@@ -79,6 +79,12 @@ function obtenerDatosBatch() {
     return resultado;
   }
 
+  // El rol biometría solo ve su sección y la carga con su propia llamada
+  // (obtenerTodoBiometria); metas, métricas, cola y salud no se usan para ese rol.
+  if (resultado.permisos.rol === "biometria") {
+    return resultado;
+  }
+
   // 2. Verificar CacheService primero
   var hoyStr = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
   var claveCache = "batch_" + hoyStr;

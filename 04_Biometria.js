@@ -1692,10 +1692,19 @@ function _continuarReconsultaPendientesBiometriaSAICierre() {
  * @private
  */
 function _escribirLoteCierre(hoja, escrituras, colEstado, colFechaResultado) {
-  for (var k = 0; k < escrituras.length; k++) {
-    var e = escrituras[k];
-    hoja.getRange(e.fila, colEstado + 1).setValue(e.estado);
-    hoja.getRange(e.fila, colFechaResultado + 1).setValue(e.fechaResultado);
+  // Cada getRange().setValue() es una llamada al servicio de Sheets. Se agrupan las filas
+  // contiguas en tramos y cada tramo se escribe con un solo setValues por columna.
+  var ordenadas = escrituras.slice().sort(function(a, b) { return a.fila - b.fila; });
+  var k = 0;
+  while (k < ordenadas.length) {
+    var fin = k;
+    while (fin + 1 < ordenadas.length && ordenadas[fin + 1].fila === ordenadas[fin].fila + 1) fin++;
+    var tramo = ordenadas.slice(k, fin + 1);
+    hoja.getRange(tramo[0].fila, colEstado + 1, tramo.length, 1)
+      .setValues(tramo.map(function(e) { return [e.estado]; }));
+    hoja.getRange(tramo[0].fila, colFechaResultado + 1, tramo.length, 1)
+      .setValues(tramo.map(function(e) { return [e.fechaResultado]; }));
+    k = fin + 1;
   }
   // El tablero cachea pendiente_biometria; sin esto mostraría el cierre anterior a esta escritura.
   invalidarCacheHojaBiometria();

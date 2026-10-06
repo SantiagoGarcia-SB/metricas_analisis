@@ -185,8 +185,9 @@ function _onBatchCargado(resultado) {
             _mostrarErrorSeccion('salud', resultado.errores.salud);
         }
 
-        // Cargar asesores (no incluido en batch, es interactivo por fecha)
-        cargarAsesoresActivosPrimerResultado();
+        // Asesores (no incluidos en batch, son interactivos por fecha). Si hubo métricas,
+        // onDatosCargados ya los pide; aquí solo se cubre el caso en que las métricas fallaron.
+        if (!resultado.metricas) cargarAsesoresActivosPrimerResultado();
     } else {
         // Para otros roles (biometria), usar el flujo normal de aplicarPermisos
         aplicarPermisos(permiso);
